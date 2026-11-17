@@ -166,7 +166,7 @@ The design should extend these capabilities rather than replace them wholesale:
 - Keep historical quote/order snapshots immutable.
 - Avoid a database migration until the full policy, schema impact, RLS, RPC signatures, audit behaviour and test plan are reviewed and separately approved.
 
-The current quote UI has category-level costing profile creation and pricing controls. Item-specific profile selection is being handled separately in the existing draft PR #4; it is not merged into `main` at the time of this design. The unified framework must account for that work without duplicating or silently merging it.
+The quote UI now supports both exact catalogue-item costing profiles and category-level fallback profiles on `main`. This incorporates the reviewed changes from draft PR #4, which was closed as superseded after its changes were committed directly to `main` at the owner's request.
 
 ## 9. Validation plan before specialised calculators
 
