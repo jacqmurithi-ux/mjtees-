@@ -169,3 +169,11 @@ a{color:inherit}
 .quote-line-editor .check-field{display:flex;align-items:center;gap:9px}
 .quote-line-editor .check-field input{width:auto}
 @media(max-width:540px){.quote-line-editor{grid-template-columns:1fr}}
+
+
+.catalogue-toolbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.catalogue-category-list{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0 16px;border-bottom:1px solid #edf0f1;margin-bottom:8px}
+.catalogue-category-list>b{font-size:12px;margin-right:6px}
+.catalogue-category-list>span{font-size:11px;padding:6px 9px;border-radius:20px;background:#edf6fc;color:#245d8a}
+.catalogue-category-list>small{font-size:12px;color:#75828a}
+@media(max-width:600px){.catalogue-toolbar-actions{width:100%}.catalogue-toolbar-actions button{flex:1}.catalogue-management .panel-toolbar{align-items:flex-start;flex-direction:column}}
