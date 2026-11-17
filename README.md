@@ -9,14 +9,14 @@ This repository contains the public website and the private, owner-first shop op
 
 ## Current release status
 
-The implementation is on `first-release-build` and is proposed in [PR #1](https://github.com/jacqmurithi-ux/mjtees-/pull/1). The database migrations and tests have been validated against a **disposable local Supabase stack in GitHub Actions**. This is not a validation against the hosted business database.
+The first-release implementation is merged into `main`. The hosted Supabase project has the first-release schema and the approved 30% gross-margin enforcement migration recorded. Local migration/pgTAP validation remains separate from production verification.
 
-- The hosted Supabase project has not been migrated or configured for this release.
-- The first owner account has not been provisioned.
-- PR #1 has not been merged.
-- The website has not been deployed.
-- GitHub Pages deployment is manual via the `Deploy GitHub Pages` workflow; it does not deploy automatically on merge.
-- Public enquiries require the Edge Function and Turnstile secrets to be configured before the form becomes active.
+- The business record exists with slug `mj-tees`.
+- The first owner account and active owner membership still need to be provisioned through the trusted bootstrap process.
+- The public enquiry Edge Function is not yet deployed.
+- Public online enquiries remain disabled until a Cloudflare Turnstile site key, matching secret, rate-limit salt and allowed origin are configured.
+- GitHub Pages deployment is manual via `Deploy GitHub Pages`; it does not run on every push.
+- The published site is not a substitute for hosted database, Auth, RLS and RPC verification.
 
 ## Technology
 
@@ -37,21 +37,21 @@ GitHub Pages serves static files and does not protect private business data. Eve
    - `VITE_SUPABASE_PUBLISHABLE_KEY`
    - `VITE_BUSINESS_SLUG`
    - `VITE_TURNSTILE_SITE_KEY`
-4. Install dependencies with `npm ci`.
+4. Install dependencies with `npm install`.
 5. Run `npm run dev`; run `npm run build` for the production bundle.
 
 The service-role key is used only by the deployed Edge Function and must be configured as a Supabase Function secret, never as a `VITE_` variable.
 
 ## GitHub Pages configuration
 
-The `Deploy GitHub Pages` workflow is intentionally `workflow_dispatch` only. It requires these GitHub Actions repository secrets before a manual deployment:
+The `Deploy GitHub Pages` workflow is intentionally `workflow_dispatch` only. It has safe public defaults for this project:
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `VITE_BUSINESS_SLUG`
-- `VITE_TURNSTILE_SITE_KEY`
+- Supabase URL: `https://rbbluwsniiwzixlvdnwz.supabase.co`
+- Supabase publishable key: supplied as a browser-visible publishable key (never use a secret/service-role key)
+- Business slug: `mj-tees`
+- Turnstile site key: optional; without it, the public enquiry form stays disabled and the rest of the website can still build.
 
-The GitHub Pages site must be configured to use **GitHub Actions** as its build/deployment source. The workflow does not run on push or pull request.
+Optional GitHub Actions Variables with the same `VITE_` names override the public defaults. The GitHub Pages site must use **GitHub Actions** as its build/deployment source. The workflow does not run on push or pull request.
 
 ## Public enquiry service configuration
 
