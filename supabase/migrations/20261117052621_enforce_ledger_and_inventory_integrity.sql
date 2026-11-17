@@ -529,7 +529,6 @@ begin
     where r.business_id=v_job.business_id and r.order_item_id=v_job.order_item_id
       and r.stock_item_id=p_stock_item_id and r.location_id=p_location_id
       and r.status='active' and r.released_quantity<r.reserved_quantity
-    for update
   )
   update public.stock_reservations r set
     released_quantity=r.released_quantity+greatest(0,least(reservations.remaining,p_quantity-reservations.prior_remaining)),
@@ -681,7 +680,7 @@ begin
     'inspector_user_id',p_inspector_user_id,'notes',p_notes);
   v_cached:=private.begin_idempotent_request(v_job.business_id,'record_quality_check',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
-  perform 1 from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
+  select * into v_job from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
   if v_job.status in ('completed','cancelled') then raise exception using errcode='22023',message='Job is closed to new quality checks'; end if;
   insert into public.quality_checks(business_id,job_id,result,inspection_mode,inspector_user_id,notes)
   values(v_job.business_id,p_job_id,p_result,p_inspection_mode,p_inspector_user_id,p_notes)
