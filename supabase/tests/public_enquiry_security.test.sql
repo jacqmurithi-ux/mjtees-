@@ -39,6 +39,11 @@ select is(
   true,'Contact rate limit blocks excess submissions'
 );
 
+select is(
+  (select count(*) from public.enquiries where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+  5::bigint,'Rate-limited attempts do not create extra enquiry records'
+);
+
 reset role;
 set local role anon;
 select throws_ok(
