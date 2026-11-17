@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(33);
 
 -- Isolated synthetic fixtures; all changes are rolled back at the end.
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
@@ -66,6 +66,12 @@ select is(
 select is(
   (public.owner_get_order_balance('cccccccc-cccc-4ccc-8ccc-cccccccccccc')->>'balance_due')::bigint,
   600::bigint,'Cash payment allocates and reduces order balance'
+);
+
+select throws_ok(
+  $select public.owner_record_payment('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    'mpesa_manual',50,now(),'Test payer','0712345678','!!!!!!',null,'20000000-0000-4000-8000-000000000009')$,
+  '22023',null,'M-Pesa reference must remain valid after normalization'
 );
 
 select is(
