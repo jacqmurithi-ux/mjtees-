@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(15);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('44444444-4444-4444-8444-444444444444','authenticated','authenticated','mj-quote-owner@example.invalid','',now(),
@@ -125,6 +125,19 @@ select is(
 select is(
   (public.owner_get_order_balance((select id from public.orders where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa')))->>'balance_due')::bigint,
   168::bigint,'New order balance matches the accepted quote total'
+);
+
+select is(
+  (public.owner_update_order_schedule(
+    (select id from public.orders where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa')),
+    current_date+5,48,'90000000-0000-4000-8000-000000000008')->>'promised_turnaround_hours')::integer,
+  48,'Owner can record a promised turnaround period on the converted order'
+);
+
+select is(
+  (select count(*) from public.order_events where event_type='schedule_updated'
+    and order_id=(select id from public.orders where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'))),
+  1::bigint,'Order schedule changes are recorded in the order event history'
 );
 
 select * from finish();
