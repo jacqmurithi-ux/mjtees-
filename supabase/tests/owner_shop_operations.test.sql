@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
+select plan(29);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-ops-owner@example.invalid','',now(),
@@ -233,6 +233,15 @@ set local role anon;
 select is(
   (select count(*)::integer from public.get_public_catalogue('mj-ops-test')),
   1,'Anonymous visitors see only published catalogue entries'
+);
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
+select throws_ok(
+  $select public.owner_upsert_catalogue_item(
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,null,'Unauthorized item','unauthorized-item',
+    'product',null,null,true,0,'80000000-0000-4000-8000-000000000028')$,
+  '42501',null,'Authenticated non-owner cannot create or publish catalogue entries'
 );
 reset role;
 select * from finish();
