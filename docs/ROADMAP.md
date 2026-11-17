@@ -2,7 +2,7 @@
 
 ## Implemented on `first-release-build`
 
-- [x] MJ orange, blue and green identity and responsive public website.\n- [x] Owner-managed product/service catalogue with a restricted anonymous read-only published catalogue endpoint.
+- [x] MJ orange, blue and green identity and responsive public website.\n- [x] Owner-managed service categories and product/service catalogue, linked to quotation lines and public enquiry choices through a tenant-scoped read-only catalogue endpoint.
 - [x] Authenticated owner workspace with email/password sign-in and active-owner membership check.
 - [x] Owner customer and enquiry management.
 - [x] Quotation costing, pricing rules, revisions and customer acceptance-to-order conversion.
