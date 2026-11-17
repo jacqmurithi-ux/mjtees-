@@ -44,14 +44,14 @@ function Website({ onOwner }: { onOwner: () => void }) {
     <section className="hero" id="home">
       <div className="hero-copy">
         <p className="eyebrow"><span className="eyebrow-dot" /> {siteContent?.hero?.eyebrow || "YOUR IDEA. OUR PRINT. YOUR BRAND."}</p>
-        <h1>Make it yours.<br /><span>Make it seen.</span></h1>
+        <h1>{siteContent?.hero?.title || <>Make it yours.<br /><span>Make it seen.</span></>}</h1>
         <p className="hero-intro">{siteContent?.hero?.description || "From custom apparel and teamwear to stickers, signage and branded merchandise — we turn your ideas into things people can see, use and wear."}</p>
         <div className="hero-actions"><a className="primary-link" href="#enquire">Start a project <span aria-hidden="true">↗</span></a><a className="text-link" href="#catalogue">Explore what we make <span>↓</span></a></div>
         <div className="hero-proof"><span><b>01</b> Made to order</span><span><b>02</b> Your design, your way</span><span><b>03</b> Personal and business orders</span></div>
       </div>
       <div className="hero-art">
         <div className="hero-art-top"><span>MJ PRINTING & BRANDING</span><span>DESIGN / PRINT / BRAND</span></div>
-        <div className="hero-logo-wrap"><img src="/assets/mj-printing-branding.svg" alt="MJ Printing & Branding logo" /></div>
+        <div className="hero-logo-wrap"><img src={logoSrc} alt="MJ Printing & Branding logo" /></div>
         <div className="hero-colour-swatch"><i /><i /><i /><i /><i /></div>
         <div className="hero-art-bottom"><strong>YOUR BRAND,</strong><strong>IN EVERY DETAIL.</strong><span>MADE TO STAND OUT ↗</span></div>
         <span className="hero-stamp">MJ<br/>TEES</span>
