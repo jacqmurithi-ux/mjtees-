@@ -762,6 +762,71 @@ begin
 end;
 $$;
 
+create or replace function private.owner_open_rework_event(
+  p_job_id uuid,p_quality_check_id uuid,p_reason text,p_request_id uuid
+) returns jsonb
+language plpgsql security definer set search_path=''
+as $
+declare v_job public.production_jobs%rowtype; v_actor uuid; v_check public.quality_checks%rowtype;
+  v_cached jsonb; v_payload jsonb; v_event uuid; v_result jsonb;
+begin
+  select * into v_job from public.production_jobs where id=p_job_id;
+  if not found then raise exception using errcode='P0002',message='Production job not found'; end if;
+  v_actor:=private.assert_active_owner(v_job.business_id);
+  if length(btrim(coalesce(p_reason,'')))=0 then raise exception using errcode='22023',message='Rework reason is required'; end if;
+  v_payload:=jsonb_build_object('job_id',p_job_id,'quality_check_id',p_quality_check_id,'reason',p_reason);
+  v_cached:=private.begin_idempotent_request(v_job.business_id,'open_rework',p_request_id,v_payload);
+  if v_cached is not null then return v_cached; end if;
+  select * into v_job from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
+  if v_job.status not in ('rework','quality_check','in_progress') then raise exception using errcode='22023',message='Job is not eligible for rework'; end if;
+  select * into v_check from public.quality_checks where business_id=v_job.business_id and id=p_quality_check_id;
+  if not found or v_check.job_id<>p_job_id or v_check.result<>'fail' then
+    raise exception using errcode='22023',message='Rework must reference a failed quality check for this job';
+  end if;
+  if exists(select 1 from public.rework_events where business_id=v_job.business_id and quality_check_id=p_quality_check_id and closed_at is null) then
+    raise exception using errcode='23505',message='An open rework event already exists for this failed check';
+  end if;
+  insert into public.rework_events(business_id,job_id,quality_check_id,reason)
+  values(v_job.business_id,p_job_id,p_quality_check_id,btrim(p_reason))
+  returning id into v_event;
+  update public.production_jobs set status='rework' where business_id=v_job.business_id and id=p_job_id;
+  v_result:=jsonb_build_object('rework_event_id',v_event,'status','open');
+  perform private.finish_idempotent_request(v_job.business_id,'open_rework',p_request_id,v_result);
+  perform private.write_audit(v_job.business_id,v_actor,'production.rework_opened','rework_event',v_event,p_request_id,
+    jsonb_build_object('job_id',p_job_id,'quality_check_id',p_quality_check_id,'reason',p_reason));
+  return v_result;
+end;
+$;
+
+create or replace function private.owner_close_rework_event(
+  p_rework_event_id uuid,p_notes text,p_request_id uuid
+) returns jsonb
+language plpgsql security definer set search_path=''
+as $
+declare v_rework public.rework_events%rowtype; v_actor uuid; v_job public.production_jobs%rowtype;
+  v_cached jsonb; v_payload jsonb; v_result jsonb;
+begin
+  select * into v_rework from public.rework_events where id=p_rework_event_id;
+  if not found then raise exception using errcode='P0002',message='Rework event not found'; end if;
+  v_actor:=private.assert_active_owner(v_rework.business_id);
+  v_payload:=jsonb_build_object('rework_event_id',p_rework_event_id,'notes',p_notes);
+  v_cached:=private.begin_idempotent_request(v_rework.business_id,'close_rework',p_request_id,v_payload);
+  if v_cached is not null then return v_cached; end if;
+  select * into v_job from public.production_jobs where business_id=v_rework.business_id and id=v_rework.job_id for update;
+  select * into v_rework from public.rework_events where business_id=v_rework.business_id and id=p_rework_event_id for update;
+  if v_rework.closed_at is not null or v_job.status='completed' then
+    raise exception using errcode='22023',message='Rework event is already closed or job is completed';
+  end if;
+  update public.rework_events set closed_at=now(),notes=p_notes
+  where business_id=v_rework.business_id and id=p_rework_event_id;
+  v_result:=jsonb_build_object('rework_event_id',p_rework_event_id,'status','closed');
+  perform private.finish_idempotent_request(v_rework.business_id,'close_rework',p_request_id,v_result);
+  perform private.write_audit(v_rework.business_id,v_actor,'production.rework_closed','rework_event',p_rework_event_id,p_request_id,
+    jsonb_build_object('job_id',v_rework.job_id,'notes',p_notes));
+  return v_result;
+end;
+$;
+
 -- Public wrappers are SECURITY INVOKER; all writes happen inside private definer functions.
 create or replace function public.owner_adjust_stock(uuid,uuid,numeric,text,text,uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_adjust_stock($1,$2,$3,$4,$5,$6); $$;
@@ -780,7 +845,12 @@ returns jsonb language sql security invoker set search_path='' as $$ select priv
 create or replace function public.owner_record_quality_check(uuid,text,text,uuid,text,uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_record_quality_check($1,$2,$3,$4,$5,$6); $$;
 create or replace function public.owner_complete_production_job(uuid,uuid)
-returns jsonb language sql security invoker set search_path='' as $$ select private.owner_complete_production_job($1,$2); $$;
+returns jsonb language sql security invoker set search_path='' as $ select private.owner_complete_production_job($1,$2); $;
+create or replace function public.owner_open_rework_event(uuid,uuid,text,uuid)
+returns jsonb language sql security invoker set search_path='' as $ select private.owner_open_rework_event($1,$2,$3,$4); $;
+create or replace function public.owner_close_rework_event(uuid,text,uuid)
+returns jsonb language sql security invoker set search_path='' as $ select private.owner_close_rework_event($1,$2,$3); $;
+
 
 revoke all on all functions in schema private from public,anon,authenticated;
 grant usage on schema private to authenticated;
@@ -794,6 +864,8 @@ grant execute on function private.is_active_owner(uuid),
  private.owner_add_production_cost(uuid,text,text,numeric,text,bigint,uuid),
  private.owner_record_quality_check(uuid,text,text,uuid,text,uuid),
  private.owner_complete_production_job(uuid,uuid),
+ private.owner_open_rework_event(uuid,uuid,text,uuid),
+ private.owner_close_rework_event(uuid,text,uuid),
  private.owner_upsert_customer(uuid,uuid,text,text,text,text,text,uuid),
  private.owner_order_balance(uuid),
  private.owner_record_payment(uuid,uuid,text,bigint,timestamptz,text,text,text,text,uuid),
@@ -812,7 +884,9 @@ revoke all on function public.owner_adjust_stock(uuid,uuid,numeric,text,text,uui
  public.owner_return_job_offcut(uuid,uuid,uuid,numeric,uuid),
  public.owner_add_production_cost(uuid,text,text,numeric,text,bigint,uuid),
  public.owner_record_quality_check(uuid,text,text,uuid,text,uuid),
- public.owner_complete_production_job(uuid,uuid)
+ public.owner_complete_production_job(uuid,uuid),
+ public.owner_open_rework_event(uuid,uuid,text,uuid),
+ public.owner_close_rework_event(uuid,text,uuid)
 from public,anon;
 grant execute on function public.owner_adjust_stock(uuid,uuid,numeric,text,text,uuid),
  public.owner_transfer_stock(uuid,uuid,uuid,numeric,text,uuid),
@@ -822,7 +896,9 @@ grant execute on function public.owner_adjust_stock(uuid,uuid,numeric,text,text,
  public.owner_return_job_offcut(uuid,uuid,uuid,numeric,uuid),
  public.owner_add_production_cost(uuid,text,text,numeric,text,bigint,uuid),
  public.owner_record_quality_check(uuid,text,text,uuid,text,uuid),
- public.owner_complete_production_job(uuid,uuid)
+ public.owner_complete_production_job(uuid,uuid),
+ public.owner_open_rework_event(uuid,uuid,text,uuid),
+ public.owner_close_rework_event(uuid,text,uuid)
 to authenticated;
 
 commit;
