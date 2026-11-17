@@ -1,4 +1,5 @@
 import { useState } from "react";
+import OwnerApp from "./OwnerApp";
 
 type ModuleKey = "Overview" | "Orders" | "Production" | "Payments" | "Inventory" | "Expenses" | "Reports";
 const modules: ModuleKey[] = ["Overview", "Orders", "Production", "Payments", "Inventory", "Expenses", "Reports"];
@@ -114,6 +115,6 @@ function Website({ onOwner }: { onOwner: () => void }) {
 
 function App() {
   const [view, setView] = useState<"website" | "owner">("website");
-  return view === "owner" ? <OwnerDashboard onExit={() => setView("website")} /> : <Website onOwner={() => setView("owner")} />;
+  return view === "owner" ? <OwnerApp onExit={() => setView("website")} /> : <Website onOwner={() => setView("owner")} />;
 }
 export default App;
