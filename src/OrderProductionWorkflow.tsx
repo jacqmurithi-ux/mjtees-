@@ -48,7 +48,6 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  };
  const customer=(id:string)=>customers.find(c=>c.id===id)?.display_name??"Customer";
  const orderItems=(orderId:string)=>items.filter(i=>i.order_id===orderId);
- const itemLabel=(id:string)=>{const item=items.find(i=>i.id===id);return item?item.description:"Order line";};
  const jobFor=(itemId:string)=>jobs.find(j=>j.order_item_id===itemId&&j.status!=="cancelled");
  const latestCheck=(jobId:string)=>checks.filter(q=>q.job_id===jobId).sort((a,b)=>new Date(b.checked_at).getTime()-new Date(a.checked_at).getTime())[0];\n const latestRework=(jobId:string)=>reworks.filter(r=>r.job_id===jobId).sort((a,b)=>new Date(b.opened_at).getTime()-new Date(a.opened_at).getTime())[0];
  const updateSchedule=(order:Order)=>void call("owner_update_order_schedule",{p_order_id:order.id,p_required_by:requiredBy[order.id]||null,p_promised_turnaround_hours:turnaround[order.id]?Number(turnaround[order.id]):null,p_request_id:rid()},"Order turnaround schedule saved.");
@@ -80,7 +79,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
   <div className="panel-toolbar"><div><h2>Orders and production</h2><p>Track accepted orders, promised turnaround, production, inspection and customer handover.</p></div><button className="secondary-action" onClick={()=>void load()}>Refresh</button></div>
   {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}
   <div className="record-list">{orders.map(order=>{
-   const lines=orderItems(order.id);const orderJobs=jobs.filter(j=>lines.some(i=>i.id===j.order_item_id));
+   const lines=orderItems(order.id);
    const hand=handover[order.id]||{method:"collection" as const,recipient:"",tracking:"",exception:""};
    return <article className="enquiry-card" key={order.id}>
     <div className="enquiry-top"><div><b>{order.order_number} · {customer(order.customer_id)}</b><small>{new Date(order.received_at).toLocaleDateString("en-KE")} · {money(order.total_amount)}</small></div><span className={"status-chip "+order.status}>{order.status.replaceAll("_"," ")}</span></div>
