@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(22);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-ops-owner@example.invalid','',now(),
@@ -36,6 +36,13 @@ select is(
     'blank_product','piece','box',10,null,null,'{"size":"M","colour":"black"}'::jsonb,2,
     null,'80000000-0000-4000-8000-000000000002')->>'created')::boolean,
   true,'Owner can create a variant-specific stock SKU'
+);
+
+select is(
+  public.owner_set_stock_opening_cost(
+    (select id from public.stock_items where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and sku='BLANK-TEE-M'),
+    15,'80000000-0000-4000-8000-000000000022')->>'current_average_unit_cost',
+  '15','Owner can set opening unit cost before stock movements'
 );
 
 reset role;
