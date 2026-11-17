@@ -18,7 +18,7 @@ begin
   if p_original_quotation_id is null or p_request_id is null then
     raise exception using errcode='22023',message='Original quotation and request id are required';
   end if;
-  select * into v_original from public.quotations where id=p_original_quotation_id;
+  select * into v_original from public.quotations where id=p_original_quotation_id for update;
   if not found then raise exception using errcode='P0002',message='Original quotation not found'; end if;
   v_actor:=private.assert_active_owner(v_original.business_id);
   if v_original.status not in ('draft','sent','declined','expired') then
