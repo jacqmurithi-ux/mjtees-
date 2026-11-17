@@ -13,8 +13,8 @@ type Movement={stock_item_id:string;location_id:string;quantity:number};
 const rid=()=>crypto.randomUUID();
 const money=(n:number)=>new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:0}).format(n);
 const today=()=>new Date().toISOString().slice(0,10);
-const purchaseTransportFromNotes=(notes:string|null)=>{const match=notes?.match(/(?:^|\\n)Transport cost \\(KES\\): (\\d+)(?:$|\\n)/);return match?Number(match[1]):0;};
-const purchaseNotesOnly=(notes:string|null)=>notes?.split("\\n").filter(line=>!/^Transport cost \\(KES\\): \\d+$/.test(line)).join("\\n").trim()??"";
+const purchaseTransportFromNotes=(notes:string|null)=>{const match=notes?.match(/(?:^|\n)Transport cost \(KES\): (\d+)(?:$|\n)/);return match?Number(match[1]):0;};
+const purchaseNotesOnly=(notes:string|null)=>notes?.split("\n").filter(line=>!/^Transport cost \(KES\): \d+$/.test(line)).join("\n").trim()??"";
 
 export default function ShopOperationsWorkflow({businessId,section,onChanged}:{businessId:string;section:"Inventory"|"Purchasing"|"Expenses"|"Reports";onChanged:()=>void}){
  const [stock,setStock]=useState<Stock[]>([]);const [locations,setLocations]=useState<Location[]>([]);const [suppliers,setSuppliers]=useState<Supplier[]>([]);
