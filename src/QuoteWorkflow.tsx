@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { supabase } from "./lib/supabase";
 
 type Category = { id: string; name: string };
+type StockItem = { id: string; sku: string; name: string; base_unit: string; is_active: boolean };
 type Customer = { id: string; display_name: string };
 type Quote = { id: string; quote_number: string; customer_id: string; status: string; revision_of: string | null; subtotal_amount: number; discount_amount: number; total_amount: number; created_at: string; expires_at: string | null };
 type Order = { id: string; order_number: string; customer_id: string; status: string; total_amount: number; received_at: string; required_by: string | null; promised_turnaround_hours: number | null };
@@ -13,6 +14,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   businessId: string; customers: Customer[]; enquiries: {id:string;public_reference:string;contact_name:string;status:string}[]; onChanged:()=>void;
 }) {
   const [categories,setCategories]=useState<Category[]>([]);
+  const [stockItems,setStockItems]=useState<StockItem[]>([]);
   const [quotes,setQuotes]=useState<Quote[]>([]);
   const [orders,setOrders]=useState<Order[]>([]);
   const [tab,setTab]=useState<"quotes"|"costing"|"orders">("quotes");
@@ -22,7 +24,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const [customerId,setCustomerId]=useState("");
   const [revisionOf,setRevisionOf]=useState<string|null>(null);
   const [enquiryId,setEnquiryId]=useState("");
-  const [quoteLines,setQuoteLines]=useState([{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false}]);
+  const [quoteLines,setQuoteLines]=useState([{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added"}]);
   const [quoteExpiry,setQuoteExpiry]=useState("");
   const [customerNotes,setCustomerNotes]=useState("");
   const [internalNotes,setInternalNotes]=useState("");
@@ -35,13 +37,14 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
 
   const load=useCallback(async()=>{
     if(!supabase)return;
-    const [cat,q,o]=await Promise.all([
+    const [cat,q,o,stock]=await Promise.all([
       supabase.from("service_categories").select("id,name").eq("business_id",businessId).eq("is_active",true).order("name"),
       supabase.from("quotations").select("id,quote_number,customer_id,status,revision_of,subtotal_amount,discount_amount,total_amount,created_at,expires_at").eq("business_id",businessId).order("created_at",{ascending:false}).limit(100),
-      supabase.from("orders").select("id,order_number,customer_id,status,total_amount,received_at,required_by,promised_turnaround_hours").eq("business_id",businessId).order("received_at",{ascending:false}).limit(100)
+      supabase.from("orders").select("id,order_number,customer_id,status,total_amount,received_at,required_by,promised_turnaround_hours").eq("business_id",businessId).order("received_at",{ascending:false}).limit(100),
+      supabase.from("stock_items").select("id,sku,name,base_unit,is_active").eq("business_id",businessId).eq("is_active",true).order("name").limit(500)
     ]);
-    if(cat.error||q.error||o.error)throw cat.error||q.error||o.error;
-    setCategories(cat.data??[]);setQuotes((q.data??[]) as Quote[]);setOrders((o.data??[]) as Order[]);
+    if(cat.error||q.error||o.error||stock.error)throw cat.error||q.error||o.error||stock.error;
+    setCategories(cat.data??[]);setStockItems((stock.data??[]) as StockItem[]);setQuotes((q.data??[]) as Quote[]);setOrders((o.data??[]) as Order[]);
   },[businessId]);
   useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
 
@@ -74,13 +77,13 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   }
   async function createQuote(e:FormEvent){
     e.preventDefault();if(!supabase)return;
-    if(!customerId||!quoteLines.length||quoteLines.some(line=>!line.categoryId||!line.description.trim()||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0||(line.unitPrice.trim()!==""&&(!Number.isSafeInteger(Number(line.unitPrice))||Number(line.unitPrice)<0))||!Number.isSafeInteger(Number(line.discount))||Number(line.discount)<0)){
+    if(!customerId||!quoteLines.length||quoteLines.some(line=>!line.categoryId||!line.description.trim()||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0||(line.unitPrice.trim()!==""&&(!Number.isSafeInteger(Number(line.unitPrice))||Number(line.unitPrice)<0))||!Number.isSafeInteger(Number(line.discount))||Number(line.discount)<0||(line.saleMode==="blank"&&!line.customerSupplies&&!line.stockItemId))){
       setError("Complete the customer and every quotation line with a category, description, positive quantity and valid whole-KES price/discount.");return;
     }
     setBusy(true);setError("");setNotice("");
-    const lines=quoteLines.map(line=>({catalogue_item_id:null,category_id:line.categoryId,stock_item_id:null,description:line.description.trim(),
+    const lines=quoteLines.map(line=>({catalogue_item_id:null,category_id:line.categoryId,stock_item_id:line.customerSupplies?null:(line.stockItemId||null),description:line.description.trim(),
       quantity:Number(line.quantity),unit:line.unit,unit_price:line.unitPrice.trim()?Number(line.unitPrice):null,line_discount:Number(line.discount),
-      sale_mode:"value_added",customer_supplies_item:line.customerSupplies,production_method_id:null,production_specification:{}}));
+      sale_mode:line.saleMode,customer_supplies_item:line.customerSupplies,production_method_id:null,production_specification:{}}));
     const {data,error:rpcError}=revisionOf
       ? await supabase.rpc("owner_create_quotation_revision",{
           p_original_quotation_id:revisionOf,p_lines:lines,
@@ -93,7 +96,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
           p_customer_notes:customerNotes.trim()||null,p_internal_notes:internalNotes.trim()||null,p_request_id:rid()
         });
     if(rpcError)setError(rpcError.message);
-    else {setNotice((revisionOf?"Quotation revision ":"Quotation ")+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setRevisionOf(null);setQuoteLines([{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false}]);setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
+    else {setNotice((revisionOf?"Quotation revision ":"Quotation ")+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setRevisionOf(null);setQuoteLines([{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added"}]);setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
     setBusy(false);
   }
   async function updateSchedule(orderId:string, form:FormData){
@@ -113,12 +116,12 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     if(!supabase)return;
     setBusy(true);setError("");setNotice("");
     const {data,error:readError}=await supabase.from("quotation_items")
-      .select("description,quantity,unit,unit_price,line_discount,category_id,customer_supplies_item")
+      .select("description,quantity,unit,unit_price,line_discount,category_id,customer_supplies_item,stock_item_id,sale_mode")
       .eq("business_id",businessId).eq("quotation_id",q.id).order("line_sequence");
     if(readError||!data?.length){setError(readError?.message||"Could not load the quotation lines.");setBusy(false);return;}
     setCustomerId(q.customer_id);setEnquiryId("");setQuoteLines(data.map(line=>({categoryId:line.category_id||"",description:line.description,
-      quantity:String(line.quantity),unit:line.unit,unitPrice:String(line.unit_price),discount:String(line.line_discount),
-      customerSupplies:Boolean(line.customer_supplies_item)})));setQuoteExpiry(q.expires_at?q.expires_at.slice(0,10):"");
+      quantity:String(line.quantity),unit:line.unit,unitPrice:line.unit_price==null?"":String(line.unit_price),discount:String(line.line_discount),
+      customerSupplies:Boolean(line.customer_supplies_item),stockItemId:line.stock_item_id||"",saleMode:line.sale_mode||"value_added"})));setQuoteExpiry(q.expires_at?q.expires_at.slice(0,10):"");
     setRevisionOf(q.id);setTab("quotes");setNotice("Revision form loaded from "+q.quote_number+". Update the details and save the new version.");
     setBusy(false);
   }
@@ -146,9 +149,11 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
         <label>Unit<input required maxLength={24} value={line.unit} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,unit:e.target.value}:x))}/></label>
         <label>Unit selling price override (KES)<input type="number" min="0" step="1" value={line.unitPrice} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,unitPrice:e.target.value}:x))} placeholder="Leave blank to use pricing rule"/></label>
         <label>Line discount (KES)<input type="number" min="0" step="1" value={line.discount} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,discount:e.target.value}:x))}/></label>
-        <label className="check-field"><input type="checkbox" checked={line.customerSupplies} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,customerSupplies:e.target.checked}:x))}/> Customer supplies the item</label>
+        <label>Sale type<select value={line.saleMode} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,saleMode:e.target.value}:x))}><option value="value_added">Printed / branded item</option><option value="blank">Blank item sale</option></select></label>
+        <label>Shop stock item<select disabled={line.customerSupplies} value={line.stockItemId} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,stockItemId:e.target.value}:x))}><option value="">No stock item linked</option>{stockItems.map(item=><option key={item.id} value={item.id}>{item.name} · {item.sku} ({item.base_unit})</option>)}</select></label>
+        <label className="check-field"><input type="checkbox" checked={line.customerSupplies} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,customerSupplies:e.target.checked,stockItemId:e.target.checked?"":x.stockItemId}:x))}/> Customer supplies the item</label>
         <button type="button" className="secondary-action" disabled={quoteLines.length===1} onClick={()=>setQuoteLines(v=>v.filter((_,i)=>i!==index))}>Remove item</button>
-      </div>)}<button type="button" className="secondary-action" onClick={()=>setQuoteLines(v=>[...v,{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false}])}>Add another item</button></div>
+      </div>)}<button type="button" className="secondary-action" onClick={()=>setQuoteLines(v=>[...v,{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added"}])}>Add another item</button></div>
       <label>Quote expiry<input type="date" value={quoteExpiry} onChange={e=>setQuoteExpiry(e.target.value)}/></label>
       <label className="wide-field">Customer notes<textarea value={customerNotes} onChange={e=>setCustomerNotes(e.target.value)}/></label>
       <label className="wide-field">Internal notes (not shown to customer)<textarea value={internalNotes} onChange={e=>setInternalNotes(e.target.value)}/></label>
