@@ -14,7 +14,7 @@ values
 
 set local role anon;
 
-select is((select count(*) from public.public_catalogue),1::bigint,
+select is((select count(*) from public.get_public_catalogue('catalogue-boundary')),1::bigint,
   'Anonymous catalogue projection returns published products only');
 
 select is((select name from public.public_catalogue limit 1),'Public Shirt',
