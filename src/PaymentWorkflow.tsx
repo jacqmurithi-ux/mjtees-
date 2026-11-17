@@ -16,16 +16,14 @@ export default function PaymentWorkflow({businessId,customers,onChanged}:{busine
  const [balances,setBalances]=useState<Record<string,Balance>>({});const [selectedOrder,setSelectedOrder]=useState("");
  const [method,setMethod]=useState<"cash"|"mpesa_manual">("cash");const [amount,setAmount]=useState("");const [receivedAt,setReceivedAt]=useState(new Date().toISOString().slice(0,16));
  const [payerName,setPayerName]=useState("");const [payerPhone,setPayerPhone]=useState("");const [reference,setReference]=useState("");const [notes,setNotes]=useState("");
- const [refundPayment,setRefundPayment]=useState("");const [refundAllocation,setRefundAllocation]=useState("");const [refundBucket,setRefundBucket]=useState<"allocated"|"unallocated">("allocated");const [refundAmount,setRefundAmount]=useState("");const [refundReason,setRefundReason]=useState("");const [refundMethod,setRefundMethod]=useState<"cash"|"mpesa">("mpesa");const [refundReference,setRefundReference]=useState("");const [reversalReason,setReversalReason]=useState("");
+ const [refundPayment,setRefundPayment]=useState("");const [refundAllocation,setRefundAllocation]=useState("");const [refundBucket,setRefundBucket]=useState<"allocated"|"unallocated">("allocated");const [refundAmount,setRefundAmount]=useState("");const [refundReason,setRefundReason]=useState("");const [refundMethod,setRefundMethod]=useState<"cash"|"mpesa">("mpesa");const [refundReference,setRefundReference]=useState("");
  const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");const [receipt,setReceipt]=useState<Receipt|null>(null);
  const load=useCallback(async()=>{
   const client=supabase;if(!client)return;
   const [o,p,r]=await Promise.all([
    client.from("orders").select("id,order_number,customer_id,status,total_amount,received_at").eq("business_id",businessId).order("received_at",{ascending:false}).limit(150),
    client.from("payments").select("id,payment_number,method,status,amount,received_at,payer_name,payer_phone,mpesa_reference,intended_order_id,notes").eq("business_id",businessId).order("received_at",{ascending:false}).limit(200),
-   client.from("receipts").select("id,receipt_number,payment_id,customer_name_snapshot,amount,issued_at").eq("business_id",businessId).order("issued_at",{ascending:false}).limit(200),
-   client.from("payment_allocations").select("id,payment_id,order_id,amount").eq("business_id",businessId).limit(500),
-   client.from("payment_refunds").select("id,payment_id,order_id,allocation_id,source_bucket,amount,status,reason,refund_method,external_reference,created_at").eq("business_id",businessId).order("created_at",{ascending:false}).limit(200)
+   client.from("receipts").select("id,receipt_number,payment_id,customer_name_snapshot,amount,issued_at").eq("business_id",businessId).order("issued_at",{ascending:false}).limit(200)
   ]);
   if(o.error||p.error||r.error)throw o.error||p.error||r.error;
   const [a,rf]=await Promise.all([client.from("payment_allocations").select("id,payment_id,order_id,amount").eq("business_id",businessId).limit(500),client.from("payment_refunds").select("id,payment_id,order_id,allocation_id,source_bucket,amount,status,reason,refund_method,external_reference,created_at").eq("business_id",businessId).order("created_at",{ascending:false}).limit(200)]);
