@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(17);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('44444444-4444-4444-8444-444444444444','authenticated','authenticated','mj-quote-owner@example.invalid','',now(),
@@ -139,6 +139,40 @@ select is(
     and order_id=(select id from public.orders where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'))),
   1::bigint,'Order schedule changes are recorded in the order event history'
 );
+
+
+select set_config('mj.test.revision_source',
+  public.owner_create_quotation('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+    'ffffffff-1111-4111-8111-ffffffffffff',null,
+    jsonb_build_array(jsonb_build_object(
+      'catalogue_item_id','cccccccc-1111-4111-8111-cccccccccccc',
+      'stock_item_id','dddddddd-1111-4111-8111-dddddddddddd',
+      'description','Revised sample T-shirt','quantity',1,'unit','piece','unit_price',100,
+      'sale_mode','value_added','customer_supplies_item',false,
+      'production_method_id',(select id from public.production_methods where code='vinyl_cut'),
+      'production_specification',jsonb_build_object('linear_metres',1,'labour_hours',0.5)
+    )),now()+interval '14 days',null,'Original draft','90000000-0000-4000-8000-000000000009')->>'quotation_id',true);
+
+select set_config('mj.test.revision_result',
+  public.owner_create_quotation_revision(current_setting('mj.test.revision_source')::uuid,
+    jsonb_build_array(jsonb_build_object(
+      'catalogue_item_id','cccccccc-1111-4111-8111-cccccccccccc',
+      'stock_item_id','dddddddd-1111-4111-8111-dddddddddddd',
+      'description','Revised sample T-shirt - updated artwork','quantity',1,'unit','piece','unit_price',120,
+      'sale_mode','value_added','customer_supplies_item',false,
+      'production_method_id',(select id from public.production_methods where code='vinyl_cut'),
+      'production_specification',jsonb_build_object('linear_metres',1,'labour_hours',0.5)
+    )),now()+interval '14 days','Updated specification','Revision notes',
+    '90000000-0000-4000-8000-000000000010')->>'quotation_id',true);
+
+select is(
+  (select revision_of from public.quotations where id=current_setting('mj.test.revision_result')::uuid),
+  current_setting('mj.test.revision_source')::uuid,
+  'Quotation revisions link to the original quotation');
+
+select is(
+  (select status from public.quotations where id=current_setting('mj.test.revision_source')::uuid),
+  'draft','Creating a revision preserves the original quotation and its status');
 
 select * from finish();
 rollback;
