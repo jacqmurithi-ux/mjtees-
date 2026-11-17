@@ -50,7 +50,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  const startJob=(item:Item)=>{
   const code=methodByItem[item.id]||methods.find(m=>m.id===item.production_method_id)?.code;
   if(!code){setError("Choose a production method matching the accepted quotation.");return;}
-  void call("owner_start_production_job",{p_order_item_id:item.id,p_method_code:code,p_plan:{due_at:jobDue[item.id]?new Date(jobDue[item.id]).toISOString():null},p_request_id:rid()},"Production job started.");
+  void call("owner_start_production_job",{p_order_item_id:item.id,p_method_code:code,p_plan:jobDue[item.id]?{due_at:new Date(jobDue[item.id]).toISOString()}: {},p_request_id:rid()},"Production job started.");
  };
  const issueMaterial=(job:Job)=>{
   const v=material[job.id]||{stock:"",location:"",quantity:"",reason:"Production material issue"};
