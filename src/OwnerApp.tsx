@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, supabaseConfigured } from "./lib/supabase";
 
@@ -9,7 +10,6 @@ type Enquiry = { id: string; public_reference: string; contact_name: string; pho
 const sections = ["Overview", "Enquiries", "Customers", "Quotations", "Orders", "Payments", "Inventory", "Purchasing", "Production", "Expenses", "Reports"] as const;
 type Section = typeof sections[number];
 const requestId = () => crypto.randomUUID();
-const money = (amount: number) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 0 }).format(amount);
 
 export default function OwnerApp({ onExit }: { onExit: () => void }) {
   const [session, setSession] = useState<Session | null>(null);
