@@ -76,7 +76,11 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
   setBusy(false);
  };
  const updatePoLine=(index:number,key:"stock"|"qty"|"price",value:string)=>setPoForm(v=>({...v,lines:v.lines.map((line,i)=>i===index?{...line,[key]:value}:line)}));
- const purchaseSubtotal=poForm.lines.reduce((sum,line)=>sum+(Number(line.qty)||0)*(Number(line.price)||0),0);\n const purchaseTransport=Math.max(0,Number(poForm.transport)||0);\n const purchaseGrandTotal=purchaseSubtotal+purchaseTransport;\n const cancelPO=(po:PO)=>void run("owner_update_purchase_order_status",{p_purchase_order_id:po.id,p_status:"cancelled",p_reason:"Cancelled by owner before goods receipt",p_request_id:rid()},"Purchase order cancelled. Its history has been retained.");\n const createPO=async(e:FormEvent)=>{
+ const purchaseSubtotal=poForm.lines.reduce((sum,line)=>sum+(Number(line.qty)||0)*(Number(line.price)||0),0);
+ const purchaseTransport=Math.max(0,Number(poForm.transport)||0);
+ const purchaseGrandTotal=purchaseSubtotal+purchaseTransport;
+ const cancelPO=(po:PO)=>void run("owner_update_purchase_order_status",{p_purchase_order_id:po.id,p_status:"cancelled",p_reason:"Cancelled by owner before goods receipt",p_request_id:rid()},"Purchase order cancelled. Its history has been retained.");
+ const createPO=async(e:FormEvent)=>{
   e.preventDefault();
   if(!poForm.supplier||!poForm.lines.length||!Number.isSafeInteger(purchaseTransport)||purchaseTransport<0||poForm.lines.some(line=>!line.stock||!Number.isFinite(Number(line.qty))||Number(line.qty)<=0||!Number.isSafeInteger(Number(line.price))||Number(line.price)<0)){
     setError("Choose a supplier and complete every stock item, positive quantity and whole-KES unit price.");return;
