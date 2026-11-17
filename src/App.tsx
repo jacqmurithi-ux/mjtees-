@@ -1,5 +1,6 @@
 import { useState } from "react";
 import OwnerApp from "./OwnerApp";
+import QuoteAcceptance from "./QuoteAcceptance";
 
 const services = [
   { title: "Custom apparel", description: "T-shirts, polos, caps and other garments for individuals, teams, schools and organisations." },
@@ -29,6 +30,8 @@ function Website({ onOwner }: { onOwner: () => void }) {
 
 function App() {
   const [view, setView] = useState<"website" | "owner">("website");
+  const acceptanceToken = new URLSearchParams(window.location.search).get("accept_quote");
+  if (acceptanceToken) return <QuoteAcceptance token={acceptanceToken} />;
   return view === "owner" ? <OwnerApp onExit={() => setView("website")} /> : <Website onOwner={() => setView("owner")} />;
 }
 export default App;
