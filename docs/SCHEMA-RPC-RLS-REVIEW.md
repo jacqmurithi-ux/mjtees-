@@ -186,7 +186,7 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff acc
 - `status text CHECK IN ('pending_verification','posted','rejected','reversed')`
 - `amount bigint NOT NULL CHECK > 0`, `currency_code char(3) NOT NULL DEFAULT 'KES'`
 - `received_at timestamptz NOT NULL`, `payer_name text`, `payer_phone text`
-- `mpesa_reference text`, `mpesa_reference_normalized text`
+- `mpesa_reference text`, `mpesa_reference_normalized text`, `intended_order_id uuid` (nullable only for non-order receipts; pending M-Pesa evidence retains its intended order here until verified)
 - `idempotency_key uuid NOT NULL`, `received_by uuid NOT NULL`
 - `verified_by uuid`, `verified_at timestamptz`, `notes text`, `created_at`
 - `UNIQUE (business_id,payment_number)`, `UNIQUE (business_id,idempotency_key)`
@@ -225,7 +225,7 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff acc
 
 **order_balance** (read-only view in a non-public schema, or a tightly scoped security-invoker view)
 - Per order: `order_id`, `order_total`, `net_paid`, `balance_due`.
-- Net paid = sum of allocations for posted payments minus allocation reversals and posted refunds attributable to the order. Pending M-Pesa and pending refunds are excluded.
+- Net paid = sum of allocations for posted payments minus allocation reversals and posted refunds attributable to the order. A refund linked to a payment/order reduces the amount credited to that order; enforce aggregate refund and allocation-reversal limits under row locks so the same paid amount cannot be refunded and reversed twice. Pending M-Pesa and pending refunds are excluded.
 - Balance is derived, not stored or browser-maintained.
 
 
@@ -259,7 +259,7 @@ The estimator shows an efficient layout estimate and actual production consumpti
 
 For every order line retain sale_mode (blank or value_added), selected production method, estimated_unit_cost, actual_unit_cost, estimated_total_cost, actual_total_cost, cost breakdown snapshot, selling price, discount and gross profit. The sale_mode must be fixed on the accepted order line; a blank sale cannot silently become value-added after acceptance without an order amendment.
 
-Gross profit is selling revenue less direct actual cost (blank item/materials/consumables/labour/machine/setup/outsourcing/packaging attributable to the job). Show estimated gross profit before production and variance after completion. Delivery/carrier charge is a separate customer-paid pass-through and is not production revenue or production cost. Customer-supplied garments have zero blank-stock cost but still incur decoration process costs. Later recipe changes never rewrite completed order costs.
+Gross profit is net product-line revenue less direct actual cost (blank item/materials/consumables/labour/machine/setup/outsourcing/packaging attributable to the job). Net product-line revenue includes line discount and its allocated share of any order-level discount; delivery/carrier charges are excluded. The order discount allocation method must be deterministic (pro-rata by pre-discount line total, with any rounding remainder assigned to the final eligible line) and snapshotted at acceptance. Show estimated gross profit before production and variance after completion. Delivery/carrier charge is a separate customer-paid pass-through and is not production revenue or production cost. Customer-supplied garments have zero blank-stock cost but still incur decoration process costs. Later recipe changes never rewrite completed order costs.
 
 **Expenses and delivery**
 
@@ -321,7 +321,7 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 - Returns `{ "customer_id": uuid, "created": boolean }`.
 
 **`owner_create_quote(p_business_id uuid, p_customer_id uuid, p_enquiry_id uuid, p_expires_at timestamptz, p_customer_notes text, p_internal_notes text, p_lines jsonb, p_request_id uuid) RETURNS jsonb`**
-- Owner only. Each line allowed keys: catalogue_item_id, category_id, description, quantity, unit, unit_price, line_discount, customer_supplies_item, production_specification, pricing_rule_id.
+- Owner only. Each line allowed keys: catalogue_item_id, category_id, description, quantity, unit, unit_price, line_discount, customer_supplies_item, sale_mode, production_method_id, production_specification, pricing_rule_id. Validate sale_mode against the selected catalogue item; blank lines cannot silently include decoration costs, and value_added lines require a valid production method unless explicitly marked as a manual/non-production service. Server calculates and snapshots estimated unit/total cost and the versioned cost breakdown; client-supplied cost values are rejected.
 - Server validates line values, category scope, quantity and discount; computes line totals, subtotal, discount and quote total. No tax.
 - Returns `{ "quotation_id": uuid, "quote_number": text, "status": "draft", "subtotal_amount": bigint, "discount_amount": bigint, "total_amount": bigint }`.
 
@@ -343,7 +343,7 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 ### 4.3 Orders
 
 **`owner_create_direct_order(p_business_id uuid, p_customer_id uuid, p_required_by date, p_promised_turnaround_hours integer, p_notes text, p_lines jsonb, p_request_id uuid) RETURNS jsonb`**
-- Owner only. Creates a direct order with the same line validation and server-side total calculation; event reason/source records that it was owner-created, not quote-converted.
+- Owner only. Each line accepts the same sale_mode, production_method_id, customer_supplies_item and specification fields as quote lines. Creates a direct order with server-side price and cost estimates; event reason/source records that it was owner-created, not quote-converted.
 - Returns order id, order number, total and status.
 
 **`owner_amend_order(p_order_id uuid, p_reason text, p_lines jsonb, p_request_id uuid) RETURNS jsonb`**
@@ -359,7 +359,7 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 - Returns `{ "payment_id": uuid, "payment_number": text, "status": "...", "allocated_amount": bigint, "receipt_number": text|null, "balance_due": bigint }`.
 
 **`owner_verify_mpesa_payment(p_payment_id uuid, p_outcome text, p_reason text, p_request_id uuid) RETURNS jsonb`**
-- Owner only. Outcome `verified` or `rejected`. Locks payment and order; can only verify pending M-Pesa. On verified, posts payment, allocates it to its intended order, creates receipt and audit/event records atomically. On rejected, marks rejected without affecting balance.
+- Owner only. Outcome `verified` or `rejected`. Locks payment and order; can only verify pending M-Pesa. On verified, posts payment, allocates it to intended_order_id, creates receipt and audit/event records atomically. Reject if intended_order_id is missing or no longer has an allocatable balance; never let the verifier choose a different order at verification time. On rejected, marks rejected without affecting balance.
 - Returns payment id, final status, optional receipt number and current balance due.
 
 **`owner_reverse_payment_allocation(p_allocation_id uuid, p_amount bigint, p_reason text, p_request_id uuid) RETURNS jsonb`**
@@ -406,6 +406,25 @@ All stock and costing operations are transactional and audited. The client may r
 - Owner only. Rejects handover while balance_due > 0 unless a separate owner approval record is created with a reason and valid scope. Handover event and approval occur atomically.
 - This operation is not required to enable the initial customer/quote/payment screen, but its invariant is reserved now.
 
+### 4.7 Purchase, production, costing and stock RPC contracts (fully scoped)
+
+All are authenticated owner-only, derive actor from auth.uid(), validate business ownership, and accept p_request_id uuid for idempotency.
+
+- **owner_receive_purchase(p_business_id uuid, p_supplier_id uuid, p_purchase_order_id uuid, p_received_at timestamptz, p_lines jsonb, p_request_id uuid) RETURNS jsonb** — line keys: purchase_order_item_id, stock_item_id, location_id, received_quantity, rejected_quantity, purchase_unit, unit_cost. Recompute conversion to base unit, reject negative quantities/costs, create goods receipt/items and receipt stock movements, update weighted average atomically. Only actually accepted goods increase on-hand.
+- **owner_adjust_stock(p_stock_item_id uuid, p_location_id uuid, p_quantity numeric, p_adjustment_type text, p_reason text, p_request_id uuid) RETURNS jsonb** — adjustment type restricted to count_gain/count_loss/opening_balance; reason mandatory; negative resulting on-hand rejected unless explicitly configured for a tracked non-stock service.
+- **owner_reserve_order_stock(p_order_id uuid, p_request_id uuid) RETURNS jsonb** — reserve eligible blank variants and materials for confirmed order items; no stock movement is created; idempotent and cannot reserve more than available.
+- **owner_release_order_reservations(p_order_id uuid, p_reason text, p_request_id uuid) RETURNS jsonb** — release reservations on cancellation, amendment or explicit production replanning.
+- **owner_start_production_job(p_order_item_id uuid, p_method_code text, p_plan jsonb, p_request_id uuid) RETURNS jsonb** — one job per order item and production stage; validate method and specification, snapshot recipe version, estimate, vinyl layout inputs/outputs and algorithm version.
+- **owner_issue_job_material(p_job_id uuid, p_stock_item_id uuid, p_location_id uuid, p_quantity numeric, p_reason text, p_request_id uuid) RETURNS jsonb** — lock stock balance, validate available quantity, snapshot weighted-average unit cost, create issue and stock movement atomically.
+- **owner_record_job_waste(p_job_id uuid, p_stock_item_id uuid, p_quantity numeric, p_waste_type text, p_reason text, p_request_id uuid) RETURNS jsonb** — classify already-issued material only; reject waste quantity greater than remaining unclassified issue quantity; no second stock deduction.
+- **owner_return_job_offcut(p_job_id uuid, p_stock_item_id uuid, p_location_id uuid, p_quantity numeric, p_condition text, p_request_id uuid) RETURNS jsonb** — return usable material as a compensating stock movement and credit its snapshot cost to the job; cannot return more than remaining unreturned issued material.
+- **owner_add_production_cost(p_job_id uuid, p_cost_type text, p_description text, p_quantity numeric, p_unit text, p_unit_rate bigint, p_request_id uuid) RETURNS jsonb** — record actual labour, machine, setup, outsourced or other direct cost; validate positive units/rate and prevent edits after job finalization except compensating entries.
+- **owner_record_quality_check(p_job_id uuid, p_result text, p_inspection_mode text, p_notes text, p_request_id uuid) RETURNS jsonb** — result pass/fail; inspection_mode second_person/self; actor derived from auth. Self inspection must be explicitly marked.
+- **owner_complete_production_job(p_job_id uuid, p_request_id uuid) RETURNS jsonb** — only after required QC pass; calculate actual costs from immutable issues, costs, offcut credits and rework; finalize order-line actual cost/profit snapshot.
+- **owner_record_expense(p_business_id uuid, p_category_id uuid, p_amount bigint, p_expense_date date, p_payee text, p_payment_method text, p_receipt_reference text, p_notes text, p_request_id uuid) RETURNS jsonb** — owner-only overhead expense, positive amount; job allocation, if later enabled, must be explicit and separately audited.
+- **owner_record_delivery(p_order_id uuid, p_method text, p_carrier text, p_tracking_reference text, p_customer_paid_charge bigint, p_recipient_name text, p_request_id uuid) RETURNS jsonb** — delivery/collection details; carrier charge is recorded as pass-through, not product revenue or production cost.
+- **owner_handover_order(p_order_id uuid, p_method text, p_recipient_name text, p_tracking_reference text, p_payment_exception_reason text, p_request_id uuid) RETURNS jsonb** — owner-only; blocks handover with outstanding balance unless a separately audited owner exception is supplied. Records final handover atomically.
+
 ## 5. RLS and grants policy matrix
 
 Enable RLS on every table in exposed schemas. The private schema containing helper functions/tokens/counters is not exposed through PostgREST. Policies use an indexed membership lookup based on `(select auth.uid())`; no authorization decision relies on `user_metadata`.
@@ -425,8 +444,8 @@ Enable RLS on every table in exposed schemas. The private schema containing help
 | payments/allocations/events/refunds | none | own business SELECT | owner RPC only |
 | receipts | none | own business SELECT | generated only by payment RPC |
 | audit_events | none | own business SELECT | trusted operations only |
-| stock, suppliers, purchase/receipt, movements, reservations | none | own business SELECT | owner RPC only |
-| production profiles, components, jobs, issues, waste, cost entries, QC, rework | none | own business SELECT | owner RPC only |
+| stock items/variants, locations, suppliers, purchase orders/items, goods receipts/items, movements, reservations | none | own business SELECT | owner RPC only |
+| production methods/profiles/components, jobs, issues, waste, offcut returns, cost entries, QC, rework | none | own business SELECT | owner RPC only |
 | expenses, expense categories, deliveries, artwork references | none | own business SELECT | owner RPC only |
 
 ### Policy predicates (normative, not migration SQL)
@@ -514,7 +533,7 @@ Before migration authoring, review and approve:
 
 Only after the user explicitly approves the final migration plan may SQL be applied to Supabase. A PR merge, production deployment and real customer/payment entry remain separate approvals.
 
-## 10. Costing acceptance tests (additional mandatory cases)
+## 9. Costing acceptance tests (additional mandatory cases)
 
 1. A blank T-shirt sale consumes the correct size/colour variant and has no decoration costs.
 2. A value-added T-shirt sale includes the blank garment plus the selected decoration process.
