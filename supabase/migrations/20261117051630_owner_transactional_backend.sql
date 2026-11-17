@@ -483,7 +483,17 @@ begin
   v_cached:=private.begin_idempotent_request(v_order.business_id,'handover_order',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
   select * into v_order from public.orders where business_id=v_order.business_id and id=p_order_id for update;
-  if v_order.status not in ('ready','completed') then raise exception using errcode='22023',message='Order must pass production and QC before handover'; end if;
+  if v_order.status <> 'ready' then raise exception using errcode='22023',message='Order must be ready before handover'; end if;
+  if exists (
+    select 1 from public.production_jobs j
+    where j.business_id=v_order.business_id
+      and j.order_item_id in (select oi.id from public.order_items oi where oi.business_id=v_order.business_id and oi.order_id=p_order_id)
+      and (j.status <> 'completed' or coalesce((
+        select q.result from public.quality_checks q
+        where q.business_id=j.business_id and q.job_id=j.id
+        order by q.checked_at desc,q.id desc limit 1
+      ),'fail') <> 'pass')
+  ) then raise exception using errcode='22023',message='All production jobs must be completed with a latest passing quality check'; end if;
   v_balance:=private.owner_order_balance(p_order_id);
   if (v_balance->>'balance_due')::bigint>0 then
     if length(btrim(coalesce(p_payment_exception_reason,'')))=0 then
@@ -555,11 +565,7 @@ $$ select private.owner_handover_order($1,$2,$3,$4,$5,$6); $$;
 -- the named operations; each function validates auth.uid() and owner membership.
 revoke all on all functions in schema private from public, anon, authenticated;
 grant usage on schema private to authenticated;
-grant execute on function private.assert_active_owner(uuid),
-  private.begin_idempotent_request(uuid,text,uuid,jsonb),
-  private.finish_idempotent_request(uuid,text,uuid,jsonb),
-  private.next_document_number(uuid,text),
-  private.write_audit(uuid,uuid,text,text,uuid,uuid,jsonb),
+grant execute on function private.is_active_owner(uuid),
   private.owner_upsert_customer(uuid,uuid,text,text,text,text,text,uuid),
   private.owner_order_balance(uuid),
   private.owner_record_payment(uuid,uuid,text,bigint,timestamptz,text,text,text,text,uuid),
