@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(15);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-ops-owner@example.invalid','',now(),
@@ -43,7 +43,7 @@ select is(
 
 select is(
   public.owner_update_purchase_order_status(
-    (select id from public.purchase_orders where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb),
+    (select id from public.purchase_orders where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
     'ordered','Purchase order sent to supplier','80000000-0000-4000-8000-000000000004')->>'status',
   'ordered','Purchase order can be formally ordered'
 );
@@ -82,6 +82,10 @@ select is(
     '80000000-0000-4000-8000-000000000006')->>'reserved_quantity')::numeric,
   3::numeric,'Order stock reservation holds the required variant quantity'
 );
+
+reset role;
+update public.orders set status='ready' where id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+set local role authenticated;
 
 select is(
   (public.owner_record_delivery('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','collection',null,null,80,'Customer',
