@@ -77,7 +77,7 @@ as $function$
   select private.owner_upsert_catalogue_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11);
 $function$;
 
-create or replace function public.get_public_catalogue(p_business_slug text)
+create or replace function private.get_public_catalogue(p_business_slug text)
 returns table(
   name text,slug text,item_type text,description text,
   public_starting_price bigint,category_name text,display_order integer
@@ -97,6 +97,19 @@ as $function$
   order by ci.display_order,ci.name;
 $function$;
 
+create or replace function public.get_public_catalogue(p_business_slug text)
+returns table(
+  name text,slug text,item_type text,description text,
+  public_starting_price bigint,category_name text,display_order integer
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $function$
+  select * from private.get_public_catalogue($1);
+$function$;
+
 revoke all on function private.owner_upsert_catalogue_item(uuid,uuid,uuid,text,text,text,text,bigint,boolean,integer,uuid)
   from public,anon,authenticated;
 grant usage on schema private to authenticated;
@@ -106,6 +119,9 @@ revoke all on function public.owner_upsert_catalogue_item(uuid,uuid,uuid,text,te
   from public,anon;
 grant execute on function public.owner_upsert_catalogue_item(uuid,uuid,uuid,text,text,text,text,bigint,boolean,integer,uuid)
   to authenticated;
+revoke all on function private.get_public_catalogue(text) from public,anon,authenticated;
+grant usage on schema private to anon,authenticated;
+grant execute on function private.get_public_catalogue(text) to anon,authenticated;
 revoke all on function public.get_public_catalogue(text) from public;
 grant execute on function public.get_public_catalogue(text) to anon,authenticated;
 
