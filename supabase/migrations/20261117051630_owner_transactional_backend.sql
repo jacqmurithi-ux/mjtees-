@@ -470,12 +470,12 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
-declare v_order public.orders%rowtype; v_actor uuid; v_cached jsonb; v_payload jsonb; v_balance jsonb; v_delivery uuid; v_result jsonb;
+declare v_order public.orders%rowtype; v_actor uuid; v_cached jsonb; v_payload jsonb; v_balance jsonb; v_delivery uuid; v_existing_delivery public.deliveries%rowtype; v_result jsonb;
 begin
   select * into v_order from public.orders where id=p_order_id;
   if not found then raise exception using errcode='P0002',message='Order not found'; end if;
   v_actor:=private.assert_active_owner(v_order.business_id);
-  if p_method not in ('collection','courier') or length(btrim(coalesce(p_recipient_name,'')))=0 then
+  if p_method is null or p_method not in ('collection','courier') or length(btrim(coalesce(p_recipient_name,'')))=0 then
     raise exception using errcode='22023',message='Handover method and recipient are required';
   end if;
   v_payload:=jsonb_build_object('order_id',p_order_id,'method',p_method,'recipient_name',p_recipient_name,
@@ -502,9 +502,21 @@ begin
     insert into public.owner_approvals(business_id,approval_type,entity_type,entity_id,reason,approved_by,request_id)
     values(v_order.business_id,'payment_exception','order',p_order_id,btrim(p_payment_exception_reason),v_actor,p_request_id);
   end if;
-  insert into public.deliveries(business_id,order_id,method,tracking_reference,recipient_name,handed_over_at)
-  values(v_order.business_id,p_order_id,p_method,nullif(btrim(p_tracking_reference),''),btrim(p_recipient_name),now())
-  returning id into v_delivery;
+  select * into v_existing_delivery from public.deliveries
+  where business_id=v_order.business_id and order_id=p_order_id and handed_over_at is null
+  order by created_at desc,id desc limit 1 for update;
+  if found then
+    if v_existing_delivery.method<>p_method then
+      raise exception using errcode='22023',message='Handover method differs from the prepared delivery record';
+    end if;
+    update public.deliveries set tracking_reference=coalesce(nullif(btrim(p_tracking_reference),''),tracking_reference),
+      recipient_name=btrim(p_recipient_name),handed_over_at=now()
+    where business_id=v_order.business_id and id=v_existing_delivery.id returning id into v_delivery;
+  else
+    insert into public.deliveries(business_id,order_id,method,tracking_reference,recipient_name,handed_over_at)
+    values(v_order.business_id,p_order_id,p_method,nullif(btrim(p_tracking_reference),''),btrim(p_recipient_name),now())
+    returning id into v_delivery;
+  end if;
   update public.orders set status='completed',updated_at=now()
   where business_id=v_order.business_id and id=p_order_id;
   insert into public.order_events(business_id,order_id,event_type,from_status,to_status,actor_user_id,reason)
