@@ -32,6 +32,15 @@ select is(
   true,'Owner can create a variant-specific stock SKU'
 );
 
+reset role;
+insert into public.order_items(id,business_id,order_id,description,quantity,unit,unit_price,line_discount,line_total,
+  sale_mode,customer_supplies_item,stock_item_id)
+values('ffffffff-ffff-4fff-8fff-ffffffffffff','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+ 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','Blank T-shirt Medium',3,'piece',100,0,300,'blank',false,
+ (select id from public.stock_items where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and sku='BLANK-TEE-M'));
+
+set local role authenticated;
+
 select is(
   public.owner_create_purchase_order('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     (select id from public.suppliers where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and display_name='Test Supplier'),
@@ -71,11 +80,6 @@ select is(
   50::numeric,'Accepted purchase quantity enters stock in base units'
 );
 
-insert into public.order_items(id,business_id,order_id,description,quantity,unit,unit_price,line_discount,line_total,
-  sale_mode,customer_supplies_item,stock_item_id)
-values('ffffffff-ffff-4fff-8fff-ffffffffffff','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
- 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','Blank T-shirt Medium',3,'piece',100,0,300,'blank',false,
- (select id from public.stock_items where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and sku='BLANK-TEE-M'));
 
 select is(
   (public.owner_reserve_order_stock('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
