@@ -4,6 +4,7 @@ import { supabase } from "./lib/supabase";
 
 type Category = { id: string; name: string };
 type StockItem = { id: string; sku: string; name: string; base_unit: string; stock_kind:string; is_active: boolean };
+type CatalogueItem = {id:string;name:string;category_id:string|null;item_type:"product"|"service"};
 type CostComponentForm = { componentType:string; stockItemId:string; unit:string; driverType:string; factor:string; waste:string; fixedCost:string };
 type Customer = { id: string; display_name: string };
 type Quote = { id: string; quote_number: string; customer_id: string; status: string; revision_of: string | null; subtotal_amount: number; discount_amount: number; total_amount: number; created_at: string; expires_at: string | null };
@@ -16,6 +17,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
 }) {
   const [categories,setCategories]=useState<Category[]>([]);
   const [stockItems,setStockItems]=useState<StockItem[]>([]);
+  const [catalogueItems,setCatalogueItems]=useState<CatalogueItem[]>([]);
   const [quotes,setQuotes]=useState<Quote[]>([]);
   const [orders,setOrders]=useState<Order[]>([]);
   const [tab,setTab]=useState<"quotes"|"costing"|"orders">("quotes");
@@ -25,7 +27,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const [customerId,setCustomerId]=useState("");
   const [revisionOf,setRevisionOf]=useState<string|null>(null);
   const [enquiryId,setEnquiryId]=useState("");
-  const [quoteLines,setQuoteLines]=useState([{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added"}]);
+  const [quoteLines,setQuoteLines]=useState([{catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added"}]);
   const [quoteExpiry,setQuoteExpiry]=useState("");
   const [customerNotes,setCustomerNotes]=useState("");
   const [internalNotes,setInternalNotes]=useState("");
@@ -38,14 +40,15 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
 
   const load=useCallback(async()=>{
     if(!supabase)return;
-    const [cat,q,o,stock]=await Promise.all([
+    const [cat,q,o,stock,catalogue]=await Promise.all([
       supabase.from("service_categories").select("id,name").eq("business_id",businessId).eq("is_active",true).order("name"),
       supabase.from("quotations").select("id,quote_number,customer_id,status,revision_of,subtotal_amount,discount_amount,total_amount,created_at,expires_at").eq("business_id",businessId).order("created_at",{ascending:false}).limit(100),
       supabase.from("orders").select("id,order_number,customer_id,status,total_amount,received_at,required_by,promised_turnaround_hours").eq("business_id",businessId).order("received_at",{ascending:false}).limit(100),
-      supabase.from("stock_items").select("id,sku,name,base_unit,stock_kind,is_active").eq("business_id",businessId).eq("is_active",true).order("name").limit(500)
+      supabase.from("stock_items").select("id,sku,name,base_unit,stock_kind,is_active").eq("business_id",businessId).eq("is_active",true).order("name").limit(500),
+      supabase.from("catalogue_items").select("id,name,category_id,item_type").eq("business_id",businessId).eq("is_active",true).order("name").limit(500)
     ]);
-    if(cat.error||q.error||o.error||stock.error)throw cat.error||q.error||o.error||stock.error;
-    setCategories(cat.data??[]);setStockItems((stock.data??[]) as StockItem[]);setQuotes((q.data??[]) as Quote[]);setOrders((o.data??[]) as Order[]);
+    if(cat.error||q.error||o.error||stock.error||catalogue.error)throw cat.error||q.error||o.error||stock.error||catalogue.error;
+    setCategories(cat.data??[]);setStockItems((stock.data??[]) as StockItem[]);setCatalogueItems((catalogue.data??[]) as CatalogueItem[]);setQuotes((q.data??[]) as Quote[]);setOrders((o.data??[]) as Order[]);
   },[businessId]);
   useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
 
@@ -86,7 +89,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
       setError("Complete the customer and every quotation line with a category, description, positive quantity and valid whole-KES price/discount.");return;
     }
     setBusy(true);setError("");setNotice("");
-    const lines=quoteLines.map(line=>({catalogue_item_id:null,category_id:line.categoryId,stock_item_id:line.customerSupplies?null:(line.stockItemId||null),description:line.description.trim(),
+    const lines=quoteLines.map(line=>({catalogue_item_id:line.catalogueItemId||null,category_id:line.categoryId,stock_item_id:line.customerSupplies?null:(line.stockItemId||null),description:line.description.trim(),
       quantity:Number(line.quantity),unit:line.unit,unit_price:line.unitPrice.trim()?Number(line.unitPrice):null,line_discount:Number(line.discount),
       sale_mode:line.saleMode,customer_supplies_item:line.customerSupplies,production_method_id:null,production_specification:{}}));
     const {data,error:rpcError}=revisionOf
@@ -101,7 +104,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
           p_customer_notes:customerNotes.trim()||null,p_internal_notes:internalNotes.trim()||null,p_request_id:rid()
         });
     if(rpcError)setError(rpcError.message);
-    else {setNotice((revisionOf?"Quotation revision ":"Quotation ")+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setRevisionOf(null);setQuoteLines([{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added"}]);setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
+    else {setNotice((revisionOf?"Quotation revision ":"Quotation ")+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setRevisionOf(null);setQuoteLines([{catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added"}]);setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
     setBusy(false);
   }
   async function updateSchedule(orderId:string, form:FormData){
@@ -121,10 +124,10 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     if(!supabase)return;
     setBusy(true);setError("");setNotice("");
     const {data,error:readError}=await supabase.from("quotation_items")
-      .select("description,quantity,unit,unit_price,line_discount,category_id,customer_supplies_item,stock_item_id,sale_mode")
+      .select("catalogue_item_id,description,quantity,unit,unit_price,line_discount,category_id,customer_supplies_item,stock_item_id,sale_mode")
       .eq("business_id",businessId).eq("quotation_id",q.id).order("line_sequence");
     if(readError||!data?.length){setError(readError?.message||"Could not load the quotation lines.");setBusy(false);return;}
-    setCustomerId(q.customer_id);setEnquiryId("");setQuoteLines(data.map(line=>({categoryId:line.category_id||"",description:line.description,
+    setCustomerId(q.customer_id);setEnquiryId("");setQuoteLines(data.map(line=>({catalogueItemId:line.catalogue_item_id||"",categoryId:line.category_id||"",description:line.description,
       quantity:String(line.quantity),unit:line.unit,unitPrice:line.unit_price==null?"":String(line.unit_price),discount:String(line.line_discount),
       customerSupplies:Boolean(line.customer_supplies_item),stockItemId:line.stock_item_id||"",saleMode:line.sale_mode||"value_added"})));setQuoteExpiry(q.expires_at?q.expires_at.slice(0,10):"");
     setRevisionOf(q.id);setTab("quotes");setNotice("Revision form loaded from "+q.quote_number+". Update the details and save the new version.");
@@ -148,6 +151,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
       <label>Customer *<select required value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">Choose customer</option>{customers.map(c=><option key={c.id} value={c.id}>{c.display_name}</option>)}</select></label>
       <label>Related enquiry<select value={enquiryId} onChange={e=>setEnquiryId(e.target.value)}><option value="">No linked enquiry</option>{enquiries.filter(x=>x.status!=="spam").map(x=><option key={x.id} value={x.id}>{x.public_reference} · {x.contact_name}</option>)}</select></label>
       <div className="wide-field"><b>Quotation items</b>{quoteLines.map((line,index)=><div className="quote-line-editor" key={index}>
+        <label>Catalogue item<select value={line.catalogueItemId} onChange={e=>{const item=catalogueItems.find(x=>x.id===e.target.value);setQuoteLines(v=>v.map((x,i)=>i===index?{...x,catalogueItemId:e.target.value,categoryId:item?.category_id||x.categoryId,description:item?.name||x.description}:x));}}><option value="">Custom / not listed</option>{catalogueItems.map(item=><option key={item.id} value={item.id}>{item.name} · {item.item_type}</option>)}</select></label>
         <label>Service category *<select required value={line.categoryId} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,categoryId:e.target.value}:x))}><option value="">Choose category</option>{categories.map(cat=><option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></label>
         <label>Description *<input required maxLength={240} value={line.description} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,description:e.target.value}:x))} placeholder="e.g. 20 branded T-shirts"/></label>
         <label>Quantity *<input required type="number" min="0.001" step="0.001" value={line.quantity} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,quantity:e.target.value}:x))}/></label>
