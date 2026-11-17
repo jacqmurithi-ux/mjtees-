@@ -35,6 +35,8 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const [costCategory,setCostCategory]=useState("");
   const [costAmount,setCostAmount]=useState("");
   const [costSaleMode,setCostSaleMode]=useState("value_added");
+  const [markupMethod,setMarkupMethod]=useState("percentage_on_cost");
+  const [markupValue,setMarkupValue]=useState("50");
   const [acceptanceLink,setAcceptanceLink]=useState("");
 
   const load=useCallback(async()=>{
@@ -63,12 +65,25 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     else {setNotice("Costing profile v"+data.version+" saved. Earlier versions remain in the history.");setCostAmount("");await load();onChanged();}
     setBusy(false);
   }
+  async function savePricingRule(e:FormEvent){
+    e.preventDefault();if(!supabase)return;
+    if(!costCategory||!markupValue||Number(markupValue)<0||(markupMethod==="margin_on_price"&&Number(markupValue)>=100)){setError("Choose a category and enter a valid markup. Margin must be below 100%.");return;}
+    setBusy(true);setError("");setNotice("");
+    const {error:rpcError}=await supabase.rpc("owner_upsert_pricing_rule",{
+      p_business_id:businessId,p_rule_id:null,p_category_id:costCategory,p_catalogue_item_id:null,
+      p_name:"Category pricing · "+(categories.find(x=>x.id===costCategory)?.name||"Service"),
+      p_markup_method:markupMethod,p_markup_value:Number(markupValue),p_effective_from:new Date().toISOString().slice(0,10),
+      p_effective_to:null,p_is_active:true,p_request_id:rid()
+    });
+    if(rpcError)setError(rpcError.message);else setNotice("Pricing rule saved. New quotations can use this rule when the unit price override is left blank.");
+    setBusy(false);
+  }
   async function createQuote(e:FormEvent){
     e.preventDefault();if(!supabase)return;
-    if(!customerId||!categoryId||!description.trim()||Number(quantity)<=0||Number(unitPrice)<0){setError("Complete the customer, category, description, quantity and price.");return;}
+    if(!customerId||!categoryId||!description.trim()||Number(quantity)<=0||(unitPrice.trim()!==""&&Number(unitPrice)<0)){setError("Complete the customer, category, description, quantity and price.");return;}
     setBusy(true);setError("");setNotice("");
     const line={catalogue_item_id:null,category_id:categoryId,stock_item_id:null,description:description.trim(),
-      quantity:Number(quantity),unit,unit_price:Math.round(Number(unitPrice)),line_discount:Math.round(Number(discount)||0),
+      quantity:Number(quantity),unit,unit_price:unitPrice.trim()?Math.round(Number(unitPrice)):null,line_discount:Math.round(Number(discount)||0),
       sale_mode:"value_added",customer_supplies_item:customerSupplies,production_method_id:null,production_specification:{}};
     const {data,error:rpcError}=revisionOf
       ? await supabase.rpc("owner_create_quotation_revision",{
@@ -132,7 +147,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
       <label>Description *<input required maxLength={240} value={description} onChange={e=>setDescription(e.target.value)} placeholder="e.g. 20 branded T-shirts"/></label>
       <label>Quantity *<input required type="number" min="0.001" step="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label>
       <label>Unit<input required maxLength={24} value={unit} onChange={e=>setUnit(e.target.value)}/></label>
-      <label>Unit selling price (KES) *<input required type="number" min="0" step="1" value={unitPrice} onChange={e=>setUnitPrice(e.target.value)}/></label>
+      <label>Unit selling price override (KES)<input type="number" min="0" step="1" value={unitPrice} onChange={e=>setUnitPrice(e.target.value)} placeholder="Leave blank to use pricing rule"/></label>
       <label>Line discount (KES)<input type="number" min="0" step="1" value={discount} onChange={e=>setDiscount(e.target.value)}/></label>
       <label className="check-field"><input type="checkbox" checked={customerSupplies} onChange={e=>setCustomerSupplies(e.target.checked)}/> Customer supplies the item</label>
       <label>Quote expiry<input type="date" value={quoteExpiry} onChange={e=>setQuoteExpiry(e.target.value)}/></label>
@@ -140,7 +155,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
       <label className="wide-field">Internal notes (not shown to customer)<textarea value={internalNotes} onChange={e=>setInternalNotes(e.target.value)}/></label>
       <div className="form-actions"><button className="primary-action compact" disabled={busy||!customers.length||!categories.length}>{busy?"Saving…":revisionOf?"Save quotation revision":"Create draft quotation"}</button></div>
     </form><div className="record-list">{quotes.map(q=><article className="record-row quote-row" key={q.id}><div><b>{q.quote_number} · {customerName(q.customer_id)}</b><small>{new Date(q.created_at).toLocaleDateString("en-KE")} · {q.status}{q.expires_at?" · Expires "+new Date(q.expires_at).toLocaleDateString("en-KE"):""}</small></div><div className="quote-total"><b>{kes(Number(q.total_amount))}</b>{q.status==="draft"||q.status==="sent"?<button className="secondary-action" disabled={busy} onClick={()=>void sendQuote(q)}>{q.status==="sent"?"Resend":"Mark sent"}</button>:null}{["draft","sent","declined","expired"].includes(q.status)?<button className="secondary-action" disabled={busy} onClick={()=>void startRevision(q)}>Create revision</button>:null}</div></article>)}{!quotes.length&&<p className="empty-records">No quotations yet.</p>}</div></>}
-    {tab==="costing"&&<><form className="record-form" onSubmit={createCostProfile}><h3 className="wide-field">Create a costing profile version</h3><p className="wide-field form-help">This starter profile records a fixed per-order cost for a service category. New versions preserve older quotation cost snapshots. Detailed material, labour and machine drivers can be added as the costing editor is expanded.</p><label>Service category *<select required value={costCategory} onChange={e=>setCostCategory(e.target.value)}><option value="">Choose category</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Costing applies to<select value={costSaleMode} onChange={e=>setCostSaleMode(e.target.value)}><option value="value_added">Value-added service</option><option value="blank">Blank product</option></select></label><label>Estimated direct cost per order (KES) *<input required type="number" min="0" step="1" value={costAmount} onChange={e=>setCostAmount(e.target.value)} placeholder="e.g. 850"/></label><div className="form-actions"><button className="primary-action compact" disabled={busy||!categories.length}>{busy?"Saving…":"Save new profile version"}</button></div></form></>}
+    {tab==="costing"&&<><form className="record-form" onSubmit={createCostProfile}><h3 className="wide-field">Create a costing profile version</h3><p className="wide-field form-help">This starter profile records a fixed per-order cost for a service category. New versions preserve older quotation cost snapshots. Detailed material, labour and machine drivers can be added as the costing editor is expanded.</p><label>Service category *<select required value={costCategory} onChange={e=>setCostCategory(e.target.value)}><option value="">Choose category</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Costing applies to<select value={costSaleMode} onChange={e=>setCostSaleMode(e.target.value)}><option value="value_added">Value-added service</option><option value="blank">Blank product</option></select></label><label>Estimated direct cost per order (KES) *<input required type="number" min="0" step="1" value={costAmount} onChange={e=>setCostAmount(e.target.value)} placeholder="e.g. 850"/></label><div className="form-actions"><button className="primary-action compact" disabled={busy||!categories.length}>{busy?"Saving…":"Save new profile version"}</button></div></form><form className="record-form pricing-rule-form" onSubmit={savePricingRule}><h3 className="wide-field">Category selling-price rule</h3><p className="wide-field form-help">Applies to new quotes in this category when you leave the unit price override blank. Existing quotations keep their saved prices.</p><label>Category *<select required value={costCategory} onChange={e=>setCostCategory(e.target.value)}><option value="">Choose category</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Pricing method<select value={markupMethod} onChange={e=>setMarkupMethod(e.target.value)}><option value="percentage_on_cost">Markup on cost (%)</option><option value="margin_on_price">Margin on selling price (%)</option><option value="fixed_amount">Fixed amount added to cost (KES)</option><option value="manual">Manual pricing only</option></select></label><label>{markupMethod==="margin_on_price"?"Target margin (%)":markupMethod==="fixed_amount"?"Amount added (KES)":"Markup (%)"}<input type="number" min="0" step="0.01" value={markupValue} onChange={e=>setMarkupValue(e.target.value)} disabled={markupMethod==="manual"}/></label><div className="form-actions"><button className="primary-action compact" disabled={busy||!categories.length}>Save pricing rule</button></div></form></>}
     {tab==="orders"&&<div className="record-list">{orders.map(o=><article className="order-card" key={o.id}><div className="order-card-heading"><div><b>{o.order_number} · {customerName(o.customer_id)}</b><small>Received {new Date(o.received_at).toLocaleDateString("en-KE")} · {o.required_by?"Due "+o.required_by:"Due date not set"}{o.promised_turnaround_hours?" · "+o.promised_turnaround_hours+"h promised":""}</small></div><div className="quote-total"><b>{kes(Number(o.total_amount))}</b><span className={"status-chip "+o.status}>{o.status.replace("_"," ")}</span></div></div><form className="order-schedule-form" onSubmit={e=>{e.preventDefault();void updateSchedule(o.id,new FormData(e.currentTarget));}}><label>Required by<input name="required_by" type="date" defaultValue={o.required_by||""}/></label><label>Promised turnaround (hours)<input name="promised_turnaround_hours" type="number" min="1" max="8760" step="1" defaultValue={o.promised_turnaround_hours||""} placeholder="e.g. 72"/></label><button className="secondary-action" disabled={busy}>Save schedule</button></form></article>)}{!orders.length&&<p className="empty-records">No orders yet. An accepted customer quotation creates its order automatically.</p>}</div>}
   </section>;
 }
