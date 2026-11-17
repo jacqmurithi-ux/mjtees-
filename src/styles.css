@@ -177,3 +177,19 @@ a{color:inherit}
 .catalogue-category-list>span{font-size:11px;padding:6px 9px;border-radius:20px;background:#edf6fc;color:#245d8a}
 .catalogue-category-list>small{font-size:12px;color:#75828a}
 @media(max-width:600px){.catalogue-toolbar-actions{width:100%}.catalogue-toolbar-actions button{flex:1}.catalogue-management .panel-toolbar{align-items:flex-start;flex-direction:column}}
+
+
+/* Purchasing form clarity and totals */
+.purchase-line-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:14px;margin:12px 0;border:1px solid #e1e8ec;border-radius:10px;background:#fff}
+.purchase-line-editor label{display:grid;gap:6px;min-width:0;font-size:12px;font-weight:700;color:#40515b}
+.purchase-line-editor input,.purchase-line-editor select{width:100%;min-width:0;border:1px solid #d9e0e3;border-radius:8px;padding:11px;background:#fff;color:#17242c}
+.purchase-line-total,.purchase-totals>div,.purchase-order-lines>div{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.purchase-line-total{padding:10px 0;border-top:1px solid #edf0f1}
+.purchase-line-total span,.purchase-totals span{font-size:12px;color:#687780}
+.purchase-totals{display:grid;gap:9px;padding:14px;border:1px solid #e1e8ec;border-radius:10px;background:#f7f9fa}
+.purchase-grand-total{padding-top:10px;border-top:1px solid #dce3e7}
+.purchase-grand-total strong{font-size:18px;color:#1675b9}
+.purchase-order-lines{display:grid;gap:8px;padding:10px 0}
+.purchase-order-lines>div{font-size:12px;color:#52616a}
+.purchase-order-lines strong{color:#17242c;white-space:nowrap}
+@media(max-width:600px){.purchase-line-editor{grid-template-columns:1fr}.purchase-line-total{grid-column:auto}.purchase-order-lines>div{align-items:flex-start}}
