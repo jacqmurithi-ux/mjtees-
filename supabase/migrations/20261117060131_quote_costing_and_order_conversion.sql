@@ -70,9 +70,9 @@ declare
 begin
   v_actor:=private.assert_active_owner(p_business_id);
   if (p_catalogue_item_id is null and p_category_id is null)
-    or p_sale_mode not in ('blank','value_added')
+    or p_sale_mode is null or p_sale_mode not in ('blank','value_added')
     or p_components is null or jsonb_typeof(p_components) is distinct from 'array'
-    or jsonb_array_length(p_components)>100 then
+    or jsonb_array_length(p_components) not between 1 and 100 then
     raise exception using errcode='22023',message='Cost profile requires a target, sale mode and valid components';
   end if;
   if p_catalogue_item_id is not null and not exists(select 1 from public.catalogue_items where business_id=p_business_id and id=p_catalogue_item_id) then
@@ -144,7 +144,7 @@ begin
   v_actor:=private.assert_active_owner(p_business_id);
   if p_category_id is null and p_catalogue_item_id is null
     or length(btrim(coalesce(p_name,''))) not between 1 and 120
-    or p_markup_method not in ('percentage_on_cost','margin_on_price','fixed_amount','manual')
+    or p_markup_method is null or p_markup_method not in ('percentage_on_cost','margin_on_price','fixed_amount','manual')
     or p_effective_from is null or (p_effective_to is not null and p_effective_to<p_effective_from)
     or (p_markup_method in ('percentage_on_cost','margin_on_price','fixed_amount') and (p_markup_value is null or p_markup_value<0))
     or (p_markup_method='margin_on_price' and p_markup_value>=100) then
@@ -234,6 +234,7 @@ begin
       continue;
     end if;
     if v_component.driver_type='manual' then
+      v_stock:=null;
       v_manual:=nullif(v_spec->'manual_component_costs'->>v_component.id::text,'')::numeric;
       if v_manual is null or v_manual<0 then
         raise exception using errcode='22023',message='A non-negative manual cost is required for each manual costing component';
@@ -332,7 +333,7 @@ begin
     v_item_type:=null;
 
     if v_quantity is null or v_quantity<=0 or v_sale_mode not in ('blank','value_added')
-      or v_discount<0 or v_unit is null or length(v_unit)>24 or jsonb_typeof(v_spec) is distinct from 'object'
+      or v_sale_mode is null or v_discount<0 or v_unit is null or length(v_unit)>24 or jsonb_typeof(v_spec) is distinct from 'object'
       or (v_sale_mode='blank' and (v_method is not null or v_customer_supplies))
       or (v_customer_supplies and v_stock_id is not null) then
       raise exception using errcode='22023',message='Invalid quotation line details';
@@ -375,6 +376,9 @@ begin
         or (r.catalogue_item_id is null and v_category_id is not null and r.category_id=v_category_id))
     order by (r.catalogue_item_id is not null) desc,r.effective_from desc,r.created_at desc
     limit 1;
+    if found and v_rule.cost_basis<>'estimated_unit_cost' then
+      raise exception using errcode='22023',message='Pricing rule cost basis is not supported by this costing version';
+    end if;
     if v_input_price is not null then
       v_price:=v_input_price;
     elsif found and v_rule.markup_method='percentage_on_cost' then
@@ -474,8 +478,8 @@ begin
   v_cached:=private.begin_idempotent_request(v_quote.business_id,'accept_quotation',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
   select * into v_token from private.quote_acceptance_tokens where id=v_token.id for update;
-  if v_token.used_at is not null or v_token.expires_at<=now() or v_quote.expires_at<=now()
-    or v_quote.status<>'sent' then
+  if v_token.used_at is not null or v_token.expires_at<=now()
+    or (v_quote.expires_at is not null and v_quote.expires_at<=now()) or v_quote.status<>'sent' then
     raise exception using errcode='22023',message='Quote acceptance link has expired or was already used';
   end if;
   select user_id into v_owner from public.business_memberships
