@@ -23,16 +23,16 @@ jobs:
         with:
           node-version: 22
       - name: Check Supabase CLI version
-        run: npx --yes supabase@latest --version
+        run: npx --yes supabase@3.2.0 --version
       - name: Show local-only CLI command options
         run: |
-          npx --yes supabase@latest start --help
-          npx --yes supabase@latest db reset --help
+          npx --yes supabase@3.2.0 start --help
+          npx --yes supabase@3.2.0 db reset --help
       - name: Start disposable local Supabase stack
         run: |
-          npx --yes supabase@latest start --debug || { docker ps -a; for id in $(docker ps -aq); do echo "--- container $id ---"; docker logs --tail 150 "$id" || true; done; exit 1; }
+          npx --yes supabase@3.2.0 start --debug || { docker ps -a; for id in $(docker ps -aq); do echo "--- container $id ---"; docker logs --tail 150 "$id" || true; done; exit 1; }
       - name: Apply migrations to disposable local database
-        run: npx --yes supabase@latest db reset --local --debug
+        run: npx --yes supabase@3.2.0 db reset --local --debug
       - name: Upload generated project config and migration validation logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -44,4 +44,4 @@ jobs:
           retention-days: 3
       - name: Stop disposable local Supabase stack
         if: always()
-        run: npx --yes supabase@latest stop --no-backup
+        run: npx --yes supabase@3.2.0 stop --no-backup
