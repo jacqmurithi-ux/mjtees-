@@ -117,3 +117,12 @@ A future migration/RPC change will be needed to enforce the policy consistently 
 The database must remain the authoritative enforcement boundary. A browser-only warning is not sufficient. The future change must preserve historical quotation and order snapshots, existing item/category profile precedence, RLS and owner checks, request idempotency, audit records and the current KES rounding convention.
 
 **No database migration, hosted write, merge beyond this explicitly requested code commit, or deployment is authorised by this validation document.**
+
+
+## 6. Deployment control finding
+
+The repository contained a workflow named `Deploy MJ Tees owner preview` that ran on every push to `main` and deployed to the `github-pages` environment. This contradicted the README's manual-deployment rule and the owner's separate-approval requirement.
+
+The workflow has now been changed to `workflow_dispatch` only. The separate `Deploy GitHub Pages` workflow was already manual-only. Future commits to `main` therefore do not trigger the owner-preview deployment workflow.
+
+**Incident note:** The code commit in this development phase triggered the pre-existing push workflow before the trigger was corrected. GitHub Actions reports that deployment job as completed successfully. No rollback or further deployment has been initiated. The owner should decide separately whether the resulting Pages deployment should remain or be replaced by a previously approved version.
