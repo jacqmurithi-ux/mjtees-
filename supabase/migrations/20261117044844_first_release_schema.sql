@@ -9,8 +9,6 @@ begin;
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
 
-create extension if not exists pgcrypto with schema extensions;
-
 create table public.businesses (
   id uuid primary key default gen_random_uuid(),
   name text not null check (length(btrim(name)) between 1 and 160),
@@ -346,7 +344,7 @@ create table public.payments (
   unique (business_id,id),
   unique (business_id,payment_number),
   unique (business_id,idempotency_key),
-  check ((method = 'cash' and status = 'posted' and mpesa_reference is null) or
+  check ((method = 'cash' and status in ('posted','reversed') and mpesa_reference is null) or
          (method = 'mpesa_manual' and mpesa_reference is not null and
           ((status = 'pending_verification' and verified_at is null) or status in ('posted','rejected','reversed'))))
 );
@@ -556,6 +554,10 @@ create table public.stock_transfers (
   check (source_location_id <> destination_location_id)
 );
 
+alter table public.stock_movements
+  add constraint stock_movements_transfer_fk
+  foreign key (business_id,stock_transfer_id) references public.stock_transfers(business_id,id) on delete restrict;
+
 create table public.purchase_orders (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id) on delete restrict,
@@ -617,6 +619,10 @@ create table public.goods_receipt_items (
   foreign key (business_id,location_id) references public.inventory_locations(business_id,id) on delete restrict,
   unique (business_id,id)
 );
+
+alter table public.goods_receipt_items
+  add constraint goods_receipt_items_movement_fk
+  foreign key (business_id,stock_movement_id) references public.stock_movements(business_id,id) on delete restrict;
 
 create table public.product_costing_profiles (
   id uuid primary key default gen_random_uuid(),
@@ -884,6 +890,10 @@ revoke all on function private.is_active_owner(uuid) from public, anon;
 grant usage on schema private to authenticated;
 grant execute on function private.is_active_owner(uuid) to authenticated;
 
+alter table private.quote_acceptance_tokens enable row level security;
+alter table private.business_bootstrap enable row level security;
+revoke all on all tables in schema private from public, anon, authenticated;
+
 -- RLS is enabled for every public business table. Reads are owner-only; all writes
 -- remain closed until narrowly scoped transactional RPCs are introduced.
 do $$
@@ -891,7 +901,7 @@ declare
   t text;
 begin
   foreach t in array array[
-    'businesses','business_memberships','audit_events','service_categories','catalogue_items',
+    'business_memberships','audit_events','service_categories','catalogue_items',
     'enquiries','customers','customer_addresses','pricing_rules','quotations','quotation_items',
     'quotation_events','orders','order_items','order_item_discount_allocations','order_events',
     'payments','payment_allocations','allocation_reversals','payment_refunds','payment_events',
@@ -911,7 +921,13 @@ begin
       t || '_owner_select',t
     );
   end loop;
-end $$;
+end $;
+
+alter table public.businesses enable row level security;
+revoke all on public.businesses from anon, authenticated;
+grant select on public.businesses to authenticated;
+create policy businesses_owner_select on public.businesses
+for select to authenticated using (private.is_active_owner(id));
 
 -- Profiles are user-scoped and contain no authorization fields.
 alter table public.user_profiles enable row level security;
@@ -925,6 +941,11 @@ for update to authenticated using (user_id = (select auth.uid()))
 with check (user_id = (select auth.uid()));
 
 -- Public catalogue projection exposes only published descriptive fields.
+grant select on public.catalogue_items, public.service_categories to anon;
+create policy catalogue_items_public_select on public.catalogue_items
+for select to anon using (is_published = true and is_active = true);
+create policy service_categories_public_select on public.service_categories
+for select to anon using (is_active = true);
 create or replace view public.public_catalogue
 with (security_invoker = true)
 as
