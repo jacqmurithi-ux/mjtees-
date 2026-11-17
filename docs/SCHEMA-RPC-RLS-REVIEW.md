@@ -385,7 +385,7 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 - Owner only. Does not create a new receipt number; records reprint audit event and returns the existing receipt snapshot.
 
 
-### 4.6 Owner setup and catalogue RPC contracts
+### 4.5 Owner setup and catalogue RPC contracts
 
 - **owner_upsert_service_category(p_business_id uuid, p_category_id uuid, p_name text, p_slug text, p_description text, p_costing_method text, p_is_active boolean, p_request_id uuid) RETURNS jsonb** — create/update an own-business category; enforce unique slug and safe archival.
 - **owner_upsert_catalogue_item(p_business_id uuid, p_item_id uuid, p_category_id uuid, p_name text, p_slug text, p_item_type text, p_description text, p_public_starting_price bigint, p_is_published boolean, p_is_active boolean, p_display_order integer, p_request_id uuid) RETURNS jsonb** — owner-only catalogue mutation; validate category ownership and public fields; never expose cost recipes in public projections.
@@ -415,6 +415,10 @@ All are authenticated owner-only, derive actor from auth.uid(), validate busines
 - **owner_record_expense(p_business_id uuid, p_category_id uuid, p_amount bigint, p_expense_date date, p_payee text, p_payment_method text, p_receipt_reference text, p_notes text, p_request_id uuid) RETURNS jsonb** — owner-only overhead expense, positive amount; job allocation, if later enabled, must be explicit and separately audited.
 - **owner_record_delivery(p_order_id uuid, p_method text, p_carrier text, p_tracking_reference text, p_customer_paid_charge bigint, p_recipient_name text, p_request_id uuid) RETURNS jsonb** — delivery/collection details; carrier charge is recorded as pass-through, not product revenue or production cost.
 - **owner_handover_order(p_order_id uuid, p_method text, p_recipient_name text, p_tracking_reference text, p_payment_exception_reason text, p_request_id uuid) RETURNS jsonb** — owner-only; blocks handover with outstanding balance unless a separately audited owner exception is supplied. Records final handover atomically.
+
+### 4.8 Handover safeguard
+
+**`owner_handover_order(p_order_id uuid, p_method text, p_recipient_name text, p_tracking_reference text, p_payment_exception_reason text, p_request_id uuid) RETURNS jsonb`** — owner-only; blocks handover with outstanding balance unless a separately audited owner exception is supplied. Records final handover atomically.
 
 ## 5. RLS and grants policy matrix
 
@@ -476,11 +480,8 @@ WITH CHECK (user_id = (select auth.uid()))
 
 No anonymous policy is created on private business tables. Public catalogue access is through a restricted projection. Public enquiry write is through the function only, not a table policy.
 
-### 4.8 Handover safeguard
 
-**`owner_handover_order(p_order_id uuid, p_method text, p_recipient_name text, p_tracking_reference text, p_payment_exception_reason text, p_request_id uuid) RETURNS jsonb`** — owner-only; blocks handover with outstanding balance unless a separately audited owner exception is supplied. Records final handover atomically.
-
-## 5. Function security and implementation rules
+## 6. Function security and implementation rules
 
 - Prefer `SECURITY INVOKER`. If a function must be `SECURITY DEFINER`, place it in a non-exposed schema, pin `search_path` to trusted schemas, schema-qualify objects, explicitly validate `auth.uid()` and active owner membership, revoke EXECUTE from PUBLIC/anon, and grant only to the intended role.
 - Every owner function derives actor from `auth.uid()`; never accept actor/role from the client.
