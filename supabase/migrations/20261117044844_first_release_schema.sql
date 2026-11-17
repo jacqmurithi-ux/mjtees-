@@ -941,15 +941,10 @@ for update to authenticated using (user_id = (select auth.uid()))
 with check (user_id = (select auth.uid()));
 
 -- Public catalogue projection exposes only published descriptive fields.
-grant select on public.catalogue_items, public.service_categories to anon;
-create policy catalogue_items_public_select on public.catalogue_items
-for select to anon using (is_published = true and is_active = true);
-create policy service_categories_public_select on public.service_categories
-for select to anon using (is_active = true);
 create or replace view public.public_catalogue
-with (security_invoker = true)
+with (security_barrier = true)
 as
-select c.id, c.business_id, c.name, c.slug, c.item_type, c.description,
+select c.name, c.slug, c.item_type, c.description,
        c.public_starting_price, c.display_order,
        s.name as category_name, s.slug as category_slug
 from public.catalogue_items c
