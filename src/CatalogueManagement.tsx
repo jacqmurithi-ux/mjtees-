@@ -9,7 +9,7 @@ const slugify=(value:string)=>value.toLowerCase().normalize("NFKD").replace(/[^a
 
 export default function CatalogueManagement({businessId,onChanged}:{businessId:string;onChanged:()=>void}){
  const [items,setItems]=useState<Item[]>([]);const [categories,setCategories]=useState<Category[]>([]);
- const [form,setForm]=useState(empty);const [editing,setEditing]=useState(false);const [loading,setLoading]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
+ const [form,setForm]=useState(empty);const [editing,setEditing]=useState(false);const [categoryForm,setCategoryForm]=useState({name:"",slug:"",description:""});const [showCategoryForm,setShowCategoryForm]=useState(false);const [loading,setLoading]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
  const load=useCallback(async()=>{
   if(!supabase)return;setLoading(true);setError("");
   const [a,b]=await Promise.all([
@@ -36,9 +36,23 @@ export default function CatalogueManagement({businessId,onChanged}:{businessId:s
   else{setNotice(form.id?"Catalogue item updated.":"Catalogue item created.");setForm(empty);setEditing(false);await load();onChanged();}
   setLoading(false);
  };
+ const saveCategory=async(e:FormEvent)=>{
+  e.preventDefault();if(!supabase)return;
+  if(!categoryForm.name.trim()||!slugify(categoryForm.slug)){setError("Enter a category name and valid URL slug.");return;}
+  setLoading(true);setError("");setNotice("");
+  const {error:rpcError}=await supabase.rpc("owner_upsert_service_category",{
+   p_business_id:businessId,p_category_id:null,p_name:categoryForm.name.trim(),p_slug:slugify(categoryForm.slug),
+   p_description:categoryForm.description.trim()||null,p_request_id:crypto.randomUUID()
+  });
+  if(rpcError)setError(rpcError.message);
+  else{setNotice("Service category saved. You can now use it for costing and quotations.");setCategoryForm({name:"",slug:"",description:""});setShowCategoryForm(false);await load();onChanged();}
+  setLoading(false);
+ };
  const edit=(item:Item)=>{setForm({id:item.id,category_id:item.category_id||"",name:item.name,slug:item.slug,item_type:item.item_type,description:item.description||"",price:item.public_starting_price===null?"":String(item.public_starting_price),is_published:item.is_published,display_order:String(item.display_order)});setEditing(true);setError("");setNotice("");};
  return <section className="connected-panel catalogue-management">
-  <div className="panel-toolbar"><div><h2>Products and services</h2><p>Publish selected products and services on the public website. Prices are indicative starting prices.</p></div><button className="primary-action compact" onClick={()=>{setForm(empty);setEditing(v=>!v);}}>Add catalogue item</button></div>
+  <div className="panel-toolbar"><div><h2>Products and services</h2><p>Publish selected products and services on the public website. Prices are indicative starting prices.</p></div><div className="catalogue-toolbar-actions"><button className="secondary-action" onClick={()=>setShowCategoryForm(v=>!v)}>Add service category</button><button className="primary-action compact" onClick={()=>{setForm(empty);setEditing(v=>!v);}}>Add catalogue item</button></div></div>
+  {showCategoryForm&&<form className="record-form category-form" onSubmit={saveCategory}><label>Category name *<input required maxLength={120} value={categoryForm.name} onChange={e=>setCategoryForm(v=>({...v,name:e.target.value,slug:slugify(e.target.value)}))}/></label><label>URL slug *<input required maxLength={120} pattern="[a-z0-9]+(-[a-z0-9]+)*" value={categoryForm.slug} onChange={e=>setCategoryForm(v=>({...v,slug:e.target.value}))}/></label><label className="wide-field">Description<input maxLength={500} value={categoryForm.description} onChange={e=>setCategoryForm(v=>({...v,description:e.target.value}))}/></label><div className="form-actions"><button className="primary-action compact" disabled={loading}>Save category</button><button type="button" className="secondary-action" onClick={()=>setShowCategoryForm(false)}>Cancel</button></div></form>}
+  <div className="catalogue-category-list"><b>Service categories</b>{categories.length?categories.map(category=><span key={category.id}>{category.name}</span>):<small>No categories yet. Add one before creating quotations.</small>}</div>
   {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}
   {editing&&<form className="record-form" onSubmit={save}>
    <label>Name *<input required maxLength={160} value={form.name} onChange={e=>setForm(v=>({...v,name:e.target.value,slug:v.id?v.slug:slugify(e.target.value)}))}/></label>
