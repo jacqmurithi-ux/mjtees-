@@ -73,7 +73,9 @@ export default function PublicEnquiryForm() {
       return;
     }
     if (!token) { setError("Complete the verification check before sending."); return; }
+    if (!fields.phone.trim() && !fields.email.trim()) { setError("Provide a phone number or email address so we can contact you."); return; }
     setLoading(true); setError(""); setMessage("");
+    try {
     const { data, error: invokeError } = await supabase.functions.invoke("submit-public-enquiry", {
       body: {
         business_slug: businessSlug,
@@ -93,7 +95,11 @@ export default function PublicEnquiryForm() {
       setToken("");
       if (widgetId.current && window.turnstile) window.turnstile.reset(widgetId.current);
     }
-    setLoading(false);
+    } catch {
+      setError("We could not reach the enquiry service. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const update = (key: keyof typeof fields, value: string | boolean) => setFields(current => ({ ...current, [key]: value }));
