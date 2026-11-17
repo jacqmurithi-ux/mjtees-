@@ -31,7 +31,8 @@ jobs:
           npx --yes supabase@latest start --help
           npx --yes supabase@latest db reset --help
       - name: Start disposable local Supabase stack
-        run: npx --yes supabase@latest start
+        run: |
+          npx --yes supabase@latest start --debug || { docker ps -a; for id in $(docker ps -aq); do echo "--- container $id ---"; docker logs --tail 150 "$id" || true; done; exit 1; }
       - name: Apply migrations to disposable local database
         run: npx --yes supabase@latest db reset --local --debug
       - name: Upload generated project config and migration validation logs
