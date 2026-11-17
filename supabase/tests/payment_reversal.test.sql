@@ -37,7 +37,7 @@ select throws_ok(
 select is(
   (public.owner_reverse_payment_allocation(
     (select id from public.payment_allocations where payment_id=current_setting('mj.test.payment_one')::uuid),
-    100,'Reverse allocation before payment reversal','92000000-0000-4000-8000-000000000003')->>'amount')::bigint,
+    100,'Reverse allocation before payment reversal','92000000-0000-4000-8000-000000000003')->>'reversed_amount')::bigint,
   100::bigint,'Allocation reversal releases the full amount'
 );
 
