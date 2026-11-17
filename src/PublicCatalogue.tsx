@@ -37,7 +37,7 @@ export default function PublicCatalogue(){
       <h3>{item.name}</h3>
       {item.description&&<p>{item.description}</p>}
       {item.public_starting_price!==null&&<strong>From {kes(Number(item.public_starting_price))}</strong>}
-      <a href="#enquire" onClick={()=>{const service=document.querySelector<HTMLSelectElement>(".public-enquiry-form select");if(service){const match=Array.from(service.options).find(o=>o.text.toLowerCase()===item.name.toLowerCase());if(match)service.value=match.value;}}}>Enquire about this ↗</a>
+      <a href="#enquire">Enquire about this ↗</a>
     </article>)}</div>
   </section>;
 }
