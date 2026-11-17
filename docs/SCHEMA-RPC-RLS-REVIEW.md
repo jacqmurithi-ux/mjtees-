@@ -166,7 +166,7 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff acc
 **order_items**
 - `id uuid PK`, `business_id uuid NOT NULL`, `order_id uuid NOT NULL`
 - `description text NOT NULL`, `quantity numeric(12,3) NOT NULL CHECK > 0`, `unit text NOT NULL`
-- `unit_price bigint NOT NULL CHECK >= 0`, `line_total bigint NOT NULL CHECK >= 0`
+- `unit_price bigint NOT NULL CHECK >= 0`, `line_discount bigint NOT NULL DEFAULT 0 CHECK >= 0`, `line_total bigint NOT NULL CHECK >= 0`
 - `category_id uuid`, `customer_supplies_item boolean NOT NULL DEFAULT false`
 - `sale_mode text NOT NULL CHECK IN ('blank','value_added')`, `production_method_id uuid`
 - `production_specification jsonb`, `estimated_unit_cost bigint CHECK >= 0`, `actual_unit_cost bigint CHECK >= 0`
@@ -237,7 +237,7 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff acc
 - stock_items represents purchasable/consumable stock: blank garments, caps, mugs, hot-peel vinyl, sticker vinyl, sublimation paper/ink, screen-printing ink, emulsion, screens, transfer media, packaging and other supplies. Fields include business, SKU, name, stock type, base unit, purchase unit, conversion factor, default supplier, reorder point, active flag and timestamps.
 - stock_variants supports size/colour/other variant attributes for blank products. Track each variant as its own stock-keeping unit; never combine different sizes/colours into one balance.
 - inventory_locations are logical storage areas inside the one shop, not separate branches.
-- stock_movements is append-only: purchase receipt, opening balance, reservation, issue to job, return, waste, adjustment and transfer. Each movement stores quantity, unit, unit cost snapshot, source reference, reason and actor. On-hand and available stock are derived from movements and reservations.
+- stock_movements is append-only: purchase receipt, opening balance, issue to job, return, adjustment and transfer. Reservations are held in stock_reservations; waste is classified against issued material in production_waste. Each movement stores quantity, unit, unit cost snapshot, source reference, reason and actor. On-hand and available stock are derived from movements and reservations.
 - Supplier purchases and goods receipts create stock only when goods are actually received. Use weighted-average cost for replenishable stock in release one and preserve receipt-time unit cost for audit and job-cost snapshots.
 
 **Meter-based vinyl and sheet material costing**
@@ -270,10 +270,9 @@ Gross profit is net product-line revenue less direct actual cost (blank item/mat
 **Operational table contracts (all carry business_id, UUID identity, timestamps and business-scoped foreign keys unless noted)**
 
 - **inventory_locations**: name, code, description, active flag. Logical storage areas only; not branches or separate businesses.
-- **stock_items**: SKU, name, stock_kind (blank_product/material/consumable/packaging), base_unit, purchase_unit, purchase_to_base_factor, costing_method (weighted_average), current_average_unit_cost, reorder_level, default_supplier_id, active/archived timestamps. Length and area materials store roll_width_mm and usable_width_mm. Enforce positive conversion factor and width for roll materials.
-- **stock_variants**: stock_item_id, variant_attributes jsonb (e.g. size and colour), variant SKU/barcode and active flag; unique variant key within business. Each size/colour combination has its own quantity ledger.
-- **stock_movements**: stock_item_id, location_id, movement_type (opening, receipt, issue, return, waste, adjustment, transfer_in, transfer_out), signed quantity in base unit, unit_cost_snapshot, source_type/source_id, reason, actor, occurred_at and request_id. Append-only; unique request_id per business. A transfer is paired movements in one transaction.
-- **stock_reservations**: order_item_id, stock_item_id, location_id, reserved_quantity, released_quantity, status, created/released timestamps. Reservation does not change physical on-hand; available = on-hand less active reservations.
+- **stock_items**: each independently counted SKU is a stock item, including every size/colour combination of a blank garment. Fields: SKU, name, optional parent_stock_item_id for grouping, variant_attributes jsonb (e.g. size and colour), stock_kind (blank_product/material/consumable/packaging), base_unit, purchase_unit, purchase_to_base_factor, costing_method (weighted_average), current_average_unit_cost, reorder_level, default_supplier_id, active/archived timestamps. Length materials store roll_width_mm and usable_width_mm. Enforce positive conversion factor and width for roll materials. Each variant SKU has its own movement balance; no separate stock_variants ledger is needed.
+- **stock_movements**: stock_item_id, location_id, movement_type (opening, receipt, issue, return, adjustment, transfer_in, transfer_out), signed quantity in base unit, unit_cost_snapshot, source_type/source_id, reason, actor, occurred_at and request_id. Append-only; unique request_id per business. A transfer is paired movements in one transaction.
+- **stock_reservations**: order_item_id, stock_item_id, location_id, reserved_quantity, released_quantity, status, created/released timestamps. Reservation does not create a stock movement or change physical on-hand; available = on-hand less active reservations.
 - **suppliers**: display name, contact name, phone/email, notes, archived_at.
 - **purchase_orders** and **purchase_order_items**: supplier, purchase number, status (draft/ordered/part_received/received/cancelled), ordered quantities, purchase unit, unit price, conversion snapshot and line total. Goods receipt, not purchase order creation, increases stock.
 - **goods_receipts** and **goods_receipt_items**: purchase order reference, received_by, received_at, accepted quantity, rejected quantity, actual purchase unit cost, base-unit conversion and stock movement link. Partial deliveries supported.
@@ -283,7 +282,7 @@ Gross profit is net product-line revenue less direct actual cost (blank item/mat
 - **production_jobs**: order_item_id, production_method_id, status, planned_quantity, started_at, due_at, completed_at, estimate/actual cost totals, calculation version and notes.
 - **production_material_issues**: job_id, stock_item_id, location_id, quantity issued in base unit, unit_cost_snapshot, extended_cost, stock_movement_id, issued_at, actor. This is the costed material issue ledger.
 - **production_cost_entries**: job_id, cost_type (labour/machine/setup/outsourced/other), description, quantity, unit, unit_rate, amount, occurred_at and actor.
-- **production_waste**: job_id, stock_item_id, quantity, waste_type, reason and related issue id. It classifies issued material; it must not create a second stock deduction.
+- **production_waste**: job_id, stock_item_id, quantity, waste_type, reason and related issue id. It classifies already-issued material; it is not a stock movement and must not create a second stock deduction.
 - **production_offcut_returns**: job_id, stock_item_id, quantity, measured unit, destination location, stock_movement_id, condition and returned_at. Reusable offcuts are a stock return and credit to the job's net material cost.
 - **quality_checks**: job_id, result (pass/fail), inspection_mode (second_person/self), inspector_user_id, checked_at and notes. Self inspection is permitted only as a recorded mode.
 - **rework_events**: job_id, quality_check_id, reason, opened_at, closed_at, additional_cost snapshot and notes. Rework material/time is linked back to the originating order line.
@@ -430,7 +429,7 @@ Enable RLS on every table in exposed schemas. The private schema containing help
 | payments/allocations/events/refunds | none | own business SELECT | owner RPC only |
 | receipts | none | own business SELECT | generated only by payment RPC |
 | audit_events | none | own business SELECT | trusted operations only |
-| stock items/variants, locations, suppliers, purchase orders/items, goods receipts/items, movements, reservations | none | own business SELECT | owner RPC only |
+| stock items (including variant SKUs), locations, suppliers, purchase orders/items, goods receipts/items, movements, reservations | none | own business SELECT | owner RPC only |
 | production methods/profiles/components, jobs, issues, waste, offcut returns, cost entries, QC, rework | none | own business SELECT | owner RPC only |
 | expenses, expense categories, deliveries, artwork references | none | own business SELECT | owner RPC only |
 
@@ -501,6 +500,13 @@ No anonymous policy is created on private business tables. Public catalogue acce
 16. Owner membership cannot be self-created from signup metadata.
 17. A caller cannot pass another business_id to access or mutate that business.
 18. No tax is applied in any quote/order/payment calculation in release one.
+19. Pending M-Pesa evidence retains its intended order and cannot be allocated to a different order during verification.
+20. A stock reservation reduces available quantity but not physical on-hand; releasing it restores availability without a movement.
+21. Waste classification never deducts stock a second time; reusable offcut return creates one compensating stock movement and credits job cost once.
+22. Two concurrent issues cannot consume the same available stock; the second request fails safely or returns its idempotent result.
+23. Every blank garment size/colour SKU has an independent stock balance and average cost.
+24. Quote acceptance copies sale mode, production method, customer-supplied flag and cost-estimate snapshot to immutable order lines.
+25. Order-level discount is allocated deterministically to lines before gross-profit reporting; rounding remainder is reproducible.
 
 ## 8. Approval checklist and change boundary
 
