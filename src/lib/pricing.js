@@ -121,3 +121,45 @@ export function evaluateMinimumMargin({
     ...economics,
   };
 }
+
+export function calculateQuotationProfitability({
+  lines,
+  minimumGrossMarginPercent = 30,
+}) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    throw new RangeError("A quotation must contain at least one line.");
+  }
+  const calculatedLines = lines.map((line) => {
+    const result = calculateLineProfitability(line);
+    const orderDiscountAllocated = line.orderDiscountAllocated ?? 0;
+    requireNonNegative(orderDiscountAllocated, "Allocated order discount");
+    if (!Number.isSafeInteger(orderDiscountAllocated)
+      || orderDiscountAllocated > result.netSellingAmount) {
+      throw new RangeError("Allocated order discount must be a whole KSh amount not exceeding the line amount after line discount.");
+    }
+    return {
+      ...result,
+      orderDiscountAllocated,
+      netSellingAmount: result.netSellingAmount - orderDiscountAllocated,
+    };
+  });
+  const netSellingAmount = calculatedLines.reduce((sum, line) => sum + line.netSellingAmount, 0);
+  const estimatedTotalCost = calculatedLines.reduce((sum, line) => sum + line.estimatedTotalCost, 0);
+  const grossProfit = netSellingAmount - estimatedTotalCost;
+  const minimumNetSellingAmount = calculateMinimumNetSellingAmount({
+    estimatedTotalCost,
+    minimumGrossMarginPercent,
+  });
+  const shortfall = Math.max(0, minimumNetSellingAmount - netSellingAmount);
+  return {
+    lines: calculatedLines,
+    netSellingAmount,
+    estimatedTotalCost,
+    grossProfit,
+    grossMarginPercent: netSellingAmount > 0 ? (grossProfit / netSellingAmount) * 100 : null,
+    minimumNetSellingAmount,
+    shortfall,
+    status: shortfall === 0 ? "passes" : "below_floor",
+    passes: shortfall === 0,
+  };
+}
