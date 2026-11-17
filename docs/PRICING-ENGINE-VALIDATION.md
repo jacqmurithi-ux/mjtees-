@@ -1,6 +1,6 @@
 # Pricing engine validation and calculation rules
 
-**Status:** Code and database-source review completed; profitability policy and database enforcement remain pending owner decisions.  
+**Status:** Shared calculation tests and database enforcement implemented; the 30% direct-cost gross-margin policy is approved.  
 **Repository:** `jacqmurithi-ux/mjtees-`  
 **Scope:** Shared pricing layer only. No product-specific calculator is introduced here.
 
@@ -21,13 +21,9 @@ Reviewed the current quotation and costing implementation in `src/QuoteWorkflow.
 
 ### Gaps and constraints confirmed
 
-1. **No minimum gross-margin floor is enforced.** A manual unit-price override can be accepted below estimated cost, and line discounts are checked only against gross line amount.
-2. **Order-level discounts have no profitability-floor check.** The discount allocation function prorates an order discount across lines and updates quotation totals, but does not re-evaluate post-discount margin. Its declared `v_floor_total` is not used.
-3. **Manual override reason is not captured on the quotation line.** The pricing snapshot records a boolean `manual_override`, while the quotation audit records the quotation action, not a dedicated override reason.
-4. **The current profile form is category-first.** Item-specific costing profile selection is now included in the `main` branch so exact item profiles can be configured without changing category defaults.
-5. **Overhead policy is undefined.** The current estimator calculates configured profile components; it does not apply a general overhead allocation or tax calculation.
-6. **Component cost semantics need clearer UI guidance.** For stock-linked components, the current function multiplies consumption by weighted-average stock cost and adds fixed cost. For components without a stock link, fixed cost is multiplied by consumption. Labour hours and machine minutes use separate specification fields; a generic machine-hour driver is not currently provided.
-7. **No quantity-discount engine or bundle-pricing policy is implemented in the reviewed quote RPC.** Existing order-level discount allocation is an allocation mechanism, not a profitability policy.
+1. **Manual override reasons are not separately captured at line level.** The pricing snapshot retains the manual-override flag. A below-floor quotation exception is separately reasoned and audited at issue time.
+2. **Component cost semantics need clearer UI guidance.** For stock-linked components, the current function multiplies consumption by weighted-average stock cost and adds fixed cost. For components without a stock link, fixed cost is multiplied by consumption. Labour hours and machine minutes use separate specification fields; a generic machine-hour driver is not currently provided.
+3. **No quantity-discount engine or bundle-pricing policy is implemented in the reviewed quote RPC.** Existing order-level discount allocation is an allocation mechanism, not a profitability policy.
 
 These are the boundaries the unified layer must address. They are not reasons to rewrite existing product profiles.
 
@@ -68,10 +64,10 @@ Markup and gross margin are different measures and must never share the same lab
 - Monetary inputs and outputs follow the existing whole-KSh convention.
 - Quantity may be fractional where the unit permits it.
 - Profitability is measured after line discounts.
-- A minimum-margin percentage is an explicit policy input; this implementation has no default value.
+- The approved minimum gross margin is 30% on direct production cost.
 - The current policy basis is estimated production cost. General overhead is not silently assumed to be included.
 - Tax is excluded, matching the current quotation workflow.
-- The pure module is a calculation foundation and test target. It does not claim to enforce a profitability floor in the database or live quotation RPC.
+- The pure module remains a calculation foundation and test target. The database is the authoritative enforcement boundary for the 30% floor.
 
 ## 3. Validation tests
 
@@ -105,18 +101,9 @@ No default values should be activated until the owner confirms:
 
 ## 5. Database work that remains separate
 
-A future migration/RPC change will be needed to enforce the policy consistently across:
+Migration `20261118000100_enforce_30_percent_gross_margin.sql` is now applied to the MJ Tees Supabase project. It adds a database helper that evaluates the saved direct-cost snapshots against the final quotation total after all discounts, records owner exceptions in `owner_approvals`, and writes an audit event. The check is performed by the quotation-send RPC, so standard quotations, revisions and quotations with allocated order discounts share the same enforcement point. The direct-order RPC accepts and forwards the same exception reason before sending and accepting its internal quotation.
 
-- Initial quotation creation and revisions.
-- Line discounts.
-- Order-level discounts after deterministic allocation.
-- Direct-order creation.
-- Any future bundle/quantity discount operation.
-- Manual overrides and authorised below-floor exceptions.
-
-The database must remain the authoritative enforcement boundary. A browser-only warning is not sufficient. The future change must preserve historical quotation and order snapshots, existing item/category profile precedence, RLS and owner checks, request idempotency, audit records and the current KES rounding convention.
-
-**No database migration, hosted write, merge beyond this explicitly requested code commit, or deployment is authorised by this validation document.**
+The existing 3-argument send RPC and 8-argument direct-order RPC remain available for compatibility; they cannot bypass the floor because they pass no exception reason. The UI now sends the optional reason through the 4-argument send RPC. No product costing profile or historical quotation/order snapshot is rewritten. No deployment is included.
 
 
 ## 6. Deployment control finding
