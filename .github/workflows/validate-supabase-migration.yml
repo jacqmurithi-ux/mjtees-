@@ -1,0 +1,48 @@
+name: Validate Supabase migration locally
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - ".github/workflows/validate-supabase-migration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate Supabase project configuration
+        run: |
+          npx --yes supabase@latest --version
+          npx --yes supabase@latest init --force
+      - name: Show local-only CLI command options
+        run: |
+          npx --yes supabase@latest start --help
+          npx --yes supabase@latest db reset --help
+      - name: Start disposable local Supabase stack
+        run: npx --yes supabase@latest start
+      - name: Apply migrations to disposable local database
+        run: npx --yes supabase@latest db reset --local --debug
+      - name: Upload generated project config and migration validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-local-validation
+          path: |
+            supabase/config.toml
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Stop disposable local Supabase stack
+        if: always()
+        run: npx --yes supabase@latest stop --no-backup
