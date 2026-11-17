@@ -386,21 +386,7 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 - Owner only. Does not create a new receipt number; records reprint audit event and returns the existing receipt snapshot.
 
 
-### 4.5 Inventory, costing and production operations
-
-- owner_receive_purchase(business_id, supplier_id, lines, request_id): records received quantities and receipt-time unit costs; creates stock movements and updates weighted-average cost atomically.
-- owner_adjust_stock(stock_item_id, quantity, adjustment_type, reason, request_id): owner-only, reason required; creates an immutable adjustment movement.
-- owner_reserve_order_stock(order_id, request_id): reserves available blank goods/materials for confirmed work without treating reservations as consumption.
-- owner_start_production_job(order_item_id, method, plan, request_id): creates a job and cost estimate from the selected recipe, order specification, quantity and customer-supplied-item flag.
-- owner_issue_job_material(job_id, stock_item_id, quantity, request_id): consumes stock using current weighted-average cost; validates available stock or records an owner-approved shortage/purchase workflow.
-- owner_record_job_waste(job_id, stock_item_id, quantity, reason, request_id): records waste against the job and its actual cost.
-- owner_complete_production_job(job_id, actual_costs, request_id): finalizes actual material/process cost and line-level gross-profit snapshot after QC/rework.
-- owner_record_quality_check(job_id, result, inspection_mode, notes, request_id): inspection_mode is second_person or self; actor is derived from auth.
-- owner_record_expense(business_id, category_id, amount, expense_date, payee, notes, request_id): owner-only expense record.
-
-All stock and costing operations are transactional and audited. The client may request a calculation preview, but the server recomputes all accepted cost/stock movements before committing.
-
-### 4.6 Handover safeguard
+### 4.5 Handover safeguard
 
 **`owner_handover_order(p_order_id uuid, p_method text, p_recipient_name text, p_tracking_reference text, p_payment_exception_reason text, p_request_id uuid) RETURNS jsonb`**
 - Owner only. Rejects handover while balance_due > 0 unless a separate owner approval record is created with a reason and valid scope. Handover event and approval occur atomically.
