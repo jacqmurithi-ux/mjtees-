@@ -391,6 +391,18 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 - Owner only. Rejects handover while balance_due > 0 unless a separate owner approval record is created with a reason and valid scope. Handover event and approval occur atomically.
 - This operation is not required to enable the initial customer/quote/payment screen, but its invariant is reserved now.
 
+### 4.6 Owner setup and catalogue RPC contracts
+
+- **owner_upsert_service_category(p_business_id uuid, p_category_id uuid, p_name text, p_slug text, p_description text, p_costing_method text, p_is_active boolean, p_request_id uuid) RETURNS jsonb** — create/update an own-business category; enforce unique slug and safe archival.
+- **owner_upsert_catalogue_item(p_business_id uuid, p_item_id uuid, p_category_id uuid, p_name text, p_slug text, p_item_type text, p_description text, p_public_starting_price bigint, p_is_published boolean, p_is_active boolean, p_display_order integer, p_request_id uuid) RETURNS jsonb** — owner-only catalogue mutation; validate category ownership and public fields; never expose cost recipes in public projections.
+- **owner_update_enquiry_status(p_enquiry_id uuid, p_status text, p_notes text, p_request_id uuid) RETURNS jsonb** — owner-only status transition with actor/time audit; does not automatically create a customer or quote.
+- **owner_upsert_supplier(p_business_id uuid, p_supplier_id uuid, p_display_name text, p_contact_name text, p_phone text, p_email text, p_notes text, p_request_id uuid) RETURNS jsonb** — create/update supplier in own business.
+- **owner_upsert_stock_item(p_business_id uuid, p_stock_item_id uuid, p_parent_stock_item_id uuid, p_sku text, p_name text, p_stock_kind text, p_base_unit text, p_purchase_unit text, p_purchase_to_base_factor numeric, p_roll_width_mm numeric, p_usable_width_mm numeric, p_variant_attributes jsonb, p_reorder_level numeric, p_default_supplier_id uuid, p_request_id uuid) RETURNS jsonb** — create/update a counted SKU or measured material; validate units, conversion, roll width and supplier scope. Existing movement history and average cost cannot be overwritten by edits.
+- **owner_upsert_costing_profile(p_business_id uuid, p_profile_id uuid, p_catalogue_item_id uuid, p_category_id uuid, p_sale_mode text, p_production_method_id uuid, p_components jsonb, p_request_id uuid) RETURNS jsonb** — validate component keys/drivers and stock-item scope; creates a new version rather than mutating a version already used by a quote/order.
+- **owner_create_purchase_order(p_business_id uuid, p_supplier_id uuid, p_lines jsonb, p_notes text, p_request_id uuid) RETURNS jsonb** — creates a draft/ordered purchase order with validated stock items, purchase units and prices; does not change on-hand stock.
+- **owner_update_purchase_order_status(p_purchase_order_id uuid, p_status text, p_reason text, p_request_id uuid) RETURNS jsonb** — validates allowed transitions; receipt operations alone move quantities into stock.
+- Owner bootstrap: first owner membership is provisioned through a one-time trusted administrative process after the owner has authenticated and identity is verified. No public RPC accepts a user_id/role to self-assign owner. Record bootstrap actor/time in audit log; disable bootstrap path after first owner exists.
+
 ### 4.7 Purchase, production, costing and stock RPC contracts (fully scoped)
 
 All are authenticated owner-only, derive actor from auth.uid(), validate business ownership, and accept p_request_id uuid for idempotency.
@@ -419,8 +431,8 @@ Enable RLS on every table in exposed schemas. The private schema containing help
 | businesses | none | own business SELECT | none |
 | user_profiles | none | own profile SELECT/UPDATE | own profile fields only |
 | business_memberships | none | own membership SELECT | none |
-| service_categories | published/active SELECT via public view only | own business CRUD | owner RPC only for mutations |
-| catalogue_items | published/active SELECT via public view only | own business CRUD | owner RPC only for mutations |
+| service_categories | published/active SELECT via public view only | own business SELECT | owner RPC only for mutations |
+| catalogue_items | published/active SELECT via public view only | own business SELECT | owner RPC only for mutations |
 | enquiries | submit via constrained function only; no SELECT | own business SELECT/UPDATE status | public function; owner RPC |
 | customers, addresses | none | own business SELECT | owner RPC only |
 | pricing_rules | none | own business SELECT | owner RPC only |
@@ -470,7 +482,11 @@ WITH CHECK (user_id = (select auth.uid()))
 
 No anonymous policy is created on private business tables. Public catalogue access is through a restricted projection. Public enquiry write is through the function only, not a table policy.
 
-## 6. Function security and implementation rules
+### 4.8 Handover safeguard
+
+**`owner_handover_order(p_order_id uuid, p_method text, p_recipient_name text, p_tracking_reference text, p_payment_exception_reason text, p_request_id uuid) RETURNS jsonb`** — owner-only; blocks handover with outstanding balance unless a separately audited owner exception is supplied. Records final handover atomically.
+
+## 5. Function security and implementation rules
 
 - Prefer `SECURITY INVOKER`. If a function must be `SECURITY DEFINER`, place it in a non-exposed schema, pin `search_path` to trusted schemas, schema-qualify objects, explicitly validate `auth.uid()` and active owner membership, revoke EXECUTE from PUBLIC/anon, and grant only to the intended role.
 - Every owner function derives actor from `auth.uid()`; never accept actor/role from the client.
