@@ -64,6 +64,23 @@ begin
   insert into public.business_memberships(business_id,user_id,role,status,created_by)
   values(v_business,v_owner,'owner','active',v_operator);
 
+  -- The one physical shop has two logical storage areas, not separate branches.
+  insert into public.inventory_locations(business_id,name,code,description)
+  values
+    (v_business,'Shop 1 — Apparel, vinyl & stickers','SHOP-1','Blank garments, vinyl, stickers and related stock'),
+    (v_business,'Shop 2 — Production supplies','SHOP-2','Inks, screens, emulsion and other production consumables');
+
+  insert into public.service_categories(business_id,name,slug,description)
+  values
+    (v_business,'Apparel','apparel','Blank garments and custom apparel'),
+    (v_business,'Screen Printing','screen-printing','Screen printing services'),
+    (v_business,'Sublimation','sublimation','Sublimation printing and branding'),
+    (v_business,'Vinyl Branding','vinyl-branding','Vinyl cutting, application and branding'),
+    (v_business,'Stickers & Decals','stickers-decals','Custom stickers, decals and graphics'),
+    (v_business,'Custom Merchandise','custom-merchandise','Mugs, caps and other personalised merchandise'),
+    (v_business,'Artwork Preparation','artwork-preparation','Artwork setup and production preparation'),
+    (v_business,'Outsourced DTF','outsourced-dtf','Externally produced DTF printing');
+
   insert into private.business_bootstrap(business_id,completed_at,completed_by,target_user_id,reason)
   values(v_business,now(),v_operator,v_owner,btrim(v_reason));
 
