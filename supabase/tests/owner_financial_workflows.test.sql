@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(36);
 
 -- Isolated synthetic fixtures; all changes are rolled back at the end.
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
@@ -68,6 +68,12 @@ select is(
   600::bigint,'Cash payment allocates and reduces order balance'
 );
 
+select is(
+  (select count(*) from public.receipts where payment_id=(select id from public.payments where idempotency_key='20000000-0000-4000-8000-000000000001')),
+  1::bigint,'Posted cash payment issues exactly one receipt'
+);
+
+
 select throws_ok(
   $$select public.owner_record_payment('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     'mpesa_manual',50,now(),'Test payer','0712345678','!!!!!!',null,'20000000-0000-4000-8000-000000000009')$$,
@@ -86,6 +92,12 @@ select is(
 );
 
 select is(
+  (select count(*) from public.receipts where payment_id=(select id from public.payments where idempotency_key='20000000-0000-4000-8000-000000000002')),
+  0::bigint,'Unverified M-Pesa evidence does not issue a receipt'
+);
+
+
+select is(
   public.owner_verify_mpesa_payment(
     (select id from public.payments where idempotency_key='20000000-0000-4000-8000-000000000002'),
     'verified','Reference checked against statement','30000000-0000-4000-8000-000000000001')->>'status',
@@ -96,6 +108,12 @@ select is(
   (public.owner_get_order_balance('cccccccc-cccc-4ccc-8ccc-cccccccccccc')->>'balance_due')::bigint,
   400::bigint,'Verified M-Pesa reduces the balance'
 );
+
+select is(
+  (select count(*) from public.receipts where payment_id=(select id from public.payments where idempotency_key='20000000-0000-4000-8000-000000000002')),
+  1::bigint,'Verified M-Pesa payment issues exactly one receipt'
+);
+
 
 select is(
   public.owner_record_refund(
