@@ -318,3 +318,23 @@ a{color:inherit}
 
 /* Owner-managed website content editor */
 .website-content-admin{display:grid;gap:16px}.website-content-admin .connected-panel{margin:0}.website-content-actions{display:flex;gap:9px;flex-wrap:wrap}.website-publish-state{padding:7px 11px;border-radius:30px;font-size:12px;font-weight:700}.website-publish-state.live{background:#e8f6ec;color:#226d39}.website-publish-state.draft{background:#fff3df;color:#8c5b16}.website-admin-help{color:#6b777e;font-size:13px;line-height:1.5}.website-admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin-top:16px}.website-admin-grid label{display:grid;gap:7px;font-size:13px;font-weight:700;color:#34434b;min-width:0}.website-admin-grid input,.website-admin-grid textarea{width:100%;min-width:0;border:1px solid #d9e0e3;border-radius:9px;padding:11px;background:#fff;color:#17242c;font:inherit}.website-admin-grid input[type=file]{font-size:12px}.website-admin-grid input[type=color]{height:42px;padding:4px}.website-admin-grid textarea{min-height:90px;resize:vertical}.website-admin-grid small{font-weight:400;color:#7b878e;overflow-wrap:anywhere}.website-colour-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.website-colour-grid label{display:grid;gap:7px;font-size:12px;font-weight:700;text-transform:capitalize}.website-colour-grid input{width:100%;height:38px;border:1px solid #d9e0e3;border-radius:7px;background:#fff;padding:3px}.website-colour-grid code{font-size:11px;color:#65737a}.json-editor{font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;font-size:12px;min-height:145px!important}.website-admin-grid .wide-field{grid-column:1/-1}@media(max-width:650px){.website-admin-grid{grid-template-columns:1fr}.website-admin-grid .wide-field{grid-column:auto}.website-colour-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.website-content-actions>*{flex:1}.website-content-actions .primary-action{flex-basis:100%}}
+
+
+/* Published website content sections */
+.website-client-strip{padding:24px 5vw;border-top:1px solid #e7edf0;border-bottom:1px solid #e7edf0;background:#fff;text-align:center}
+.website-client-strip>p{margin:0 0 14px;color:#71808a;font-size:9px;font-weight:800;letter-spacing:.16em}
+.website-client-strip>div{display:flex;justify-content:center;align-items:center;gap:14px 30px;flex-wrap:wrap}
+.website-client-strip span{color:#34434b;font-size:13px;font-weight:700}
+.website-faq-section{max-width:1260px;margin:0 auto;padding:78px 4.5vw;display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,1.2fr);gap:48px}
+.website-faq-section h2{margin:10px 0 0;font:700 clamp(32px,4vw,48px)/1.05 "Space Grotesk",sans-serif;letter-spacing:-.05em}
+.website-faq-list details{border-bottom:1px solid #e2e9ec;padding:17px 0}
+.website-faq-list details:first-child{border-top:1px solid #e2e9ec}
+.website-faq-list summary{cursor:pointer;color:#1e2a38;font-size:14px;font-weight:700;list-style:none}
+.website-faq-list summary::-webkit-details-marker{display:none}
+.website-faq-list summary:after{content:"+";float:right;color:#1f8ed6;font-size:19px}
+.website-faq-list details[open] summary:after{content:"−"}
+.website-faq-list p{max-width:680px;margin:12px 28px 0 0;color:#687984;font-size:13px;line-height:1.7}
+.website-social-links{display:flex;flex-wrap:wrap;gap:14px;margin:8px 0}
+.website-social-links a{color:#cbd6db;font-size:11px;text-decoration:none}
+.website-social-links a:hover{color:#fff}
+@media(max-width:700px){.website-faq-section{padding:58px 20px;grid-template-columns:1fr;gap:24px}.website-client-strip>div{gap:12px 18px}.website-client-strip span{font-size:11px}}
