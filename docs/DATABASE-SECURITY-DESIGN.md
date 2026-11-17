@@ -55,14 +55,14 @@ All business tables carry `business_id` even though there is one business initia
 - **service_categories** — configurable service grouping and costing basis (e.g. screen printing, sublimation, vinyl branding, stickers, outsourced DTF).
 - **catalogue_items** — public-facing products/services, type, description, category, active flag, optional public starting price and display order. A public starting price is indicative and never silently becomes a confirmed quote.
 - **pricing_rules** — category/item-level costing and markup configuration, effective dates and owner audit. Store cost basis and markup method explicitly. The quote line snapshots the final agreed price so later rule changes do not rewrite historical quotes.
-- **quotations** — business, sequential human-readable quote number, customer, status (draft/sent/accepted/declined/expired/converted), issue/expiry dates, currency, subtotal, discount, tax (only if configured), total, notes and creator. Totals are server-calculated.
+- **quotations** — business, sequential human-readable quote number, customer, status (draft/sent/accepted/declined/expired/converted), issue/expiry dates, currency, subtotal, discount, total, notes and creator. Totals are server-calculated.
 - **quotation_items** — quote, description snapshot, category/item reference (nullable for custom work), quantity, unit, unit price, line discount, line total, production notes, customer-supplied-item flag and pricing/cost snapshot. Quantity and money values must be validated server-side.
 - **quotation_events** — append-only sent/viewed/accepted/declined/expired/revised/conversion events, actor/source, timestamp and reason. Customer acceptance from a public link must use an unguessable, expiring token stored hashed, with narrowly scoped access; do not expose owner data through that link.
 - Quote revisions should create a new revision/snapshot or a new quote linked to its predecessor. Never mutate an already accepted quote in a way that changes the accepted commercial terms.
 
 ### Orders and payments
 
-- **orders** — business, order number, source quotation (nullable for direct orders), customer, status, currency, subtotal/discount/tax/total snapshots, required-by date, promised turnaround, received date, notes, creator. Order total is frozen from the accepted quote unless an owner-authorized change is recorded as an order amendment.
+- **orders** — business, order number, source quotation (nullable for direct orders), customer, status, currency, subtotal/discount/total snapshots, required-by date, promised turnaround, received date, notes, creator. Order total is frozen from the accepted quote unless an owner-authorized change is recorded as an order amendment.
 - **order_items** — line snapshots copied from accepted quote; quantity, description, agreed price, category, customer-supplied item flag, and production specification. Changes after acceptance create a dated amendment event.
 - **order_events** — append-only lifecycle events: created, confirmed, in production, quality checked, ready, collected/delivered, cancelled, payment exception approved. Record actor, time, status transition and reason.
 - **payments** — business, payment reference, received date/time, method (cash or mpesa_manual initially), amount, currency, payer details where useful, normalized M-Pesa transaction code where applicable, receiving user, status and notes. Cash is posted when physically received and recorded. A manually entered M-Pesa transaction remains pending verification and cannot be allocated or counted as paid until the owner verifies it. Manual verification is not labelled provider-confirmed. A unique normalized M-Pesa transaction reference prevents duplicate entry where a reference exists.
@@ -86,6 +86,8 @@ All business tables carry `business_id` even though there is one business initia
 - **owner_approvals** — explicit approvals for financial exceptions, discounts beyond configured limits, payment overrides and release of goods before full payment. Include reason, actor and timestamp.
 
 ## 4. Payment and balance rules
+
+Tax is deferred entirely from release one. No tax rate, tax line or tax calculation is applied to quotations, orders or receipts. A future tax feature requires a separate design and approval.
 
 1. A quote is not a payment request and an enquiry is not an order.
 2. An order is created only from an accepted quote or an explicitly recorded owner-created direct order.
