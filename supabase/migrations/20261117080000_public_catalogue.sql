@@ -31,7 +31,7 @@ begin
      or p_slug !~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
      or p_item_type not in ('product','service')
      or (p_public_starting_price is not null and p_public_starting_price < 0)
-     or p_display_order is null then
+     or p_display_order is null or p_display_order < 0 or p_request_id is null then
     raise exception 'Invalid catalogue item details' using errcode = '22023';
   end if;
   if p_category_id is not null and not exists (
@@ -93,6 +93,7 @@ as $function$
   join public.businesses b on b.id=ci.business_id
   left join public.service_categories sc on sc.business_id=ci.business_id and sc.id=ci.category_id
   where b.slug=p_business_slug and b.is_active and ci.is_active and ci.is_published
+    and (ci.category_id is null or sc.is_active)
   order by ci.display_order,ci.name;
 $function$;
 
