@@ -170,7 +170,8 @@ begin
   end if;
   v_lock_key:=p_business_id::text||':'||coalesce(p_category_id::text,'-')||':'||coalesce(p_catalogue_item_id::text,'-');
   perform pg_advisory_xact_lock(hashtextextended(v_lock_key,0));
-  if exists(select 1 from public.pricing_rules r where r.business_id=p_business_id and r.id is distinct from p_rule_id
+  if exists(select 1 from public.pricing_rules r where r.business_id=p_business_id and r.is_active
+    and r.id is distinct from p_rule_id
     and r.category_id is not distinct from p_category_id and r.catalogue_item_id is not distinct from p_catalogue_item_id
     and daterange(r.effective_from,coalesce(r.effective_to,'infinity'::date),'[]')
       && daterange(p_effective_from,coalesce(p_effective_to,'infinity'::date),'[]')) then
