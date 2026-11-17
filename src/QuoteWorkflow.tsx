@@ -78,6 +78,19 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     else {setNotice("Quotation "+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setDescription("");setQuantity("1");setUnitPrice("");setDiscount("0");setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
     setBusy(false);
   }
+  async function updateSchedule(orderId:string, form:FormData){
+    if(!supabase)return;
+    const requiredBy=String(form.get("required_by")||"");
+    const hoursRaw=String(form.get("promised_turnaround_hours")||"");
+    const hours=hoursRaw?Number(hoursRaw):null;
+    if(hours!==null&&(!Number.isInteger(hours)||hours<1||hours>8760)){setError("Turnaround hours must be between 1 and 8,760.");return;}
+    setBusy(true);setError("");setNotice("");
+    const {error:rpcError}=await supabase.rpc("owner_update_order_schedule",{
+      p_order_id:orderId,p_required_by:requiredBy||null,p_promised_turnaround_hours:hours,p_request_id:rid()
+    });
+    if(rpcError)setError(rpcError.message);else{setNotice("Order turnaround schedule saved.");await load();}
+    setBusy(false);
+  }
   async function sendQuote(q:Quote){
     if(!supabase)return;
     setBusy(true);setError("");setNotice("");
@@ -108,6 +121,6 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
       <div className="form-actions"><button className="primary-action compact" disabled={busy||!customers.length||!categories.length}>{busy?"Saving…":"Create draft quotation"}</button></div>
     </form><div className="record-list">{quotes.map(q=><article className="record-row quote-row" key={q.id}><div><b>{q.quote_number} · {customerName(q.customer_id)}</b><small>{new Date(q.created_at).toLocaleDateString("en-KE")} · {q.status}{q.expires_at?" · Expires "+new Date(q.expires_at).toLocaleDateString("en-KE"):""}</small></div><div className="quote-total"><b>{kes(Number(q.total_amount))}</b>{q.status==="draft"||q.status==="sent"?<button className="secondary-action" disabled={busy} onClick={()=>void sendQuote(q)}>{q.status==="sent"?"Resend":"Mark sent"}</button>:null}</div></article>)}{!quotes.length&&<p className="empty-records">No quotations yet.</p>}</div></>}
     {tab==="costing"&&<><form className="record-form" onSubmit={createCostProfile}><h3 className="wide-field">Create a costing profile version</h3><p className="wide-field form-help">This starter profile records a fixed per-order cost for a service category. New versions preserve older quotation cost snapshots. Detailed material, labour and machine drivers can be added as the costing editor is expanded.</p><label>Service category *<select required value={costCategory} onChange={e=>setCostCategory(e.target.value)}><option value="">Choose category</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Costing applies to<select value={costSaleMode} onChange={e=>setCostSaleMode(e.target.value)}><option value="value_added">Value-added service</option><option value="blank">Blank product</option></select></label><label>Estimated direct cost per order (KES) *<input required type="number" min="0" step="1" value={costAmount} onChange={e=>setCostAmount(e.target.value)} placeholder="e.g. 850"/></label><div className="form-actions"><button className="primary-action compact" disabled={busy||!categories.length}>{busy?"Saving…":"Save new profile version"}</button></div></form></>}
-    {tab==="orders"&&<div className="record-list">{orders.map(o=><article className="record-row" key={o.id}><div><b>{o.order_number} · {customerName(o.customer_id)}</b><small>Received {new Date(o.received_at).toLocaleDateString("en-KE")} · {o.required_by?"Required "+o.required_by:"No due date"}{o.promised_turnaround_hours?" · "+o.promised_turnaround_hours+"h promised":""}</small></div><div className="quote-total"><b>{kes(Number(o.total_amount))}</b><span className={"status-chip "+o.status}>{o.status.replace("_"," ")}</span></div></article>)}{!orders.length&&<p className="empty-records">No orders yet. An accepted customer quotation creates its order automatically.</p>}</div>}
+    {tab==="orders"&&<div className="record-list">{orders.map(o=><article className="order-card" key={o.id}><div className="order-card-heading"><div><b>{o.order_number} · {customerName(o.customer_id)}</b><small>Received {new Date(o.received_at).toLocaleDateString("en-KE")} · {o.required_by?"Due "+o.required_by:"Due date not set"}{o.promised_turnaround_hours?" · "+o.promised_turnaround_hours+"h promised":""}</small></div><div className="quote-total"><b>{kes(Number(o.total_amount))}</b><span className={"status-chip "+o.status}>{o.status.replace("_"," ")}</span></div></div><form className="order-schedule-form" onSubmit={e=>{e.preventDefault();void updateSchedule(o.id,new FormData(e.currentTarget));}}><label>Required by<input name="required_by" type="date" defaultValue={o.required_by||""}/></label><label>Promised turnaround (hours)<input name="promised_turnaround_hours" type="number" min="1" max="8760" step="1" defaultValue={o.promised_turnaround_hours||""} placeholder="e.g. 72"/></label><button className="secondary-action" disabled={busy}>Save schedule</button></form></article>)}{!orders.length&&<p className="empty-records">No orders yet. An accepted customer quotation creates its order automatically.</p>}</div>}
   </section>;
 }
