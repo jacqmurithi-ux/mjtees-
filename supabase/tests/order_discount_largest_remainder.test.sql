@@ -102,7 +102,7 @@ select is(
 );
 
 select is(
-  (select sum(allocated_discount_amount) from public.order_item_discount_allocations
+  (select sum(allocated_discount_amount)::bigint from public.order_item_discount_allocations
    where order_id=(select id from public.orders where order_number=current_setting('mj.test.discount_order_number'))),
   10::bigint,'Immutable discount allocation rows reconcile exactly to the order discount'
 );
