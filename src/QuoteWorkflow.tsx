@@ -22,13 +22,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const [customerId,setCustomerId]=useState("");
   const [revisionOf,setRevisionOf]=useState<string|null>(null);
   const [enquiryId,setEnquiryId]=useState("");
-  const [categoryId,setCategoryId]=useState("");
-  const [description,setDescription]=useState("");
-  const [quantity,setQuantity]=useState("1");
-  const [unit,setUnit]=useState("piece");
-  const [unitPrice,setUnitPrice]=useState("");
-  const [discount,setDiscount]=useState("0");
-  const [customerSupplies,setCustomerSupplies]=useState(false);
+  const [quoteLines,setQuoteLines]=useState([{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false}]);
   const [quoteExpiry,setQuoteExpiry]=useState("");
   const [customerNotes,setCustomerNotes]=useState("");
   const [internalNotes,setInternalNotes]=useState("");
@@ -80,24 +74,26 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   }
   async function createQuote(e:FormEvent){
     e.preventDefault();if(!supabase)return;
-    if(!customerId||!categoryId||!description.trim()||Number(quantity)<=0||(unitPrice.trim()!==""&&Number(unitPrice)<0)){setError("Complete the customer, category, description, quantity and price.");return;}
+    if(!customerId||!quoteLines.length||quoteLines.some(line=>!line.categoryId||!line.description.trim()||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0||(line.unitPrice.trim()!==""&&(!Number.isSafeInteger(Number(line.unitPrice))||Number(line.unitPrice)<0))||!Number.isSafeInteger(Number(line.discount))||Number(line.discount)<0)){
+      setError("Complete the customer and every quotation line with a category, description, positive quantity and valid whole-KES price/discount.");return;
+    }
     setBusy(true);setError("");setNotice("");
-    const line={catalogue_item_id:null,category_id:categoryId,stock_item_id:null,description:description.trim(),
-      quantity:Number(quantity),unit,unit_price:unitPrice.trim()?Math.round(Number(unitPrice)):null,line_discount:Math.round(Number(discount)||0),
-      sale_mode:"value_added",customer_supplies_item:customerSupplies,production_method_id:null,production_specification:{}};
+    const lines=quoteLines.map(line=>({catalogue_item_id:null,category_id:line.categoryId,stock_item_id:null,description:line.description.trim(),
+      quantity:Number(line.quantity),unit:line.unit,unit_price:line.unitPrice.trim()?Number(line.unitPrice):null,line_discount:Number(line.discount),
+      sale_mode:"value_added",customer_supplies_item:line.customerSupplies,production_method_id:null,production_specification:{}}));
     const {data,error:rpcError}=revisionOf
       ? await supabase.rpc("owner_create_quotation_revision",{
-          p_original_quotation_id:revisionOf,p_lines:[line],
+          p_original_quotation_id:revisionOf,p_lines:lines,
           p_expires_at:quoteExpiry?new Date(quoteExpiry+"T23:59:59").toISOString():null,
           p_customer_notes:customerNotes.trim()||null,p_internal_notes:internalNotes.trim()||null,p_request_id:rid()
         })
       : await supabase.rpc("owner_create_quotation",{
-          p_business_id:businessId,p_customer_id:customerId,p_enquiry_id:enquiryId||null,p_lines:[line],
+          p_business_id:businessId,p_customer_id:customerId,p_enquiry_id:enquiryId||null,p_lines:lines,
           p_expires_at:quoteExpiry?new Date(quoteExpiry+"T23:59:59").toISOString():null,
           p_customer_notes:customerNotes.trim()||null,p_internal_notes:internalNotes.trim()||null,p_request_id:rid()
         });
     if(rpcError)setError(rpcError.message);
-    else {setNotice((revisionOf?"Quotation revision ":"Quotation ")+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setRevisionOf(null);setDescription("");setQuantity("1");setUnitPrice("");setDiscount("0");setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
+    else {setNotice((revisionOf?"Quotation revision ":"Quotation ")+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setRevisionOf(null);setQuoteLines([{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false}]);setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
     setBusy(false);
   }
   async function updateSchedule(orderId:string, form:FormData){
@@ -118,11 +114,11 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     setBusy(true);setError("");setNotice("");
     const {data,error:readError}=await supabase.from("quotation_items")
       .select("description,quantity,unit,unit_price,line_discount,category_id,customer_supplies_item")
-      .eq("business_id",businessId).eq("quotation_id",q.id).order("created_at").limit(1).maybeSingle();
-    if(readError||!data){setError(readError?.message||"Could not load the quotation lines.");setBusy(false);return;}
-    setCustomerId(q.customer_id);setEnquiryId("");setCategoryId(data.category_id||"");setDescription(data.description);
-    setQuantity(String(data.quantity));setUnit(data.unit);setUnitPrice(String(data.unit_price));setDiscount(String(data.line_discount));
-    setCustomerSupplies(Boolean(data.customer_supplies_item));setQuoteExpiry(q.expires_at?q.expires_at.slice(0,10):"");
+      .eq("business_id",businessId).eq("quotation_id",q.id).order("line_sequence");
+    if(readError||!data?.length){setError(readError?.message||"Could not load the quotation lines.");setBusy(false);return;}
+    setCustomerId(q.customer_id);setEnquiryId("");setQuoteLines(data.map(line=>({categoryId:line.category_id||"",description:line.description,
+      quantity:String(line.quantity),unit:line.unit,unitPrice:String(line.unit_price),discount:String(line.line_discount),
+      customerSupplies:Boolean(line.customer_supplies_item)})));setQuoteExpiry(q.expires_at?q.expires_at.slice(0,10):"");
     setRevisionOf(q.id);setTab("quotes");setNotice("Revision form loaded from "+q.quote_number+". Update the details and save the new version.");
     setBusy(false);
   }
@@ -143,13 +139,16 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
       <h3 className="wide-field">{revisionOf?"Create quotation revision":"Create quotation"}</h3>
       <label>Customer *<select required value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">Choose customer</option>{customers.map(c=><option key={c.id} value={c.id}>{c.display_name}</option>)}</select></label>
       <label>Related enquiry<select value={enquiryId} onChange={e=>setEnquiryId(e.target.value)}><option value="">No linked enquiry</option>{enquiries.filter(x=>x.status!=="spam").map(x=><option key={x.id} value={x.id}>{x.public_reference} · {x.contact_name}</option>)}</select></label>
-      <label>Service category *<select required value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Choose category</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-      <label>Description *<input required maxLength={240} value={description} onChange={e=>setDescription(e.target.value)} placeholder="e.g. 20 branded T-shirts"/></label>
-      <label>Quantity *<input required type="number" min="0.001" step="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label>
-      <label>Unit<input required maxLength={24} value={unit} onChange={e=>setUnit(e.target.value)}/></label>
-      <label>Unit selling price override (KES)<input type="number" min="0" step="1" value={unitPrice} onChange={e=>setUnitPrice(e.target.value)} placeholder="Leave blank to use pricing rule"/></label>
-      <label>Line discount (KES)<input type="number" min="0" step="1" value={discount} onChange={e=>setDiscount(e.target.value)}/></label>
-      <label className="check-field"><input type="checkbox" checked={customerSupplies} onChange={e=>setCustomerSupplies(e.target.checked)}/> Customer supplies the item</label>
+      <div className="wide-field"><b>Quotation items</b>{quoteLines.map((line,index)=><div className="quote-line-editor" key={index}>
+        <label>Service category *<select required value={line.categoryId} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,categoryId:e.target.value}:x))}><option value="">Choose category</option>{categories.map(cat=><option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></label>
+        <label>Description *<input required maxLength={240} value={line.description} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,description:e.target.value}:x))} placeholder="e.g. 20 branded T-shirts"/></label>
+        <label>Quantity *<input required type="number" min="0.001" step="0.001" value={line.quantity} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,quantity:e.target.value}:x))}/></label>
+        <label>Unit<input required maxLength={24} value={line.unit} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,unit:e.target.value}:x))}/></label>
+        <label>Unit selling price override (KES)<input type="number" min="0" step="1" value={line.unitPrice} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,unitPrice:e.target.value}:x))} placeholder="Leave blank to use pricing rule"/></label>
+        <label>Line discount (KES)<input type="number" min="0" step="1" value={line.discount} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,discount:e.target.value}:x))}/></label>
+        <label className="check-field"><input type="checkbox" checked={line.customerSupplies} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,customerSupplies:e.target.checked}:x))}/> Customer supplies the item</label>
+        <button type="button" className="secondary-action" disabled={quoteLines.length===1} onClick={()=>setQuoteLines(v=>v.filter((_,i)=>i!==index))}>Remove item</button>
+      </div>)}<button type="button" className="secondary-action" onClick={()=>setQuoteLines(v=>[...v,{categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false}])}>Add another item</button></div>
       <label>Quote expiry<input type="date" value={quoteExpiry} onChange={e=>setQuoteExpiry(e.target.value)}/></label>
       <label className="wide-field">Customer notes<textarea value={customerNotes} onChange={e=>setCustomerNotes(e.target.value)}/></label>
       <label className="wide-field">Internal notes (not shown to customer)<textarea value={internalNotes} onChange={e=>setInternalNotes(e.target.value)}/></label>
