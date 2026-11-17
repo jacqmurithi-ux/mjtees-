@@ -69,8 +69,8 @@ select is(
 );
 
 select throws_ok(
-  $select public.owner_record_payment('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-    'mpesa_manual',50,now(),'Test payer','0712345678','!!!!!!',null,'20000000-0000-4000-8000-000000000009')$,
+  $$select public.owner_record_payment('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    'mpesa_manual',50,now(),'Test payer','0712345678','!!!!!!',null,'20000000-0000-4000-8000-000000000009')$$,
   '22023',null,'M-Pesa reference must remain valid after normalization'
 );
 
