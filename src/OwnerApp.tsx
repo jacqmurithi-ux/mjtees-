@@ -5,6 +5,7 @@ import { supabase, supabaseConfigured } from "./lib/supabase";
 import QuoteWorkflow from "./QuoteWorkflow";
 import PaymentWorkflow from "./PaymentWorkflow";
 import OrderProductionWorkflow from "./OrderProductionWorkflow";
+import ShopOperationsWorkflow from "./ShopOperationsWorkflow";
 
 type Business = { id: string; name: string; trading_name: string | null };
 type Customer = { id: string; display_name: string; business_name: string | null; phone: string | null; email: string | null; created_at: string };
@@ -13,6 +14,7 @@ type Enquiry = { id: string; public_reference: string; contact_name: string; pho
 const sections = ["Overview", "Enquiries", "Customers", "Quotations", "Orders", "Payments", "Inventory", "Purchasing", "Production", "Expenses", "Reports"] as const;
 type Section = typeof sections[number];
 const requestId = () => crypto.randomUUID();
+const money = (n:number) => new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:0}).format(n);
 
 export default function OwnerApp({ onExit }: { onExit: () => void }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -21,6 +23,7 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
   const [section, setSection] = useState<Section>("Overview");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
+  const [operational, setOperational] = useState({orders:0,activeOrders:0,postedPayments:0,expenses:0,stockItems:0});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -52,19 +55,29 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
       if (!membership?.businesses) throw new Error("This account does not have an active owner membership.");
       const businessRecord = Array.isArray(membership.businesses) ? membership.businesses[0] : membership.businesses;
       setBusiness(businessRecord as Business);
-      const [customerResult, enquiryResult] = await Promise.all([
+      const [customerResult, enquiryResult, orderResult, paymentResult, expenseResult, stockResult] = await Promise.all([
         supabase.from("customers").select("id,display_name,business_name,phone,email,created_at").eq("business_id", membership.business_id).is("archived_at", null).order("created_at", { ascending: false }).limit(100),
         supabase.from("enquiries").select("id,public_reference,contact_name,phone,email,requested_service,description,quantity,desired_by,customer_supplies_item,artwork_drive_url,status,created_at").eq("business_id", membership.business_id).order("created_at", { ascending: false }).limit(100),
+        supabase.from("orders").select("id,status,total_amount").eq("business_id", membership.business_id).limit(500),
+        supabase.from("payments").select("amount,status").eq("business_id", membership.business_id).limit(1000),
+        supabase.from("expenses").select("amount").eq("business_id", membership.business_id).limit(1000),
+        supabase.from("stock_items").select("id").eq("business_id", membership.business_id).is("archived_at", null).limit(1000),
       ]);
       if (customerResult.error) throw customerResult.error;
       if (enquiryResult.error) throw enquiryResult.error;
+      if (orderResult.error) throw orderResult.error;
+      if (paymentResult.error) throw paymentResult.error;
+      if (expenseResult.error) throw expenseResult.error;
+      if (stockResult.error) throw stockResult.error;
       setCustomers((customerResult.data ?? []) as Customer[]);
       setEnquiries((enquiryResult.data ?? []) as Enquiry[]);
+      const orderRows = orderResult.data ?? []; const paymentRows = paymentResult.data ?? []; const expenseRows = expenseResult.data ?? [];
+      setOperational({orders:orderRows.length,activeOrders:orderRows.filter(x=>!["completed","cancelled"].includes(x.status)).length,postedPayments:paymentRows.filter(x=>x.status==="posted").reduce((sum,x)=>sum+Number(x.amount),0),expenses:expenseRows.reduce((sum,x)=>sum+Number(x.amount),0),stockItems:stockResult.data?.length??0});
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load owner workspace."); }
     finally { setLoading(false); }
   }, [session]);
 
-  useEffect(() => { if (session) void loadWorkspace(); else { setBusiness(null); setCustomers([]); setEnquiries([]); } }, [session, loadWorkspace]);
+  useEffect(() => { if (session) void loadWorkspace(); else { setBusiness(null); setCustomers([]); setEnquiries([]); setOperational({orders:0,activeOrders:0,postedPayments:0,expenses:0,stockItems:0}); } }, [session, loadWorkspace]);
 
   async function signIn(event: FormEvent) {
     event.preventDefault(); if (!supabase) return;
@@ -111,14 +124,15 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
     <main className="connected-main"><header className="connected-header"><div><p className="eyebrow">MJ PRINTING & BRANDING</p><h1>{section}</h1><p>{business?.trading_name || business?.name || "Loading business…"}</p></div><button className="secondary-action" onClick={() => void loadWorkspace()} disabled={loading}>Refresh</button></header>
       {error && <div className="notice error">{error}</div>}{notice && <div className="notice success">{notice}</div>}
       {loading && <p className="loading-line">Updating records…</p>}
-      {section === "Overview" && <><div className="connected-metrics"><article><span>Open enquiries</span><strong>{activeEnquiries.length}</strong><small>Awaiting review or quotation</small></article><article><span>Customers</span><strong>{customers.length}</strong><small>Active customer records</small></article><article><span>Enquiries received</span><strong>{enquiries.length}</strong><small>Latest 100 records</small></article><article><span>Live financial totals</span><strong>—</strong><small>Connect order and payment workflows next</small></article></div><section className="connected-panel"><h2>Today’s work</h2><p>Start with new enquiries, follow up on quotes and keep customer details together.</p><button className="primary-action compact" onClick={() => setSection("Enquiries")}>Review enquiries</button></section></>}
+      {section === "Overview" && <><div className="connected-metrics"><article><span>Open enquiries</span><strong>{activeEnquiries.length}</strong><small>Awaiting review or quotation</small></article><article><span>Active orders</span><strong>{operational.activeOrders}</strong><small>{operational.orders} orders recorded</small></article><article><span>Payments posted</span><strong>{money(operational.postedPayments)}</strong><small>Verified cash and M-Pesa receipts</small></article><article><span>Expenses recorded</span><strong>{money(operational.expenses)}</strong><small>{operational.stockItems} stock items in catalogue</small></article></div><section className="connected-panel"><h2>Today’s work</h2><p>Review new enquiries, progress accepted orders, record payments and keep stock and expenses current.</p><div className="form-actions"><button className="primary-action compact" onClick={() => setSection("Enquiries")}>Review enquiries</button><button className="secondary-action" onClick={() => setSection("Orders")}>Track orders</button><button className="secondary-action" onClick={() => setSection("Payments")}>Record payment</button></div></section></>}
       {section === "Customers" && <section className="connected-panel"><div className="panel-toolbar"><div><h2>Customers</h2><p>Customer records saved to the business database.</p></div><button className="primary-action compact" onClick={() => setShowCustomerForm(v => !v)}>Add customer</button></div>{showCustomerForm && <form className="record-form" onSubmit={saveCustomer}><label>Customer name *<input required value={customerForm.display_name} onChange={e => setCustomerForm(v => ({...v,display_name:e.target.value}))}/></label><label>Business / organisation<input value={customerForm.business_name} onChange={e => setCustomerForm(v => ({...v,business_name:e.target.value}))}/></label><label>Phone<input value={customerForm.phone} onChange={e => setCustomerForm(v => ({...v,phone:e.target.value}))}/></label><label>Email<input type="email" value={customerForm.email} onChange={e => setCustomerForm(v => ({...v,email:e.target.value}))}/></label><label className="wide-field">Notes<textarea value={customerForm.notes} onChange={e => setCustomerForm(v => ({...v,notes:e.target.value}))}/></label><div className="form-actions"><button className="primary-action compact" disabled={loading}>Save customer</button><button type="button" className="secondary-action" onClick={() => setShowCustomerForm(false)}>Cancel</button></div></form>}<div className="record-list">{customers.map(c => <article className="record-row" key={c.id}><div><b>{c.display_name}</b><small>{c.business_name || "Individual"} · {c.phone || c.email || "No contact details"}</small></div><span>{c.email || "—"}</span></article>)}{!customers.length && <p className="empty-records">No customers yet. Add the first customer to begin.</p>}</div></section>}
       {section === "Enquiries" && <section className="connected-panel"><div className="panel-toolbar"><div><h2>Website enquiries</h2><p>Requests received through the public enquiry endpoint.</p></div><span className="count-chip">{activeEnquiries.length} open</span></div><div className="record-list">{enquiries.map(item => <article className="enquiry-card" key={item.id}><div className="enquiry-top"><div><b>{item.contact_name}</b><small>{item.public_reference} · {new Date(item.created_at).toLocaleString("en-KE")}</small></div><span className={"status-chip " + item.status}>{item.status}</span></div><p><b>{item.requested_service}</b> · {item.quantity ?? "Quantity not given"}</p><p>{item.description}</p><small>{[item.phone,item.email].filter(Boolean).join(" · ") || "No contact"}{item.desired_by ? " · Needed by " + item.desired_by : ""}{item.customer_supplies_item ? " · Customer supplies item" : ""}</small>{item.artwork_drive_url && <a href={item.artwork_drive_url} target="_blank" rel="noreferrer">Open artwork reference ↗</a>}<div className="enquiry-actions"><select aria-label="Update enquiry status" value={item.status} onChange={e => void updateEnquiry(item,e.target.value)}><option value="new">New</option><option value="reviewing">Reviewing</option><option value="quoted">Quoted</option><option value="closed">Closed</option><option value="spam">Spam</option></select></div></article>)}{!enquiries.length && <p className="empty-records">No enquiries have been received.</p>}</div></section>}
       {section === "Quotations" && business && <QuoteWorkflow businessId={business.id} customers={customers} enquiries={enquiries} onChanged={() => void loadWorkspace()} />}
       {section === "Orders" && business && <OrderProductionWorkflow businessId={business.id} customers={customers} onChanged={() => void loadWorkspace()} />}
       {section === "Production" && business && <OrderProductionWorkflow businessId={business.id} customers={customers} onChanged={() => void loadWorkspace()} />}
       {section === "Payments" && business && <PaymentWorkflow businessId={business.id} customers={customers} onChanged={() => void loadWorkspace()} />}
-      {!["Overview","Customers","Enquiries","Quotations","Orders","Payments","Production"].includes(section) && <section className="connected-panel upcoming-panel"><h2>{section} workflow</h2><p>This section is not connected yet. It will be enabled only when its complete owner workflow, database actions and permission checks are implemented.</p><p>Customer and enquiry records are live. Other screens will not display invented sample transactions.</p></section>}
+      {["Inventory","Purchasing","Expenses","Reports"].includes(section) && business && <ShopOperationsWorkflow businessId={business.id} section={section as "Inventory"|"Purchasing"|"Expenses"|"Reports"} onChanged={() => void loadWorkspace()} />}
+      {!["Overview","Customers","Enquiries","Quotations","Orders","Payments","Production","Inventory","Purchasing","Expenses","Reports"].includes(section) && <section className="connected-panel upcoming-panel"><h2>{section} workflow</h2><p>This section is not connected yet. It will be enabled only when its complete owner workflow, database actions and permission checks are implemented.</p><p>Customer and enquiry records are live. Other screens will not display invented sample transactions.</p></section>}
       <footer className="connected-footer">MJ Printing & Branding · KES · Africa/Nairobi</footer>
     </main>
   </div>;
