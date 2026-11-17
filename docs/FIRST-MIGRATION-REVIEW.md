@@ -13,6 +13,9 @@ That evidence establishes that the migrations apply and the tested database path
 ## Review finding corrected in this pass
 
 - **Value-added blank-stock consumption:** reservations included tracked stock items on value-added order lines, but the handover trigger consumed stock only for lines whose sale mode was `blank`. This left branded garments reserved but not deducted from stock. The trigger now consumes any tracked, non-customer-supplied stock item at handover, matching the reservation logic. A regression test covers a value-added garment order.
+- **Inactive pricing-rule replacement:** the overlap check considered inactive historical pricing rules, preventing a new active rule from replacing them over the same effective period. The check now considers only active rules, with regression coverage.
+- **First-owner bootstrap race:** the trusted bootstrap script previously checked for an existing owner without serializing concurrent operators. It now takes a transaction-scoped advisory lock before checking and creating the first business/owner.
+- **Public landing route:** the app previously opened the owner preview by default. It now opens the public website first; the owner preview remains visibly marked as not live data.
 
 ## Remaining release-readiness work
 
