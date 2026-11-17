@@ -333,7 +333,7 @@ create or replace function private.owner_adjust_stock(
 language plpgsql security definer set search_path=''
 as $$
 declare v_item public.stock_items%rowtype; v_actor uuid; v_cached jsonb; v_payload jsonb;
-  v_on_hand numeric; v_delta numeric; v_movement uuid; v_result jsonb;
+  v_on_hand numeric; v_reserved numeric; v_delta numeric; v_movement uuid; v_result jsonb;
 begin
   select * into v_item from public.stock_items where id=p_stock_item_id;
   if not found then raise exception using errcode='P0002',message='Stock item not found'; end if;
@@ -352,6 +352,8 @@ begin
   end if;
   select coalesce(sum(quantity),0) into v_on_hand from public.stock_movements
   where business_id=v_item.business_id and stock_item_id=p_stock_item_id and location_id=p_location_id;
+  select coalesce(sum(reserved_quantity-released_quantity),0) into v_reserved from public.stock_reservations
+  where business_id=v_item.business_id and stock_item_id=p_stock_item_id and location_id=p_location_id and status='active';
   if p_adjustment_type='opening_balance' then
     if exists(select 1 from public.stock_movements where business_id=v_item.business_id and stock_item_id=p_stock_item_id and location_id=p_location_id) then
       raise exception using errcode='22023',message='Opening balance can only be recorded before other movements';
@@ -360,7 +362,9 @@ begin
   elsif p_adjustment_type='count_gain' then v_delta:=p_quantity;
   else v_delta:=-p_quantity;
   end if;
-  if v_on_hand+v_delta<0 then raise exception using errcode='22023',message='Adjustment would make stock negative'; end if;
+  if v_on_hand+v_delta<v_reserved then
+    raise exception using errcode='22023',message='Adjustment cannot reduce stock below active reservations';
+  end if;
   insert into public.stock_movements(business_id,stock_item_id,location_id,movement_type,quantity,unit_cost_snapshot,
     source_type,source_id,reason,actor_user_id,request_id)
   values(v_item.business_id,p_stock_item_id,p_location_id,
