@@ -234,5 +234,6 @@ select is(
   (select count(*)::integer from public.get_public_catalogue('mj-ops-test')),
   1,'Anonymous visitors see only published catalogue entries'
 );
+reset role;
 select * from finish();
 rollback;
