@@ -11,7 +11,7 @@ create or replace function private.capture_purchase_transport_cost()
 returns trigger language plpgsql security definer set search_path=''
 as $$
 begin
-  new.transport_cost := coalesce(substring(coalesce(new.notes,'') from '(?m)^Transport cost \\(KES\\): ([0-9]+)$')::bigint,new.transport_cost,0);
+  new.transport_cost := coalesce(substring(coalesce(new.notes,'') from '(?m)^Transport cost \(KES\): ([0-9]+)$')::bigint,new.transport_cost,0);
   return new;
 end; $$;
 drop trigger if exists purchase_orders_capture_transport_cost on public.purchase_orders;
@@ -91,8 +91,8 @@ for each row execute function private.apply_receipt_transport_to_inventory();
 
 -- Backfill the transport already entered in purchase-order notes, including existing drafts.
 update public.purchase_orders set transport_cost=coalesce(
-  substring(coalesce(notes,'') from '(?m)^Transport cost \\(KES\\): ([0-9]+)$')::bigint,0
-) where transport_cost=0 and notes ~ '(?m)^Transport cost \\(KES\\): [0-9]+$';
+  substring(coalesce(notes,'') from '(?m)^Transport cost \(KES\): ([0-9]+)$')::bigint,0
+) where transport_cost=0 and notes ~ '(?m)^Transport cost \(KES\): [0-9]+$';
 
 with totals as (
   select poi.purchase_order_id,poi.business_id,sum(poi.line_total)::numeric subtotal,max(po.transport_cost)::bigint transport
