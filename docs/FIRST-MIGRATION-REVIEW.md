@@ -24,8 +24,9 @@ That evidence establishes that the migrations apply and the tested database path
 2. Make first-owner bootstrap concurrency-safe before any hosted execution.
 3. Deploy/configure the public enquiry Edge Function separately, including the allowed-origin, Turnstile, service-role, and rate-limit secrets. The migration alone does not deploy the function.
 4. Build the real owner application: authentication, customer/enquiry workflow, quotes, orders, payments, stock/purchasing, production/QC, expenses, delivery, and reports. The current React dashboard is explicitly a preview with placeholder modules and no Supabase client.
-5. Add environment configuration and deployment instructions, verify GitHub Pages routing/base path, and complete end-to-end browser tests.
-6. Reconcile the roadmap and legacy design notes with the actual implementation.
+5. Complete owner-facing catalogue maintenance before relying on a public catalogue. The bootstrap seeds the initial service categories, but there is not yet an owner RPC/UI to create or edit catalogue items. Quotes can still use custom line descriptions and category-based costing.
+6. Add environment configuration and deployment instructions, verify GitHub Pages routing/base path, and complete end-to-end browser tests.
+7. Reconcile the roadmap and legacy design notes with the actual implementation.
 
 ## Explicitly not done
 
