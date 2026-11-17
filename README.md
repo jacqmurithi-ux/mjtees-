@@ -1,7 +1,7 @@
 # MJ Printing & Branding
 
 **Business:** MJ Printing & Branding (MJ Tees)  
-**Tagline:** Run the work. Deliver the brand.  
+**Website description:** Printing, apparel and branding.  
 **Hosting target:** GitHub Pages (manual deployment only)  
 **Backend:** Supabase project `rbbluwsniiwzixlvdnwz`
 
