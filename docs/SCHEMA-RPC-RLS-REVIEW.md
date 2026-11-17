@@ -132,7 +132,8 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff acc
 - `unit_price bigint NOT NULL CHECK >= 0`, `line_discount bigint NOT NULL DEFAULT 0 CHECK >= 0`
 - `line_total bigint NOT NULL CHECK >= 0` (server-calculated)
 - `customer_supplies_item boolean NOT NULL DEFAULT false`
-- `production_specification text`, `pricing_snapshot jsonb`
+- `sale_mode text NOT NULL CHECK IN ('blank','value_added')`, `production_method_id uuid`
+- `production_specification jsonb`, `pricing_snapshot jsonb`, `cost_estimate_snapshot jsonb`
 - `created_at`
 - Composite FK to quotation. Line totals must be calculated with explicit rounding rules and summed server-side.
 
@@ -167,8 +168,11 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff acc
 - `description text NOT NULL`, `quantity numeric(12,3) NOT NULL CHECK > 0`, `unit text NOT NULL`
 - `unit_price bigint NOT NULL CHECK >= 0`, `line_total bigint NOT NULL CHECK >= 0`
 - `category_id uuid`, `customer_supplies_item boolean NOT NULL DEFAULT false`
-- `production_specification text`, `created_at`
-- Immutable accepted price snapshot; amendments use separate events/records.
+- `sale_mode text NOT NULL CHECK IN ('blank','value_added')`, `production_method_id uuid`
+- `production_specification jsonb`, `estimated_unit_cost bigint CHECK >= 0`, `actual_unit_cost bigint CHECK >= 0`
+- `estimated_total_cost bigint CHECK >= 0`, `actual_total_cost bigint CHECK >= 0`
+- `cost_breakdown_snapshot jsonb`, `cost_calculation_version text`, `created_at`
+- Immutable accepted selling-price and cost-estimate snapshots; actual cost is finalized from job issues/cost entries. Amendments use separate events/records.
 
 **order_events**
 - `id uuid PK`, `business_id uuid NOT NULL`, `order_id uuid NOT NULL`
