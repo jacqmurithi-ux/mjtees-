@@ -1,6 +1,9 @@
 -- Public, read-only published catalogue and owner-managed catalogue entries.
 begin;
 
+-- Replace the former unscoped view: it could mix published rows across businesses.
+drop view if exists public.public_catalogue;
+
 create or replace function private.owner_upsert_catalogue_item(
   p_business_id uuid,
   p_catalogue_item_id uuid,
@@ -76,7 +79,7 @@ $function$;
 
 create or replace function public.get_public_catalogue(p_business_slug text)
 returns table(
-  id uuid,name text,slug text,item_type text,description text,
+  name text,slug text,item_type text,description text,
   public_starting_price bigint,category_name text,display_order integer
 )
 language sql
@@ -84,7 +87,7 @@ stable
 security definer
 set search_path = ''
 as $function$
-  select ci.id,ci.name,ci.slug,ci.item_type,ci.description,ci.public_starting_price,
+  select ci.name,ci.slug,ci.item_type,ci.description,ci.public_starting_price,
     sc.name as category_name,ci.display_order
   from public.catalogue_items ci
   join public.businesses b on b.id=ci.business_id
