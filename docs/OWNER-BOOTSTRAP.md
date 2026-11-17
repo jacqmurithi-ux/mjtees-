@@ -26,6 +26,7 @@ The script is a trusted administrative operation. Run it only through a protecte
 ## Safeguards in the script
 
 - Confirms both Auth users exist.
+- Takes a transaction-scoped advisory lock so concurrent bootstrap operators serialize before checking or writing.
 - Refuses to run if an active owner already exists.
 - Refuses to run if a completed bootstrap record exists.
 - Creates the business, profile, exactly one active owner membership, bootstrap completion record, document counters and audit event in one transaction.
