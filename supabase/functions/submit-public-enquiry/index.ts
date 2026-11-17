@@ -92,7 +92,7 @@ Deno.serve(async (request: Request) => {
   }
   if (!validText(token, 4096)) return reply({ message: "Complete the verification check" }, 400);
 
-  const forwardedIp = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-real-ip") ?? "";
+  // Trust only the platform-injected Cloudflare client IP. x-real-ip can be supplied by a direct caller.\n  const forwardedIp = request.headers.get("cf-connecting-ip") ?? "";
   const captchaForm = new URLSearchParams({ secret: captchaSecret, response: token });
   if (forwardedIp) captchaForm.set("remoteip", forwardedIp);
   let captcha: { success?: boolean; hostname?: string };
