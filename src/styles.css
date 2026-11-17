@@ -161,3 +161,11 @@ a{color:inherit}
 .catalogue-management .checkbox-field input{width:auto}
 @media(max-width:850px){.site-header{padding:18px 20px}.site-header nav{gap:14px}.hero,.services-section,.catalogue-section,.process-section,.enquiry-section{grid-template-columns:1fr;gap:35px}.hero{padding:48px 20px 65px}.hero-art{min-height:330px}.section,.process-section{padding:58px 20px}.enquiry-section{padding:58px 20px}.portal-section{padding:42px 20px}.site-footer{padding:22px 20px}.section-heading h2,.process-section h2,.portal-section h2{font-size:44px}}
 @media(max-width:560px){.site-header{align-items:flex-start}.site-header nav{display:grid;grid-template-columns:repeat(2,auto);gap:9px 15px;justify-items:start}.site-header nav a,.nav-portal{font-size:11px}.brand{font-size:10px}.brand-mark{width:36px;height:36px}.hero h1{font-size:54px}.hero-intro{font-size:15px}.hero-art{min-height:280px}.service-grid,.catalogue-grid{grid-template-columns:1fr}.service-card{min-height:0}.portal-section{align-items:flex-start;flex-direction:column}.site-footer{align-items:flex-start;flex-direction:column;gap:7px}.enquiry-section .record-form{grid-template-columns:1fr}.enquiry-section .wide-field,.enquiry-section .form-actions{grid-column:auto}.catalogue-management .record-row{display:grid}.catalogue-item-actions{justify-content:space-between}}
+
+
+.quote-line-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:16px;margin:12px 0;border:1px solid #e1e8ec;border-radius:10px;background:#fff}
+.quote-line-editor label{min-width:0}
+.quote-line-editor select{width:100%;border:1px solid #d9e0e3;border-radius:9px;padding:12px;background:#fff;color:#17242c;font:inherit}
+.quote-line-editor .check-field{display:flex;align-items:center;gap:9px}
+.quote-line-editor .check-field input{width:auto}
+@media(max-width:540px){.quote-line-editor{grid-template-columns:1fr}}
