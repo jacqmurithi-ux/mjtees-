@@ -151,7 +151,7 @@ create or replace function private.owner_upsert_pricing_rule(
   p_is_active boolean,p_request_id uuid
 ) returns jsonb language plpgsql security definer set search_path=''
 as $$
-declare v_actor uuid; v_cached jsonb; v_payload jsonb; v_id uuid; v_created boolean; v_result jsonb;
+declare v_actor uuid; v_cached jsonb; v_payload jsonb; v_id uuid; v_created boolean; v_result jsonb; v_lock_key text;
 begin
   v_actor:=private.assert_active_owner(p_business_id);
   if p_category_id is null and p_catalogue_item_id is null
