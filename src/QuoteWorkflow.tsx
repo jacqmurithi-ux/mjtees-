@@ -125,7 +125,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     setBusy(true);setError("");setNotice("");
     const {data,error:readError}=await supabase.from("quotation_items")
       .select("catalogue_item_id,description,quantity,unit,unit_price,line_discount,category_id,customer_supplies_item,stock_item_id,sale_mode")
-      .eq("business_id",businessId).eq("quotation_id",q.id).order("line_sequence");
+      .eq("business_id",businessId).eq("quotation_id",q.id).order("created_at",{ascending:true}).order("id",{ascending:true});
     if(readError||!data?.length){setError(readError?.message||"Could not load the quotation lines.");setBusy(false);return;}
     setCustomerId(q.customer_id);setEnquiryId("");setQuoteLines(data.map(line=>({catalogueItemId:line.catalogue_item_id||"",categoryId:line.category_id||"",description:line.description,
       quantity:String(line.quantity),unit:line.unit,unitPrice:line.unit_price==null?"":String(line.unit_price),discount:String(line.line_discount),
