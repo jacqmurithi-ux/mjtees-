@@ -11,8 +11,8 @@ function App() {
   return (
     <main>
       <header className="site-header">
-        <a className="brand" href="#home" aria-label="MJ Tees home">
-          <span className="brand-mark">MJ</span><span>MJ TEES</span>
+        <a className="brand" href="#home" aria-label="MJ Printing & Branding home">
+          <span className="brand-mark">MJ</span><span>MJ PRINTING & BRANDING</span>
         </a>
         <nav aria-label="Main navigation">
           <a href="#services">Services</a><a href="#process">How it works</a><a className="nav-portal" href="#shop-access">Shop portal</a>
@@ -21,11 +21,11 @@ function App() {
       <section className="hero" id="home">
         <div className="hero-copy">
           <p className="eyebrow">PRINTING · APPAREL · BRANDING</p>
-          <h1>Make your idea<br /><span>wearable.</span></h1>
+          <h1>Make your idea<br /><span>stand out.</span></h1>
           <p className="hero-intro">Custom apparel, printing and branded merchandise for people, teams, schools, businesses and organisations.</p>
           <a className="primary-link" href="#services">Explore our services <span aria-hidden="true">↗</span></a>
         </div>
-        <div className="hero-art" aria-label="MJ Tees brand artwork">
+        <div className="hero-art" aria-label="MJ Printing and Branding artwork">
           <div className="art-circle art-circle-one" /><div className="art-circle art-circle-two" />
           <div className="art-word">YOUR<br />IDENTITY.</div><div className="art-caption">DESIGNED TO BE SEEN</div>
         </div>
@@ -59,8 +59,8 @@ function App() {
         <span className="portal-status">Portal setup in progress</span>
       </section>
       <footer className="site-footer">
-        <a className="brand" href="#home"><span className="brand-mark">MJ</span><span>MJ TEES</span></a>
-        <p>Printing, apparel and branding.</p><span>© {new Date().getFullYear()} MJ Tees</span>
+        <a className="brand" href="#home"><span className="brand-mark">MJ</span><span>MJ PRINTING & BRANDING</span></a>
+        <p>Printing, apparel and branding.</p><span>© {new Date().getFullYear()} MJ Printing & Branding</span>
       </footer>
     </main>
   );
