@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 
 type CatalogueItem = {
-  id:string; name:string; slug:string; item_type:"product"|"service";
+  name:string; slug:string; item_type:"product"|"service";
   description:string|null; public_starting_price:number|null; category_name:string|null;
   display_order:number;
 };
@@ -32,7 +32,7 @@ export default function PublicCatalogue(){
   if(!items.length)return null;
   return <section className="section catalogue-section" id="catalogue">
     <div className="section-heading"><p className="eyebrow">OUR CATALOGUE</p><h2>Explore what<br/>we can make.</h2><p>Published items are a starting point. Final pricing depends on sizes, artwork, quantity and production method.</p></div>
-    <div className="catalogue-grid">{items.map(item=><article className="catalogue-card" key={item.id}>
+    <div className="catalogue-grid">{items.map(item=><article className="catalogue-card" key={item.slug}>
       <span className="catalogue-kind">{item.category_name||item.item_type}</span>
       <h3>{item.name}</h3>
       {item.description&&<p>{item.description}</p>}
