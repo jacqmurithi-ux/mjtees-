@@ -338,3 +338,11 @@ a{color:inherit}
 .website-social-links a{color:#cbd6db;font-size:11px;text-decoration:none}
 .website-social-links a:hover{color:#fff}
 @media(max-width:700px){.website-faq-section{padding:58px 20px;grid-template-columns:1fr;gap:24px}.website-client-strip>div{gap:12px 18px}.website-client-strip span{font-size:11px}}
+
+
+.website-faq-editor{display:grid;gap:14px;margin-top:14px}
+.website-faq-row{display:grid;grid-template-columns:1fr 1.3fr auto;gap:12px;align-items:end;padding:14px;border:1px solid #e0e7ea;border-radius:10px;background:#fbfcfd}
+.website-faq-row label{display:grid;gap:7px;font-size:13px;font-weight:700;color:#34434b}
+.website-faq-row input,.website-faq-row textarea{width:100%;border:1px solid #d9e0e3;border-radius:8px;padding:10px;font:inherit}
+.website-faq-row textarea{min-height:72px;resize:vertical}
+@media(max-width:760px){.website-faq-row{grid-template-columns:1fr}.website-faq-row .text-action{justify-self:start}}
