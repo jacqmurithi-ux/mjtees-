@@ -26,6 +26,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Set up Deno for Edge Function type checking
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check public enquiry Edge Function
+        run: deno check supabase/functions/submit-public-enquiry/index.ts
       - name: Check Supabase CLI version
         run: npx --yes supabase@3.2.0 --version
       - name: Show local-only CLI command options
