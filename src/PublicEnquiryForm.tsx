@@ -24,6 +24,7 @@ export default function PublicEnquiryForm() {
   const widgetHost = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
   const [token, setToken] = useState("");
+  const [catalogueOptions,setCatalogueOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -64,6 +65,20 @@ export default function PublicEnquiryForm() {
       if (widgetId.current && window.turnstile) window.turnstile.remove(widgetId.current);
       widgetId.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadCatalogue() {
+      if (!supabase || !businessSlug) return;
+      const { data } = await supabase.rpc("get_public_catalogue", { p_business_slug: businessSlug });
+      if (active && data) {
+        const names = Array.from(new Set((data as Array<{name:string}>).map(item => item.name).filter(Boolean)));
+        setCatalogueOptions(names);
+      }
+    }
+    void loadCatalogue();
+    return () => { active = false; };
   }, []);
 
   async function submit(event: FormEvent) {
@@ -112,7 +127,7 @@ export default function PublicEnquiryForm() {
         <label>Your name *<input required maxLength={120} value={fields.contact_name} onChange={e => update("contact_name", e.target.value)} /></label>
         <label>Phone<input type="tel" maxLength={40} value={fields.phone} onChange={e => update("phone", e.target.value)} /></label>
         <label>Email<input type="email" maxLength={254} value={fields.email} onChange={e => update("email", e.target.value)} /></label>
-        <label>Service required *<select required value={fields.requested_service} onChange={e => update("requested_service", e.target.value)}><option value="">Choose a service</option>{["Custom apparel","Screen printing","Heat-applied branding","Stickers and decals","Custom merchandise","Artwork preparation","Other"].map(x => <option key={x}>{x}</option>)}</select></label>
+        <label>Product or service required *<select required value={fields.requested_service} onChange={e => update("requested_service", e.target.value)}><option value="">Choose a product or service</option>{(catalogueOptions.length ? catalogueOptions : ["Custom apparel","Screen printing","Heat-applied branding","Stickers and decals","Custom merchandise","Artwork preparation"]).map(x => <option key={x}>{x}</option>)}<option>Other / custom request</option></select></label>
         <label>Quantity<input type="number" min="1" max="100000" step="any" value={fields.quantity} onChange={e => update("quantity", e.target.value)} /></label>
         <label>Needed by<input type="date" min={new Date().toISOString().slice(0,10)} value={fields.desired_by} onChange={e => update("desired_by", e.target.value)} /></label>
         <label className="wide-field">Describe your order *<textarea required maxLength={4000} rows={4} value={fields.description} onChange={e => update("description", e.target.value)} placeholder="Items, sizes, colours, print locations and any other requirements" /></label>
