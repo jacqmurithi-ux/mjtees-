@@ -49,7 +49,8 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  const customer=(id:string)=>customers.find(c=>c.id===id)?.display_name??"Customer";
  const orderItems=(orderId:string)=>items.filter(i=>i.order_id===orderId);
  const jobFor=(itemId:string)=>jobs.find(j=>j.order_item_id===itemId&&j.status!=="cancelled");
- const latestCheck=(jobId:string)=>checks.filter(q=>q.job_id===jobId).sort((a,b)=>new Date(b.checked_at).getTime()-new Date(a.checked_at).getTime())[0];\n const latestRework=(jobId:string)=>reworks.filter(r=>r.job_id===jobId).sort((a,b)=>new Date(b.opened_at).getTime()-new Date(a.opened_at).getTime())[0];
+ const latestCheck=(jobId:string)=>checks.filter(q=>q.job_id===jobId).sort((a,b)=>new Date(b.checked_at).getTime()-new Date(a.checked_at).getTime())[0];
+ const latestRework=(jobId:string)=>reworks.filter(r=>r.job_id===jobId).sort((a,b)=>new Date(b.opened_at).getTime()-new Date(a.opened_at).getTime())[0];
  const updateSchedule=(order:Order)=>void call("owner_update_order_schedule",{p_order_id:order.id,p_required_by:requiredBy[order.id]||null,p_promised_turnaround_hours:turnaround[order.id]?Number(turnaround[order.id]):null,p_request_id:rid()},"Order turnaround schedule saved.");
  const startJob=(item:Item)=>{
   const code=methodByItem[item.id]||methods.find(m=>m.id===item.production_method_id)?.code;
