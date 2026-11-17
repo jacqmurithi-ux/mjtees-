@@ -22,7 +22,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  const [methodByItem,setMethodByItem]=useState<Record<string,string>>({});const [jobDue,setJobDue]=useState<Record<string,string>>({});
  const [material,setMaterial]=useState<Record<string,{stock:string;location:string;quantity:string;reason:string}>>({});
  const [qc,setQc]=useState<Record<string,{result:"pass"|"fail";mode:"self"|"second_person";inspector:string;notes:string}>>({});
- const [handover,setHandover]=useState<Record<string,{method:"collection"|"courier";recipient:string;tracking:string;exception:string}>>({});
+ const [handover,setHandover]=useState<Record<string,{method:"collection"|"courier";recipient:string;carrier:string;tracking:string;charge:string;exception:string}>>({});
  const load=useCallback(async()=>{
   const client=supabase;if(!client)return;
   const [o,i,m,j,q,rw,ce,s,l]=await Promise.all([
@@ -71,16 +71,23 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  const openRework=(job:Job)=>{const failed=latestCheck(job.id);if(!failed||failed.result!=="fail"){setError("A failed quality check is required to open rework.");return;}const reason=window.prompt("What corrective work is required?");if(!reason?.trim())return;void call("owner_open_rework_event",{p_job_id:job.id,p_quality_check_id:failed.id,p_reason:reason.trim(),p_request_id:rid()},"Rework opened and linked to the failed inspection.");};
  const closeRework=(event:Rework)=>{const notes=window.prompt("Describe the corrective work completed");if(!notes?.trim())return;void call("owner_close_rework_event",{p_rework_event_id:event.id,p_notes:notes.trim(),p_request_id:rid()},"Rework closed. Record a fresh quality check before completing the job.");};
  const handoverOrder=(order:Order)=>{
-  const v=handover[order.id]||{method:"collection",recipient:"",tracking:"",exception:""};
+  const v=handover[order.id]||{method:"collection",recipient:"",carrier:"",tracking:"",charge:"0",exception:""};
   if(!v.recipient.trim()){setError("Enter the person receiving the order.");return;}
-  void call("owner_handover_order",{p_order_id:order.id,p_method:v.method,p_recipient_name:v.recipient.trim(),p_tracking_reference:v.tracking.trim()||null,p_payment_exception_reason:v.exception.trim()||null,p_request_id:rid()},"Order handed over. The system recorded the delivery and any approved payment exception.");
+  if(v.method==="courier"&&!v.carrier.trim()){setError("Enter the parcel carrier.");return;}
+  if(!Number.isSafeInteger(Number(v.charge))||Number(v.charge)<0){setError("Enter the actual carrier charge in whole KES.");return;}
+  if(!supabase)return;setBusy(true);setError("");setNotice("");
+  const {error:deliveryError}=await supabase.rpc("owner_record_delivery",{p_order_id:order.id,p_method:v.method,p_carrier:v.carrier.trim()||null,p_tracking_reference:v.tracking.trim()||null,p_customer_paid_charge:Number(v.charge),p_recipient_name:v.recipient.trim(),p_request_id:rid()});
+  if(deliveryError){setError(deliveryError.message);setBusy(false);return;}
+  const {error:handoverError}=await supabase.rpc("owner_handover_order",{p_order_id:order.id,p_method:v.method,p_recipient_name:v.recipient.trim(),p_tracking_reference:v.tracking.trim()||null,p_payment_exception_reason:v.exception.trim()||null,p_request_id:rid()});
+  if(handoverError)setError(handoverError.message);else setNotice("Delivery charge and handover recorded. Any payment exception was approved and audited.");
+  await load();onChanged();setBusy(false);
  };
  return <section className="connected-panel order-production">
   <div className="panel-toolbar"><div><h2>Orders and production</h2><p>Track accepted orders, promised turnaround, production, inspection and customer handover.</p></div><button className="secondary-action" onClick={()=>void load()}>Refresh</button></div>
   {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}
   <div className="record-list">{orders.map(order=>{
    const lines=orderItems(order.id);
-   const hand=handover[order.id]||{method:"collection" as const,recipient:"",tracking:"",exception:""};
+   const hand=handover[order.id]||{method:"collection" as const,recipient:"",carrier:"",tracking:"",charge:"0",exception:""};
    return <article className="enquiry-card" key={order.id}>
     <div className="enquiry-top"><div><b>{order.order_number} · {customer(order.customer_id)}</b><small>{new Date(order.received_at).toLocaleDateString("en-KE")} · {money(order.total_amount)}</small></div><span className={"status-chip "+order.status}>{order.status.replaceAll("_"," ")}</span></div>
     <div className="schedule-editor"><label>Required by<input type="date" value={requiredBy[order.id]??order.required_by??""} onChange={e=>setRequiredBy(v=>({...v,[order.id]:e.target.value}))}/></label><label>Promised turnaround (hours)<input type="number" min="1" max="8760" value={turnaround[order.id]??(order.promised_turnaround_hours?.toString()||"")} onChange={e=>setTurnaround(v=>({...v,[order.id]:e.target.value}))}/></label><button className="secondary-action" disabled={busy} onClick={()=>updateSchedule(order)}>Save schedule</button></div>
@@ -97,7 +104,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
      </div>;
     })}
     {!lines.length&&<p className="empty-records">No order lines found.</p>}
-    {order.status==="ready"&&<div className="handover-panel"><h3>Customer handover</h3><div className="inline-controls"><select value={hand.method} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,method:e.target.value as "collection"|"courier"}}))}><option value="collection">Customer collection</option><option value="courier">Courier delivery</option></select><input placeholder="Recipient name" value={hand.recipient} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,recipient:e.target.value}}))}/><input placeholder="Carrier / tracking reference" value={hand.tracking} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,tracking:e.target.value}}))}/><input placeholder="Payment exception reason (owner approval)" value={hand.exception} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,exception:e.target.value}}))}/><button className="primary-action compact" disabled={busy} onClick={()=>handoverOrder(order)}>Confirm handover</button></div><p className="small-note">Full payment is required. Only enter a reason when the owner is approving an exception; the backend records that approval.</p></div>}
+    {order.status==="ready"&&<div className="handover-panel"><h3>Customer handover</h3><div className="inline-controls"><select value={hand.method} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,method:e.target.value as "collection"|"courier"}}))}><option value="collection">Customer collection</option><option value="courier">Courier delivery</option></select><input placeholder="Recipient name" value={hand.recipient} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,recipient:e.target.value}}))}/>{hand.method==="courier"&&<input placeholder="Parcel carrier" value={hand.carrier} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,carrier:e.target.value}}))}/>}<input placeholder="Tracking reference" value={hand.tracking} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,tracking:e.target.value}}))}/><input type="number" min="0" step="1" placeholder="Actual carrier charge (KES)" value={hand.charge} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,charge:e.target.value}}))}/><input placeholder="Payment exception reason (owner approval)" value={hand.exception} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,exception:e.target.value}}))}/><button className="primary-action compact" disabled={busy} onClick={()=>handoverOrder(order)}>Confirm handover</button></div><p className="small-note">Full payment is required. Enter the actual courier charge paid by the customer (collection is KES 0). Only enter a reason when the owner is approving a payment exception.</p></div>}
    </article>;
   })}{!orders.length&&<p className="empty-records">No orders yet. Accepted quotations will appear here automatically.</p>}</div>
  </section>;
