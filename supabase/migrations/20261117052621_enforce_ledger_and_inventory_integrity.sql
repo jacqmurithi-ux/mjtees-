@@ -845,11 +845,11 @@ returns jsonb language sql security invoker set search_path='' as $$ select priv
 create or replace function public.owner_record_quality_check(uuid,text,text,uuid,text,uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_record_quality_check($1,$2,$3,$4,$5,$6); $$;
 create or replace function public.owner_complete_production_job(uuid,uuid)
-returns jsonb language sql security invoker set search_path='' as $ select private.owner_complete_production_job($1,$2); $;
+returns jsonb language sql security invoker set search_path='' as $$ select private.owner_complete_production_job($1,$2); $$;
 create or replace function public.owner_open_rework_event(uuid,uuid,text,uuid)
-returns jsonb language sql security invoker set search_path='' as $ select private.owner_open_rework_event($1,$2,$3,$4); $;
+returns jsonb language sql security invoker set search_path='' as $$ select private.owner_open_rework_event($1,$2,$3,$4); $$;
 create or replace function public.owner_close_rework_event(uuid,text,uuid)
-returns jsonb language sql security invoker set search_path='' as $ select private.owner_close_rework_event($1,$2,$3); $;
+returns jsonb language sql security invoker set search_path='' as $$ select private.owner_close_rework_event($1,$2,$3); $$;
 
 
 revoke all on all functions in schema private from public,anon,authenticated;
