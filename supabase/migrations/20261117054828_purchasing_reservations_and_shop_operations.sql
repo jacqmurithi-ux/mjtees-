@@ -67,7 +67,7 @@ declare v_actor uuid; v_cached jsonb; v_payload jsonb; v_id uuid; v_created bool
 begin
   v_actor:=private.assert_active_owner(p_business_id);
   if length(btrim(coalesce(p_sku,''))) not between 1 and 80 or length(btrim(coalesce(p_name,''))) not between 1 and 180
-    or p_stock_kind not in ('blank_product','material','consumable','packaging')
+    or p_stock_kind is null or p_stock_kind not in ('blank_product','material','consumable','packaging')
     or length(btrim(coalesce(p_base_unit,''))) not between 1 and 24
     or length(btrim(coalesce(p_purchase_unit,''))) not between 1 and 24
     or p_purchase_to_base_factor is null or p_purchase_to_base_factor<=0
@@ -248,6 +248,7 @@ declare v_actor uuid; v_cached jsonb; v_payload jsonb; v_id uuid; v_result jsonb
 begin
   v_actor:=private.assert_active_owner(p_business_id);
   if p_amount is null or p_amount<=0 or p_expense_date is null or p_expense_date>current_date
+    or p_payment_method is null or p_payment_method not in ('cash','mpesa','bank','card','other')
     or length(btrim(coalesce(p_payee,''))) not between 1 and 180
     or p_payment_method not in ('cash','mpesa','bank','card','other')
     or length(coalesce(p_receipt_reference,''))>120 or length(coalesce(p_notes,''))>4000 then
@@ -282,7 +283,7 @@ begin
   select * into v_order from public.orders where id=p_order_id;
   if not found then raise exception using errcode='P0002',message='Order not found'; end if;
   v_actor:=private.assert_active_owner(v_order.business_id);
-  if v_order.status<>'ready' or p_method not in ('collection','courier')
+  if v_order.status<>'ready' or p_method is null or p_method not in ('collection','courier')
     or p_customer_paid_charge is null or p_customer_paid_charge<0
     or length(btrim(coalesce(p_recipient_name,''))) not between 1 and 180
     or (p_method='courier' and length(btrim(coalesce(p_carrier,'')))=0) then
@@ -313,7 +314,7 @@ begin
   select * into v_enquiry from public.enquiries where id=p_enquiry_id;
   if not found then raise exception using errcode='P0002',message='Enquiry not found'; end if;
   v_actor:=private.assert_active_owner(v_enquiry.business_id);
-  if p_status not in ('new','reviewing','quoted','closed','spam') or length(coalesce(p_notes,''))>2000 then
+  if p_status is null or p_status not in ('new','reviewing','quoted','closed','spam') or length(coalesce(p_notes,''))>2000 then
     raise exception using errcode='22023',message='Invalid enquiry status or notes';
   end if;
   if not (
@@ -345,7 +346,7 @@ declare v_actor uuid; v_cached jsonb; v_payload jsonb; v_po uuid; v_number text;
 begin
   v_actor:=private.assert_active_owner(p_business_id);
   if not exists(select 1 from public.suppliers where business_id=p_business_id and id=p_supplier_id and archived_at is null)
-    or jsonb_typeof(p_lines)<>'array' or jsonb_array_length(p_lines) not between 1 and 100 or length(coalesce(p_notes,''))>4000 then
+    or p_lines is null or jsonb_typeof(p_lines) is distinct from 'array' or jsonb_array_length(p_lines) not between 1 and 100 or length(coalesce(p_notes,''))>4000 then
     raise exception using errcode='22023',message='Invalid supplier or purchase order lines';
   end if;
   v_payload:=jsonb_build_object('supplier_id',p_supplier_id,'lines',p_lines,'notes',p_notes);
@@ -421,8 +422,8 @@ declare v_actor uuid; v_cached jsonb; v_payload jsonb; v_po public.purchase_orde
   v_count integer:=0; v_result jsonb; v_all_received boolean;
 begin
   v_actor:=private.assert_active_owner(p_business_id);
-  if p_received_at is null or p_received_at>now()+interval '5 minutes'
-    or jsonb_typeof(p_lines)<>'array' or jsonb_array_length(p_lines) not between 1 and 100 then
+  if p_supplier_id is null or p_received_at is null or p_received_at>now()+interval '5 minutes'
+    or p_lines is null or jsonb_typeof(p_lines) is distinct from 'array' or jsonb_array_length(p_lines) not between 1 and 100 then
     raise exception using errcode='22023',message='Invalid goods receipt details';
   end if;
   v_payload:=jsonb_build_object('supplier_id',p_supplier_id,'purchase_order_id',p_purchase_order_id,'received_at',p_received_at,'lines',p_lines);
@@ -452,7 +453,7 @@ begin
     v_accept:=(v_line->>'accepted_quantity')::numeric;
     v_reject:=(v_line->>'rejected_quantity')::numeric;
     v_base_cost:=(v_line->>'actual_unit_cost')::bigint;
-    if v_accept<0 or v_reject<0 or v_accept+v_reject<=0 or v_base_cost<0 then
+    if v_accept is null or v_reject is null or v_base_cost is null or v_accept<0 or v_reject<0 or v_accept+v_reject<=0 or v_base_cost<0 then
       raise exception using errcode='22023',message='Invalid accepted/rejected quantity or unit cost';
     end if;
     select coalesce(sum(gri.accepted_quantity+gri.rejected_quantity),0) into v_received
