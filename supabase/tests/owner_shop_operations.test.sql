@@ -187,27 +187,28 @@ select is(
 );
 
 -- Rejected units count toward supplier delivery completion but never enter usable stock.
-select is(
+select set_config('mj.test.replacement_po_id',
   public.owner_create_purchase_order('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     (select id from public.suppliers where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and display_name='Test Supplier'),
     jsonb_build_array(jsonb_build_object('stock_item_id',(select id from public.stock_items where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and sku='BLANK-TEE-M'),
       'ordered_quantity',3,'unit_price',100)),
-    'Replacement stock with rejected units','80000000-0000-4000-8000-000000000023')->>'status',
+    'Replacement stock with rejected units','80000000-0000-4000-8000-000000000023')->>'purchase_order_id',true);
+select is(
+  (select status from public.purchase_orders where id=current_setting('mj.test.replacement_po_id')::uuid),
   'draft','Owner can create a replacement purchase order'
 );
 select is(
   public.owner_update_purchase_order_status(
-    (select id from public.purchase_orders where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' order by created_at desc limit 1),
+    current_setting('mj.test.replacement_po_id')::uuid,
     'ordered','Replacement order sent to supplier','80000000-0000-4000-8000-000000000024')->>'status',
   'ordered','Replacement purchase order can be ordered'
 );
 select is(
   public.owner_receive_purchase('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     (select id from public.suppliers where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and display_name='Test Supplier'),
-    (select id from public.purchase_orders where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' order by created_at desc limit 1),
+    current_setting('mj.test.replacement_po_id')::uuid,
     now(),jsonb_build_array(jsonb_build_object(
-      'purchase_order_item_id',(select id from public.purchase_order_items where purchase_order_id=
-        (select id from public.purchase_orders where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' order by created_at desc limit 1)),
+      'purchase_order_item_id',(select id from public.purchase_order_items where purchase_order_id=current_setting('mj.test.replacement_po_id')::uuid),
       'location_id','dddddddd-dddd-4ddd-8ddd-dddddddddddd','accepted_quantity',2,'rejected_quantity',1,'actual_unit_cost',100)),
     '80000000-0000-4000-8000-000000000025')->>'status',
   'received','Supplier delivery completes when accepted and rejected quantities account for the ordered quantity'
