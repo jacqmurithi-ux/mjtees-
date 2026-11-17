@@ -60,11 +60,13 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
  const createSupplier=async(e:FormEvent)=>{
   e.preventDefault();await run("owner_upsert_supplier",{p_business_id:businessId,p_supplier_id:null,p_display_name:supplierForm.name.trim(),p_contact_name:null,p_phone:supplierForm.phone.trim()||null,p_email:supplierForm.email.trim()||null,p_notes:null,p_request_id:rid()},"Supplier saved.");setSupplierForm({name:"",phone:"",email:""});
  };
+ const createLocation=async(e:FormEvent)=>{e.preventDefault();await run("owner_upsert_inventory_location",{p_business_id:businessId,p_location_id:null,p_name:locationForm.name.trim(),p_code:locationForm.code.trim(),p_description:locationForm.description.trim()||null,p_request_id:rid()},"Inventory location saved.");setLocationForm({name:"",code:"",description:""});};
+ const adjustStock=(item:Stock)=>{const v=adjustForm[item.id]||{location:locations[0]?.id||"",quantity:"",type:"opening_balance",reason:""};if(!v.location||!Number(v.quantity)||Number(v.quantity)<=0||!v.reason.trim()){setError("Choose a location and enter a positive quantity and reason.");return;}void run("owner_adjust_stock",{p_stock_item_id:item.id,p_location_id:v.location,p_quantity:Number(v.quantity),p_adjustment_type:v.type,p_reason:v.reason.trim(),p_request_id:rid()},"Stock movement recorded.");setAdjustForm(x=>({...x,[item.id]:{...v,quantity:"",reason:""}}));};
  const createStock=async(e:FormEvent)=>{
   e.preventDefault();const f=stockForm;
   await run("owner_upsert_stock_item",{p_business_id:businessId,p_stock_item_id:null,p_parent_stock_item_id:null,p_sku:f.sku.trim(),p_name:f.name.trim(),p_stock_kind:f.kind,p_base_unit:f.base.trim(),p_purchase_unit:f.purchase.trim(),p_purchase_to_base_factor:Number(f.factor),p_roll_width_mm:null,p_usable_width_mm:null,p_variant_attributes:{},p_reorder_level:Number(f.reorder),p_default_supplier_id:f.supplier||null,p_request_id:rid()},"Stock item created.");setStockForm({sku:"",name:"",kind:"blank_product",base:"each",purchase:"each",factor:"1",reorder:"0",supplier:""});
  };
- const createPO=async(e:React.FormEvent)=>{
+ const createPO=async(e:FormEvent)=>{
   e.preventDefault();if(!poForm.supplier||!poForm.stock){setError("Choose a supplier and stock item.");return;}
   await run("owner_create_purchase_order",{p_business_id:businessId,p_supplier_id:poForm.supplier,p_lines:[{stock_item_id:poForm.stock,ordered_quantity:Number(poForm.qty),unit_price:Number(poForm.price)}],p_notes:poForm.notes.trim()||null,p_request_id:rid()},"Draft purchase order created. Mark it ordered when sent to the supplier.");setPoForm({supplier:"",stock:"",qty:"1",price:"0",notes:""});
  };
@@ -74,8 +76,8 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
   if(!v.location){setError("Add or activate an inventory location before receiving stock.");return;}
   void run("owner_receive_purchase",{p_business_id:businessId,p_supplier_id:po.supplier_id,p_purchase_order_id:po.id,p_received_at:new Date().toISOString(),p_lines:[{purchase_order_item_id:line.id,location_id:v.location,accepted_quantity:Number(v.accepted),rejected_quantity:Number(v.rejected),actual_unit_cost:Number(v.cost)}],p_request_id:rid()},"Goods receipt recorded. Accepted quantities have been added to inventory.");
  };
- const addCategory=async(e:React.FormEvent)=>{e.preventDefault();await run("owner_upsert_expense_category",{p_business_id:businessId,p_category_id:null,p_name:newCategory.trim(),p_is_active:true,p_request_id:rid()},"Expense category created.");setNewCategory("");};
- const addExpense=async(e:React.FormEvent)=>{
+ const addCategory=async(e:FormEvent)=>{e.preventDefault();await run("owner_upsert_expense_category",{p_business_id:businessId,p_category_id:null,p_name:newCategory.trim(),p_is_active:true,p_request_id:rid()},"Expense category created.");setNewCategory("");};
+ const addExpense=async(e:FormEvent)=>{
   e.preventDefault();await run("owner_record_expense",{p_business_id:businessId,p_category_id:expenseForm.category,p_amount:Number(expenseForm.amount),p_expense_date:expenseForm.date,p_payee:expenseForm.payee.trim(),p_payment_method:expenseForm.method,p_receipt_reference:expenseForm.reference.trim()||null,p_notes:expenseForm.notes.trim()||null,p_request_id:rid()},"Expense recorded.");setExpenseForm(v=>({...v,amount:"",payee:"",reference:"",notes:""}));
  };
  const totalExpenses=expenses.reduce((s,x)=>s+x.amount,0);
