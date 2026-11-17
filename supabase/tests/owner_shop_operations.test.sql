@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(28);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-ops-owner@example.invalid','',now(),
@@ -213,5 +213,26 @@ select is(
   'received','Supplier delivery completes when accepted and rejected quantities account for the ordered quantity'
 );
 
+-- Public catalogue is deliberately limited to active, published rows and safe display fields.
+select is(
+  public.owner_upsert_catalogue_item(
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,null,'Custom T-shirt','custom-t-shirt',
+    'product','Made to order branded apparel',850,true,10,
+    '80000000-0000-4000-8000-000000000026')->>'is_published',
+  'true','Owner can publish a catalogue product'
+);
+select is(
+  public.owner_upsert_catalogue_item(
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,null,'Internal setup service','internal-setup',
+    'service','Not public',null,false,99,
+    '80000000-0000-4000-8000-000000000027')->>'is_published',
+  'false','Owner can keep a catalogue entry unpublished'
+);
+reset role;
+set local role anon;
+select is(
+  (select count(*)::integer from public.get_public_catalogue('mj-ops-test')),
+  1,'Anonymous visitors see only published catalogue entries'
+);
 select * from finish();
 rollback;
