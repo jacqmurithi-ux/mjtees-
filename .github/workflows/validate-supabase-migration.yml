@@ -26,6 +26,7 @@ jobs:
         run: |
           npx --yes supabase@latest --version
           npx --yes supabase@latest init --force
+          sed -i 's/^project_id = .*/project_id = "mjtees"/' supabase/config.toml
       - name: Show local-only CLI command options
         run: |
           npx --yes supabase@latest start --help
