@@ -71,7 +71,7 @@ select is(
       'production_specification',jsonb_build_object('linear_metres',2,'labour_hours',0.5)
     )),now()+interval '14 days','Customer quote','Internal costing notes',
     '90000000-0000-4000-8000-000000000003')->>'total_amount')::bigint,
-  152::bigint,'Quote price is calculated from component cost, category markup and line discount'
+  168::bigint,'Quote price reflects the replacement 120 percent markup and line discount'
 );
 
 select set_config('mj.test.quote_token',
@@ -86,7 +86,7 @@ set local role anon;
 
 select is(
   public.accept_quotation(current_setting('mj.test.quote_token'),'90000000-0000-4000-8000-000000000005')->>'total_amount',
-  '152','Public token acceptance creates the order without exposing customer records'
+  '168','Public token acceptance creates the order without exposing customer records'
 );
 
 select set_config('mj.test.accepted_order_number',
@@ -124,7 +124,7 @@ select is(
 
 select is(
   (public.owner_get_order_balance((select id from public.orders where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa')))->>'balance_due')::bigint,
-  152::bigint,'New order balance matches the accepted quote total'
+  168::bigint,'New order balance matches the accepted quote total'
 );
 
 select * from finish();
