@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "./lib/supabase";
 import OwnerApp from "./OwnerApp";
 import QuoteAcceptance from "./QuoteAcceptance";
 import PublicEnquiryForm from "./PublicEnquiryForm";
@@ -20,24 +21,31 @@ const categories = [
   { number: "04", name: "Custom merchandise", detail: "Mugs · Gifts · Teamwear", tone: "pink", symbol: "＋" },
 ];
 
-function Brand({ footer = false }: { footer?: boolean }) {
+function Brand({ footer = false, logoSrc = "/assets/mj-printing-branding.svg" }: { footer?: boolean; logoSrc?: string }) {
   return <a className={footer ? "brand footer-brand" : "brand"} href="#home" aria-label="MJ Printing and Branding home">
-    <img src="/assets/mj-printing-branding.svg" alt="MJ Printing & Branding — Design, Print, Brand" />
+    <img src={logoSrc} alt="MJ Printing & Branding — Design, Print, Brand" />
   </a>;
 }
 
 function Website({ onOwner }: { onOwner: () => void }) {
+  const [siteContent, setSiteContent] = useState<any>(null);
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.from("website_content").select("content").eq("business_id", "a5d48858-a75b-445d-ba23-8fcd65a5b891").eq("is_published", true).maybeSingle()
+      .then(({ data, error }) => { if (!error && data?.content) setSiteContent(data.content); });
+  }, []);
+  const logoSrc = siteContent?.brand?.logoPath || "/assets/mj-printing-branding.svg";
   return <main className="public-site">
     <div className="announcement-bar"><span>DESIGN</span><i /> <span>PRINT</span><i /> <span>BRAND</span><b>Custom printing and branding, made around your idea.</b></div>
     <header className="site-header">
-      <Brand />
+      <Brand logoSrc={logoSrc} />
       <nav aria-label="Main navigation"><a href="#services">Services</a><a href="#catalogue">Explore products</a><a href="#process">How it works</a><a href="#enquire">Contact</a><button className="nav-portal" onClick={onOwner}>Owner workspace <span>↗</span></button></nav>
     </header>
     <section className="hero" id="home">
       <div className="hero-copy">
-        <p className="eyebrow"><span className="eyebrow-dot" /> YOUR IDEA. OUR PRINT. YOUR BRAND.</p>
+        <p className="eyebrow"><span className="eyebrow-dot" /> {siteContent?.hero?.eyebrow || "YOUR IDEA. OUR PRINT. YOUR BRAND."}</p>
         <h1>Make it yours.<br /><span>Make it seen.</span></h1>
-        <p className="hero-intro">From custom apparel and teamwear to stickers, signage and branded merchandise — we turn your ideas into things people can see, use and wear.</p>
+        <p className="hero-intro">{siteContent?.hero?.description || "From custom apparel and teamwear to stickers, signage and branded merchandise — we turn your ideas into things people can see, use and wear."}</p>
         <div className="hero-actions"><a className="primary-link" href="#enquire">Start a project <span aria-hidden="true">↗</span></a><a className="text-link" href="#catalogue">Explore what we make <span>↓</span></a></div>
         <div className="hero-proof"><span><b>01</b> Made to order</span><span><b>02</b> Your design, your way</span><span><b>03</b> Personal and business orders</span></div>
       </div>
@@ -62,7 +70,7 @@ function Website({ onOwner }: { onOwner: () => void }) {
     <PublicEnquiryForm />
     <section className="process-section" id="process"><div><p className="eyebrow">HOW IT WORKS</p><h2>From first idea<br/>to final finish.</h2><p className="process-intro">A straightforward process keeps your order clear from the first conversation to collection.</p></div><ol className="process-list"><li><span>01</span><div><strong>Tell us what you need</strong><p>Share the item, design, quantity, sizes, colours and your preferred deadline.</p></div></li><li><span>02</span><div><strong>We prepare your quote</strong><p>We review the artwork, materials, print positions and production method, then confirm the price.</p></div></li><li><span>03</span><div><strong>Approve and production begins</strong><p>Once the details and payment arrangements are confirmed, your job moves into production.</p></div></li><li><span>04</span><div><strong>Quality check and handover</strong><p>We confirm when your order is ready and arrange collection or delivery.</p></div></li></ol></section>
     <section className="portal-section" id="shop-access"><div><p className="eyebrow">BEHIND EVERY GOOD ORDER</p><h2>Organised from quote<br/>to production.</h2><p>Our private workspace keeps quotations, materials, purchasing and production connected so we can manage each job carefully.</p></div><button className="portal-status" onClick={onOwner}>Owner workspace ↗</button></section>
-    <footer className="site-footer"><Brand footer /><p>Design. Print. Brand.</p><span>© {new Date().getFullYear()} MJ Printing & Branding</span></footer>
+    <footer className="site-footer"><Brand footer logoSrc={logoSrc} /><p>{siteContent?.brand?.tagline || "Design. Print. Brand."}</p><span>{siteContent?.contact?.phone || ""} {siteContent?.contact?.email || "mjtees35@gmail.com"} · {siteContent?.contact?.address || ""}</span><span>© {new Date().getFullYear()} {siteContent?.brand?.legalName || "MJ Printing & Branding"}</span></footer>
   </main>;
 }
 
