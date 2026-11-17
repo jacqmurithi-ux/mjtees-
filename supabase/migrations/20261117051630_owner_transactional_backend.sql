@@ -1,4 +1,5 @@
 -- MJ Tees — transactional owner backend (financial core and handover)
+-- Review safeguard: validate manual M-Pesa references after normalization before insert.
 -- Supabase CLI generated: 2026-11-17. Apply only after separate explicit approval.
 begin;
 
