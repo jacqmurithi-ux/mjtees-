@@ -15,7 +15,7 @@ insert into public.customers(id,business_id,display_name,created_by)
 values('cccccccc-cccc-4ccc-8ccc-cccccccccccc','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','Ops Customer','33333333-3333-4333-8333-333333333333');
 insert into public.orders(id,business_id,order_number,customer_id,status,subtotal_amount,discount_amount,total_amount,created_by)
 values('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','OPS-ORDER-1',
- 'cccccccc-cccc-4ccc-8ccc-cccccccccccc','ready',300,0,300,'33333333-3333-4333-8333-333333333333');
+ 'cccccccc-cccc-4ccc-8ccc-cccccccccccc','confirmed',300,0,300,'33333333-3333-4333-8333-333333333333');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','33333333-3333-4333-8333-333333333333',true);
 
