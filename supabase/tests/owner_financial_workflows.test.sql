@@ -52,7 +52,7 @@ select is(
 );
 
 select throws_ok(
-  $$$select public.owner_upsert_customer('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Different Payload',null,null,null,null,
+  $$select public.owner_upsert_customer('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Different Payload',null,null,null,null,
     '10000000-0000-4000-8000-000000000001')$$,
   '22023',null,'Reusing an idempotency key with different payload is rejected'
 );
