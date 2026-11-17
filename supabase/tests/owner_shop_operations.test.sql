@@ -238,9 +238,9 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
 select throws_ok(
-  $select public.owner_upsert_catalogue_item(
+  $test$select public.owner_upsert_catalogue_item(
     'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,null,'Unauthorized item','unauthorized-item',
-    'product',null,null,true,0,'80000000-0000-4000-8000-000000000028')$,
+    'product',null,null,true,0,'80000000-0000-4000-8000-000000000028')$test$,
   '42501',null,'Authenticated non-owner cannot create or publish catalogue entries'
 );
 reset role;
