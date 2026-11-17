@@ -503,7 +503,7 @@ begin
   select not exists(
     select 1 from public.purchase_order_items poi
     where poi.business_id=p_business_id and poi.purchase_order_id=p_purchase_order_id
-      and coalesce((select sum(gri.accepted_quantity) from public.goods_receipt_items gri
+      and coalesce((select sum(gri.accepted_quantity+gri.rejected_quantity) from public.goods_receipt_items gri
         where gri.business_id=poi.business_id and gri.purchase_order_item_id=poi.id),0)<poi.ordered_quantity
   ) into v_all_received;
   update public.purchase_orders set status=case when v_all_received then 'received' else 'part_received' end,updated_at=now()
