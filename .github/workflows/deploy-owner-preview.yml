@@ -19,10 +19,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Check out first-release-build (without merging the PR)
+      - name: Check out the production main branch
         uses: actions/checkout@v4
         with:
-          ref: first-release-build
+          ref: main
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
