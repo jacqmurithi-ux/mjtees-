@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(21);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-ops-owner@example.invalid','',now(),
@@ -18,6 +18,12 @@ values('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbb
  'cccccccc-cccc-4ccc-8ccc-cccccccccccc','confirmed',300,0,300,'33333333-3333-4333-8333-333333333333');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','33333333-3333-4333-8333-333333333333',true);
+
+select is(
+  (public.owner_upsert_inventory_location('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,'Shop Two','SHOP-2','Consumables and screens',
+    '80000000-0000-4000-8000-000000000021')->>'created')::boolean,
+  true,'Owner can create a second inventory storage location'
+);
 
 select is(
   (public.owner_upsert_supplier('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,'Test Supplier',null,'0711111111',null,null,
