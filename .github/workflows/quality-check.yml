@@ -19,15 +19,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Generate migration with Supabase CLI
-        run: npx --yes supabase@latest migration new first_release_schema
-      - name: Upload CLI-generated migration
-        uses: actions/upload-artifact@v4
-        with:
-          name: supabase-cli-generated-migration
-          path: supabase/migrations/*.sql
-          if-no-files-found: error
-          retention-days: 3
       - name: Install dependencies
         run: npm install
       - name: Type-check and build
