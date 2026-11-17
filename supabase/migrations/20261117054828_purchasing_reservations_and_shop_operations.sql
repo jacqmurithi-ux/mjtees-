@@ -13,6 +13,7 @@ end;
 $fk$;
 create index if not exists order_items_stock_item_idx on public.order_items(business_id,stock_item_id);
 create index if not exists stock_reservations_order_item_idx on public.stock_reservations(business_id,order_item_id,status);
+create unique index if not exists deliveries_one_unhanded_per_order on public.deliveries(business_id,order_id) where handed_over_at is null;
 
 create or replace function private.owner_upsert_supplier(
   p_business_id uuid,p_supplier_id uuid,p_display_name text,p_contact_name text,
@@ -278,7 +279,7 @@ create or replace function private.owner_record_delivery(
   p_customer_paid_charge bigint,p_recipient_name text,p_request_id uuid
 ) returns jsonb language plpgsql security definer set search_path=''
 as $$
-declare v_order public.orders%rowtype; v_actor uuid; v_cached jsonb; v_payload jsonb; v_id uuid; v_result jsonb;
+declare v_order public.orders%rowtype; v_actor uuid; v_cached jsonb; v_payload jsonb; v_id uuid; v_existing public.deliveries%rowtype; v_result jsonb;
 begin
   select * into v_order from public.orders where id=p_order_id;
   if not found then raise exception using errcode='P0002',message='Order not found'; end if;
@@ -293,10 +294,21 @@ begin
     'tracking_reference',p_tracking_reference,'customer_paid_charge',p_customer_paid_charge,'recipient_name',p_recipient_name);
   v_cached:=private.begin_idempotent_request(v_order.business_id,'record_delivery',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
-  insert into public.deliveries(business_id,order_id,method,carrier,tracking_reference,customer_paid_charge,recipient_name,dispatched_at)
-  values(v_order.business_id,p_order_id,p_method,nullif(btrim(p_carrier),''),nullif(btrim(p_tracking_reference),''),
-    p_customer_paid_charge,btrim(p_recipient_name),case when p_method='courier' then now() else null end)
-  returning id into v_id;
+  select * into v_existing from public.deliveries
+  where business_id=v_order.business_id and order_id=p_order_id and handed_over_at is null
+  order by created_at desc,id desc limit 1 for update;
+  if found then
+    if v_existing.method<>p_method then raise exception using errcode='22023',message='An unhanded delivery already exists with a different method'; end if;
+    update public.deliveries set carrier=nullif(btrim(p_carrier),''),tracking_reference=nullif(btrim(p_tracking_reference),''),
+      customer_paid_charge=p_customer_paid_charge,recipient_name=btrim(p_recipient_name),
+      dispatched_at=case when p_method='courier' then coalesce(dispatched_at,now()) else null end
+    where business_id=v_order.business_id and id=v_existing.id returning id into v_id;
+  else
+    insert into public.deliveries(business_id,order_id,method,carrier,tracking_reference,customer_paid_charge,recipient_name,dispatched_at)
+    values(v_order.business_id,p_order_id,p_method,nullif(btrim(p_carrier),''),nullif(btrim(p_tracking_reference),''),
+      p_customer_paid_charge,btrim(p_recipient_name),case when p_method='courier' then now() else null end)
+    returning id into v_id;
+  end if;
   v_result:=jsonb_build_object('delivery_id',v_id,'method',p_method,'customer_paid_charge',p_customer_paid_charge);
   perform private.finish_idempotent_request(v_order.business_id,'record_delivery',p_request_id,v_result);
   perform private.write_audit(v_order.business_id,v_actor,'delivery.recorded','delivery',v_id,p_request_id,
