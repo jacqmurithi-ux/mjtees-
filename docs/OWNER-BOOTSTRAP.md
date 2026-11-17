@@ -29,7 +29,7 @@ The script is a trusted administrative operation. Run it only through a protecte
 - Takes a transaction-scoped advisory lock so concurrent bootstrap operators serialize before checking or writing.
 - Refuses to run if an active owner already exists.
 - Refuses to run if a completed bootstrap record exists.
-- Creates the business, profile, exactly one active owner membership, bootstrap completion record, document counters and audit event in one transaction.
+- Creates the business, profile, exactly one active owner membership, the two agreed logical shop storage locations, initial service categories, bootstrap completion record, document counters and audit event in one transaction.
 - A unique business slug and membership key provide additional duplicate protection.
 - No owner is selected based on signup order, email domain, user metadata or a browser-supplied role.
 
