@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(18);
+select plan(20);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-ops-owner@example.invalid','',now(),
@@ -87,9 +87,10 @@ select is(
   3::numeric,'Order stock reservation holds the required variant quantity'
 );
 
-reset role;
-update public.orders set status='ready' where id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
-set local role authenticated;
+select is(
+  public.owner_mark_order_ready('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','No production work required','80000000-0000-4000-8000-000000000014')->>'status',
+  'ready','Owner can mark an order with no production work ready for handover'
+);
 
 select is(
   (public.owner_record_delivery('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','collection',null,null,80,'Customer',
@@ -156,9 +157,10 @@ select is(
     '80000000-0000-4000-8000-000000000012')->>'reserved_quantity')::numeric,
   2::numeric,'Value-added order reserves the required blank garment stock'
 );
-reset role;
-update public.orders set status='ready' where id='11111111-1111-4111-8111-111111111111';
-set local role authenticated;
+select is(
+  public.owner_mark_order_ready('11111111-1111-4111-8111-111111111111','No production method assigned to this value-added item','80000000-0000-4000-8000-000000000015')->>'status',
+  'ready','Owner can mark an order ready when no production method is configured'
+);
 select is(
   public.owner_handover_order('11111111-1111-4111-8111-111111111111','collection','Customer',null,'Owner approved unpaid balance',
     '80000000-0000-4000-8000-000000000013')->>'status',
