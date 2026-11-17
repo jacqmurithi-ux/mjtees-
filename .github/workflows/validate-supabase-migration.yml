@@ -8,6 +8,10 @@ on:
       - ".github/workflows/validate-supabase-migration.yml"
   workflow_dispatch:
 
+concurrency:
+  group: supabase-local-validation
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
