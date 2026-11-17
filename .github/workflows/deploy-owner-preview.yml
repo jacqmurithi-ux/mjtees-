@@ -42,7 +42,7 @@ jobs:
       - name: Build website and owner workspace
         env:
           VITE_SUPABASE_URL: https://rbbluwsniiwzixlvdnwz.supabase.co
-          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_EvZpMrnBo_UHOBXFDyXUdA_wkxhNbJB
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_EvZpMrnBo_UHObXFDyXUdA_wkxhNbJB
           VITE_BUSINESS_SLUG: mj-tees
           VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: npm run build
