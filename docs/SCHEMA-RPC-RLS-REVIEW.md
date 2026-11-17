@@ -262,6 +262,33 @@ Gross profit is selling revenue less direct actual cost (blank item/materials/co
 - expenses are owner-created in release one, with category, amount, date, payee, payment method, receipt reference, notes and audit. Shop overhead remains separate from direct job cost unless explicitly allocated to a job.
 - deliveries stores collection/delivery method, carrier, tracking reference, customer-paid carrier charge, dispatch/handover timestamp and recipient. Carrier charges do not inflate product sales or production margin.
 
+
+**Operational table contracts (all carry business_id, UUID identity, timestamps and business-scoped foreign keys unless noted)**
+
+- **inventory_locations**: name, code, description, active flag. Logical storage areas only; not branches or separate businesses.
+- **stock_items**: SKU, name, stock_kind (blank_product/material/consumable/packaging), base_unit, purchase_unit, purchase_to_base_factor, costing_method (weighted_average), current_average_unit_cost, reorder_level, default_supplier_id, active/archived timestamps. Length and area materials store roll_width_mm and usable_width_mm. Enforce positive conversion factor and width for roll materials.
+- **stock_variants**: stock_item_id, variant_attributes jsonb (e.g. size and colour), variant SKU/barcode and active flag; unique variant key within business. Each size/colour combination has its own quantity ledger.
+- **stock_movements**: stock_item_id, location_id, movement_type (opening, receipt, issue, return, waste, adjustment, transfer_in, transfer_out), signed quantity in base unit, unit_cost_snapshot, source_type/source_id, reason, actor, occurred_at and request_id. Append-only; unique request_id per business. A transfer is paired movements in one transaction.
+- **stock_reservations**: order_item_id, stock_item_id, location_id, reserved_quantity, released_quantity, status, created/released timestamps. Reservation does not change physical on-hand; available = on-hand less active reservations.
+- **suppliers**: display name, contact name, phone/email, notes, archived_at.
+- **purchase_orders** and **purchase_order_items**: supplier, purchase number, status (draft/ordered/part_received/received/cancelled), ordered quantities, purchase unit, unit price, conversion snapshot and line total. Goods receipt, not purchase order creation, increases stock.
+- **goods_receipts** and **goods_receipt_items**: purchase order reference, received_by, received_at, accepted quantity, rejected quantity, actual purchase unit cost, base-unit conversion and stock movement link. Partial deliveries supported.
+- **production_methods**: stable code, name, active flag, setup-cost and process-driver configuration. Seed methods: vinyl_cut, sticker_cut, sublimation, screen_printing, no_cut_printing and dtf_outsourced. They are process templates, not hardcoded product categories.
+- **product_costing_profiles**: optional catalogue item/category scope, sale_mode, production_method_id, version, effective dates, active flag. Exactly one applicable active profile chosen for a new estimate; existing order lines retain snapshots.
+- **costing_components**: profile_id, component_type, optional stock_item_id, unit, driver_type, numeric factor, expected_waste_percent and fixed_cost. No executable formulas in data.
+- **production_jobs**: order_item_id, production_method_id, status, planned_quantity, started_at, due_at, completed_at, estimate/actual cost totals, calculation version and notes.
+- **production_material_issues**: job_id, stock_item_id, location_id, quantity issued in base unit, unit_cost_snapshot, extended_cost, stock_movement_id, issued_at, actor. This is the costed material issue ledger.
+- **production_cost_entries**: job_id, cost_type (labour/machine/setup/outsourced/other), description, quantity, unit, unit_rate, amount, occurred_at and actor.
+- **production_waste**: job_id, stock_item_id, quantity, waste_type, reason and related issue id. It classifies issued material; it must not create a second stock deduction.
+- **production_offcut_returns**: job_id, stock_item_id, quantity, measured unit, destination location, stock_movement_id, condition and returned_at. Reusable offcuts are a stock return and credit to the job's net material cost.
+- **quality_checks**: job_id, result (pass/fail), inspection_mode (second_person/self), inspector_user_id, checked_at and notes. Self inspection is permitted only as a recorded mode.
+- **rework_events**: job_id, quality_check_id, reason, opened_at, closed_at, additional_cost snapshot and notes. Rework material/time is linked back to the originating order line.
+- **artwork_references**: order_item_id, drive_url/file_id, filename, version_label, source, approval_status, approved_by and timestamps. No artwork file bytes stored in Supabase.
+- **expenses** and **expense_categories**: owner-only category, payee, amount, date, payment method, receipt reference, optional notes and audit. Expenses are overhead unless explicitly linked to a job with a documented allocation.
+- **deliveries**: order_id, method (collection/courier), carrier, tracking reference, customer_paid_charge, recipient, dispatched_at and handed_over_at. Carrier charge is a separate pass-through.
+
+Stock movement and job cost rows are append-only. Corrections use compensating movements/cost entries with reason and actor, never silent edits or deletes. All quantity and cost snapshots are recorded in base units and integer KES respectively.
+
 ### 3.6 Numbering and concurrency
 
 Use a `document_counters` table keyed by `(business_id, document_type)` for quote/order/payment/receipt sequences. Increment and return the next number inside the same transaction using row-level locking or atomic `UPDATE ... RETURNING`. Do not use `MAX(number)+1`, timestamps alone, or browser counters.
