@@ -52,7 +52,7 @@ select is(
 );
 
 select throws_ok(
-  $$select public.owner_upsert_customer('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Different Payload',null,null,null,null,
+  $$$select public.owner_upsert_customer('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Different Payload',null,null,null,null,
     '10000000-0000-4000-8000-000000000001')$$,
   '22023',null,'Reusing an idempotency key with different payload is rejected'
 );
@@ -162,10 +162,10 @@ select is(
 );
 
 select throws_ok(
-  $select public.owner_record_job_waste(
+  $$select public.owner_record_job_waste(
     (select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999'),
     (select id from public.production_material_issues where job_id=(select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999')),
-    3,'scrap','Too much waste','50000000-0000-4000-8000-000000000007')$,
+    3,'scrap','Too much waste','50000000-0000-4000-8000-000000000007')$$,
   '22023',null,'Waste plus offcuts cannot exceed the issued quantity'
 );
 
@@ -178,9 +178,9 @@ select is(
 );
 
 select throws_ok(
-  $select public.owner_complete_production_job(
+  $$select public.owner_complete_production_job(
     (select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999'),
-    '50000000-0000-4000-8000-000000000009')$,
+    '50000000-0000-4000-8000-000000000009')$$,
   '22023',null,'Job cannot complete without a latest passing QC'
 );
 
@@ -222,8 +222,8 @@ select is(
 );
 
 select throws_ok(
-  $select public.owner_handover_order('cccccccc-cccc-4ccc-8ccc-cccccccccccc','collection','Customer',null,null,
-    '60000000-0000-4000-8000-000000000001')$,
+  $$select public.owner_handover_order('cccccccc-cccc-4ccc-8ccc-cccccccccccc','collection','Customer',null,null,
+    '60000000-0000-4000-8000-000000000001')$$,
   '22023',null,'Handover is blocked while an order balance remains'
 );
 
@@ -245,14 +245,9 @@ select is(
   2::numeric,'Destination transfer quantity is recorded once'
 );
 
-select throws_ok(
-  $select public.owner_get_order_balance('cccccccc-cccc-4ccc-8ccc-cccccccccccc')$,
-  '42501',null,'Authenticated non-owner cannot read order balance or call owner RPCs'
-);
-
 select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
 select throws_ok(
-  $select public.owner_get_order_balance('cccccccc-cccc-4ccc-8ccc-cccccccccccc')$,
+  $$select public.owner_get_order_balance('cccccccc-cccc-4ccc-8ccc-cccccccccccc')$$,
   '42501',null,'Authenticated non-owner cannot read order balance or call owner RPCs'
 );
 reset role;
