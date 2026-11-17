@@ -494,7 +494,7 @@ begin
   v_payload:=jsonb_build_object('job_id',p_job_id,'stock_item_id',p_stock_item_id,'location_id',p_location_id,'quantity',p_quantity,'reason',p_reason);
   v_cached:=private.begin_idempotent_request(v_job.business_id,'issue_job_material',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
-  perform 1 from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
+  select * into v_job from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
   if v_job.status not in ('planned','in_progress','rework') then raise exception using errcode='22023',message='Job is locked against new material issues'; end if;
   perform pg_advisory_xact_lock(hashtextextended(v_job.business_id::text||p_stock_item_id::text||p_location_id::text,0));
   select coalesce(sum(quantity),0) into v_on_hand from public.stock_movements
@@ -520,12 +520,23 @@ begin
     unit_cost_snapshot,extended_cost,stock_movement_id,actor_user_id)
   values(v_job.business_id,p_job_id,p_stock_item_id,p_location_id,p_quantity,v_cost,round(p_quantity*v_cost)::bigint,v_movement,v_actor)
   returning id into v_issue;
-  update public.stock_reservations r set released_quantity=least(r.reserved_quantity,r.released_quantity+p_quantity),
-    status=case when r.released_quantity+p_quantity>=r.reserved_quantity then 'consumed' else 'active' end,
-    released_at=case when r.released_quantity+p_quantity>=r.reserved_quantity then now() else null end
-  where r.business_id=v_job.business_id and r.order_item_id=v_job.order_item_id
-    and r.stock_item_id=p_stock_item_id and r.location_id=p_location_id and r.status='active'
-    and r.released_quantity<r.reserved_quantity;
+  with reservations as (
+    select r.id,r.reserved_quantity,r.released_quantity,
+      r.reserved_quantity-r.released_quantity as remaining,
+      coalesce(sum(r.reserved_quantity-r.released_quantity) over(order by r.created_at,r.id
+        rows between unbounded preceding and 1 preceding),0) as prior_remaining
+    from public.stock_reservations r
+    where r.business_id=v_job.business_id and r.order_item_id=v_job.order_item_id
+      and r.stock_item_id=p_stock_item_id and r.location_id=p_location_id
+      and r.status='active' and r.released_quantity<r.reserved_quantity
+    for update
+  )
+  update public.stock_reservations r set
+    released_quantity=r.released_quantity+greatest(0,least(reservations.remaining,p_quantity-reservations.prior_remaining)),
+    status=case when r.released_quantity+greatest(0,least(reservations.remaining,p_quantity-reservations.prior_remaining))>=r.reserved_quantity then 'consumed' else 'active' end,
+    released_at=case when r.released_quantity+greatest(0,least(reservations.remaining,p_quantity-reservations.prior_remaining))>=r.reserved_quantity then now() else null end
+  from reservations
+  where r.id=reservations.id and greatest(0,least(reservations.remaining,p_quantity-reservations.prior_remaining))>0;
   update public.production_jobs set status='in_progress',started_at=coalesce(started_at,now())
   where business_id=v_job.business_id and id=p_job_id and status='planned';
   v_result:=jsonb_build_object('issue_id',v_issue,'stock_movement_id',v_movement,'quantity_issued',p_quantity,
@@ -554,6 +565,8 @@ begin
   v_payload:=jsonb_build_object('job_id',p_job_id,'issue_id',p_issue_id,'quantity',p_quantity,'waste_type',p_waste_type,'reason',p_reason);
   v_cached:=private.begin_idempotent_request(v_job.business_id,'record_job_waste',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
+  select * into v_job from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
+  if v_job.status in ('completed','cancelled') then raise exception using errcode='22023',message='Job is closed to waste classification'; end if;
   select * into v_issue from public.production_material_issues where business_id=v_job.business_id and id=p_issue_id for update;
   if not found or v_issue.job_id<>p_job_id then raise exception using errcode='22023',message='Issue does not belong to job'; end if;
   select coalesce(sum(quantity),0) into v_used from public.production_waste where business_id=v_job.business_id and issue_id=p_issue_id;
@@ -584,6 +597,8 @@ begin
   v_payload:=jsonb_build_object('job_id',p_job_id,'issue_id',p_issue_id,'location_id',p_location_id,'quantity',p_quantity);
   v_cached:=private.begin_idempotent_request(v_job.business_id,'return_job_offcut',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
+  select * into v_job from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
+  if v_job.status in ('completed','cancelled') then raise exception using errcode='22023',message='Job is closed to offcut returns'; end if;
   select * into v_issue from public.production_material_issues where business_id=v_job.business_id and id=p_issue_id for update;
   if not found or v_issue.job_id<>p_job_id then raise exception using errcode='22023',message='Issue does not belong to job'; end if;
   select coalesce(sum(quantity),0) into v_used from public.production_waste where business_id=v_job.business_id and issue_id=p_issue_id;
@@ -628,6 +643,8 @@ begin
   v_payload:=jsonb_build_object('job_id',p_job_id,'cost_type',p_cost_type,'description',p_description,'quantity',p_quantity,'unit',p_unit,'unit_rate',p_unit_rate);
   v_cached:=private.begin_idempotent_request(v_job.business_id,'add_production_cost',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
+  select * into v_job from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
+  if v_job.status not in ('planned','in_progress','rework') then raise exception using errcode='22023',message='Job is locked against additional costs'; end if;
   v_amount:=round(p_quantity*p_unit_rate)::bigint;
   insert into public.production_cost_entries(business_id,job_id,cost_type,description,quantity,unit,unit_rate,amount,actor_user_id)
   values(v_job.business_id,p_job_id,p_cost_type,btrim(p_description),p_quantity,btrim(p_unit),p_unit_rate,v_amount,v_actor)
@@ -722,6 +739,12 @@ begin
   from public.order_items oi where oi.business_id=v_job.business_id and oi.id=v_job.order_item_id;
   update public.order_items set actual_total_cost=v_cost,actual_unit_cost=case when v_qty>0 then round(v_cost/v_qty)::bigint else 0 end
   where business_id=v_job.business_id and id=v_item_id;
+  if exists (
+    select 1 from public.order_items oi
+    where oi.business_id=v_job.business_id and oi.order_id=v_order_id
+      and oi.sale_mode='value_added' and oi.production_method_id is not null
+      and not exists (select 1 from public.production_jobs pj where pj.business_id=oi.business_id and pj.order_item_id=oi.id and pj.status='completed')
+  ) then raise exception using errcode='22023',message='Every value-added production line must have a completed job'; end if;
   if not exists(
     select 1 from public.production_jobs j
     where j.business_id=v_job.business_id and j.order_item_id in (
