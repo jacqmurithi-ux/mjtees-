@@ -2,7 +2,7 @@
 
 ## Implemented on `first-release-build`
 
-- [x] MJ orange, blue and green identity and responsive public website.
+- [x] MJ orange, blue and green identity and responsive public website.\n- [x] Owner-managed product/service catalogue with a restricted anonymous read-only published catalogue endpoint.
 - [x] Authenticated owner workspace with email/password sign-in and active-owner membership check.
 - [x] Owner customer and enquiry management.
 - [x] Quotation costing, pricing rules, revisions and customer acceptance-to-order conversion.
@@ -17,8 +17,8 @@
 
 ## Final technical review still required
 
-- [ ] Re-run frontend build and full local Supabase migration/pgTAP validation after the latest changes.
-- [ ] Review and correct any findings from production, refund/reversal, purchasing/receiving and cross-module workflow tests.
+- [ ] Re-run frontend build and full local Supabase migration/pgTAP validation after the latest catalogue and SQL delimiter fixes.
+- [ ] Review and correct any findings from production, refund/reversal, purchasing/receiving, catalogue publishing and cross-module workflow tests.
 - [ ] Verify the complete browser flow on an isolated hosted development project, including public enquiry/Turnstile, quote acceptance, owner operations, receipts, refund/reversal, inventory, QC and handover.
 - [ ] Verify anon, non-owner authenticated and owner access against every exposed table, view and RPC; review SECURITY DEFINER grants and Supabase advisors.
 - [ ] Validate pagination/report totals and backup/restore/recovery procedures.
