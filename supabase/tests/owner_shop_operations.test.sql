@@ -129,8 +129,10 @@ select is(
   125::bigint,'Owner can record an operating expense'
 );
 
+reset role;
 insert into public.enquiries(business_id,public_reference,contact_name,phone,requested_service,description)
 values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','ENQ-OPS-001','Prospect','0712222222','Vinyl branding','Need ten shirts');
+set local role authenticated;
 
 select is(
   public.owner_update_enquiry_status((select id from public.enquiries where public_reference='ENQ-OPS-001'),
