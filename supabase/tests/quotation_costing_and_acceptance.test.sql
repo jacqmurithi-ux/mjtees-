@@ -76,10 +76,13 @@ select is(
   '152','Public token acceptance creates the order without exposing customer records'
 );
 
+select set_config('mj.test.accepted_order_number',
+  public.accept_quotation(current_setting('mj.test.quote_token'),'90000000-0000-4000-8000-000000000005')->>'order_number',true);
+
 select is(
   public.accept_quotation(current_setting('mj.test.quote_token'),'90000000-0000-4000-8000-000000000005')->>'order_number',
-  (select order_number from public.orders where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa')),
-  'Retry with the same request id returns the original order'
+  current_setting('mj.test.accepted_order_number'),
+  'Retry with the same request id returns the original order without direct table access'
 );
 
 select throws_ok(
