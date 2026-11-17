@@ -338,7 +338,7 @@ begin
   select * into v_item from public.stock_items where id=p_stock_item_id;
   if not found then raise exception using errcode='P0002',message='Stock item not found'; end if;
   v_actor:=private.assert_active_owner(v_item.business_id);
-  if p_quantity is null or p_quantity<=0 or p_adjustment_type not in ('count_gain','count_loss','opening_balance')
+  if p_quantity is null or p_quantity<=0 or p_adjustment_type is null or p_adjustment_type not in ('count_gain','count_loss','opening_balance')
      or length(btrim(coalesce(p_reason,'')))=0 then
     raise exception using errcode='22023',message='Positive quantity, valid adjustment type and reason are required';
   end if;
