@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(18);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-ops-owner@example.invalid','',now(),
@@ -138,6 +138,37 @@ select is(
   public.owner_update_enquiry_status((select id from public.enquiries where public_reference='ENQ-OPS-001'),
     'reviewing','Owner is reviewing the request','80000000-0000-4000-8000-000000000011')->>'status',
   'reviewing','Owner can triage a public enquiry'
+);
+
+-- Value-added orders also consume an MJ Tees blank garment SKU.
+reset role;
+insert into public.orders(id,business_id,order_number,customer_id,status,subtotal_amount,discount_amount,total_amount,created_by)
+values('11111111-1111-4111-8111-111111111111','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','OPS-ORDER-2',
+ 'cccccccc-cccc-4ccc-8ccc-cccccccccccc','confirmed',200,0,200,'33333333-3333-4333-8333-333333333333');
+insert into public.order_items(id,business_id,order_id,description,quantity,unit,unit_price,line_discount,line_total,
+  sale_mode,customer_supplies_item,stock_item_id)
+values('22222222-2222-4222-8222-222222222222','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+ '11111111-1111-4111-8111-111111111111','Branded T-shirt Medium',2,'piece',100,0,200,'value_added',false,
+ (select id from public.stock_items where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and sku='BLANK-TEE-M'));
+set local role authenticated;
+select is(
+  (public.owner_reserve_order_stock('11111111-1111-4111-8111-111111111111',
+    '80000000-0000-4000-8000-000000000012')->>'reserved_quantity')::numeric,
+  2::numeric,'Value-added order reserves the required blank garment stock'
+);
+reset role;
+update public.orders set status='ready' where id='11111111-1111-4111-8111-111111111111';
+set local role authenticated;
+select is(
+  public.owner_handover_order('11111111-1111-4111-8111-111111111111','collection','Customer',null,'Owner approved unpaid balance',
+    '80000000-0000-4000-8000-000000000013')->>'status',
+  'completed','Value-added order can hand over after consuming its reserved blank garment'
+);
+select is(
+  (select coalesce(sum(quantity),0) from public.stock_movements
+    where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      and stock_item_id=(select id from public.stock_items where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and sku='BLANK-TEE-M')),
+  45::numeric,'Value-added handover deducts blank garment stock exactly once'
 );
 
 select * from finish();
