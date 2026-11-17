@@ -22,11 +22,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Generate Supabase project configuration
-        run: |
-          npx --yes supabase@latest --version
-          npx --yes supabase@latest init --force
-          sed -i 's/^project_id = .*/project_id = "mjtees"/' supabase/config.toml
+      - name: Check Supabase CLI version
+        run: npx --yes supabase@latest --version
       - name: Show local-only CLI command options
         run: |
           npx --yes supabase@latest start --help
