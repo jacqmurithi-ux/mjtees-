@@ -38,3 +38,22 @@ export function evaluateMinimumMargin(input: LineProfitabilityInput & {
   minimumNetSellingAmount: number | null;
   shortfall: number | null;
 };
+
+export interface QuotationLineProfitabilityInput extends LineProfitabilityInput {
+  orderDiscountAllocated?: number;
+}
+
+export function calculateQuotationProfitability(input: {
+  lines: QuotationLineProfitabilityInput[];
+  minimumGrossMarginPercent?: number;
+}): {
+  lines: Array<LineProfitability & { orderDiscountAllocated: number }>;
+  netSellingAmount: number;
+  estimatedTotalCost: number;
+  grossProfit: number;
+  grossMarginPercent: number | null;
+  minimumNetSellingAmount: number;
+  shortfall: number;
+  status: "passes" | "below_floor";
+  passes: boolean;
+};
