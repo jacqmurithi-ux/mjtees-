@@ -528,7 +528,8 @@ begin
     if v_actor is null then raise exception using errcode='42501',message='Authenticated owner required for stock handover'; end if;
     for v_line in
       select oi.id,oi.stock_item_id from public.order_items oi
-      where oi.business_id=new.business_id and oi.order_id=new.id and oi.sale_mode='blank' and oi.stock_item_id is not null
+      where oi.business_id=new.business_id and oi.order_id=new.id
+         and oi.stock_item_id is not null and oi.customer_supplies_item=false
     loop
       if coalesce((select sum(r.reserved_quantity-r.released_quantity) from public.stock_reservations r
         where r.business_id=new.business_id and r.order_item_id=v_line.id and r.status='active'),0)
@@ -547,7 +548,7 @@ begin
           insert into public.stock_movements(business_id,stock_item_id,location_id,movement_type,quantity,unit_cost_snapshot,
             source_type,source_id,reason,actor_user_id,request_id)
           values(new.business_id,v_reservation.stock_item_id,v_reservation.location_id,'issue',-v_qty,v_cost,
-            'order_handover',new.id,'Blank stock sold and handed over',v_actor,gen_random_uuid());
+            'order_handover',new.id,'Tracked blank item sold and handed over',v_actor,gen_random_uuid());
           update public.stock_reservations set released_quantity=reserved_quantity,status='consumed',released_at=now()
           where business_id=new.business_id and id=v_reservation.id;
         end if;
