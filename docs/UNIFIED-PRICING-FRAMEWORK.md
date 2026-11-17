@@ -1,6 +1,6 @@
 # Unified pricing framework
 
-**Status:** Design proposal for review — not an approved database change.  
+**Status:** Approved pricing policy; 30% direct-cost gross-margin enforcement is implemented in the database migration and quotation workflow.  
 **Scope:** All MJ Printing & Branding (MJ Tees) products and services.  
 **Core rule:** One pricing strategy, multiple product-specific costing methods.
 
@@ -133,7 +133,7 @@ The shared pricing layer should calculate a minimum allowable selling price from
 
 `minimum price = cost basis / (1 - minimum margin)`
 
-The minimum margin is a configurable business policy, not a value to invent in code. The system must define whether the protected cost basis is direct production cost alone or direct cost plus an allocated overhead amount. Until that policy is configured, show both direct-cost profitability and any separately allocated overhead rather than pretending they are the same measure.
+The approved minimum is **30% gross margin on direct production cost**. The protected cost basis is the saved direct production-cost estimate only. No general overhead allocation or tax is assumed. The minimum final net selling amount is `ceil(direct production cost / 0.70)`. The check runs after line discounts and any allocated order-level discount. A below-floor quotation requires an active business owner to provide a reason; the approval is recorded in `owner_approvals` and the audit log.
 
 A discount, tier selection, bundle adjustment or manual price must be rechecked after all adjustments. If it breaches the floor, block it or require a specifically authorised, reasoned exception. Do not silently accept it.
 
@@ -191,32 +191,25 @@ Use a representative test matrix. Test values should come from verified stock co
 
 Also validate that all monetary arithmetic uses the current integer-KSh convention and that rounding is deterministic at line and order level.
 
-## 10. Decisions still required before rates are configured
+## 10. Decisions still required before specialised rates are configured
 
-The framework can be designed now, but these commercial values must come from the owner and actual business evidence before they are activated:
+The following product and service decisions still require measured operating data and owner input:
 
-1. Minimum gross margin policy, potentially varying by product/service class.
-2. Whether and how job-attributed overhead is included in the protected price floor.
-3. Which products genuinely need Good / Better / Best tiers.
-4. Quantity breakpoints and the actual savings at each breakpoint.
-5. Artwork service levels, revision allowances and charges.
-6. Which complexity drivers are measurable and which require a documented manual band.
-7. Which roles may approve below-floor exceptions and manual overrides.
-8. Bundle discount authority and allocation policy.
-9. Outsourcing risk/handling policy based on real supplier experience.
-10. Quotation validity periods and price-change communication rules.
+1. Which products genuinely need Good / Better / Best tiers.
+2. Quantity breakpoints and the actual savings at each breakpoint.
+3. Artwork service levels, revision allowances and charges.
+4. Which complexity drivers are measurable and which require a documented manual band.
+5. Bundle discount authority and allocation policy.
+6. Outsourcing risk/handling policy based on real supplier experience.
+7. Quotation validity periods and price-change communication rules.
 
-No default percentage, price, commission, labour rate or margin threshold should be hard-coded before these decisions are confirmed.
+The minimum gross-margin policy, direct-cost basis and owner-only below-floor exception authority are already approved and implemented. Do not add assumed overhead or another profitability target.
 
 ## 11. Delivery sequence
 
-1. Review this framework against the current UI, SQL functions, schema constraints, RLS and tests.
-2. Resolve policy decisions and confirm the profitability cost basis.
-3. Define a pure, testable pricing calculation contract and representative fixtures.
-4. Validate existing pricing-rule behaviour and quotation snapshots against that contract.
-5. Implement shared pricing controls on an isolated branch, without changing unrelated product costing.
-6. Add measurement-and-complexity as one specialised method after the shared framework passes validation.
-7. Present database impact and migration/test plan separately for explicit approval.
-8. Merge and deploy only after their separate approvals.
+1. Keep the shared pricing calculation tests aligned with the database's final discounted-total rule.
+2. Add specialised costing methods one at a time, preserving existing product profiles and snapshots.
+3. Validate each method against measured materials, labour and machine data before activation.
+4. Keep deployment separate from database and code changes; deployment still requires its own approval.
 
-**No database migration, hosted database write, merge or deployment is authorised by this design document.**
+The migration `20261118000100_enforce_30_percent_gross_margin.sql` is applied to the MJ Tees Supabase project. It adds owner-reason approval to quotation sending and direct-order creation. No deployment is included.
