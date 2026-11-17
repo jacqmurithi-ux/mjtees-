@@ -386,7 +386,7 @@ begin
     'amount',p_amount,'reason',p_reason,'refund_method',p_refund_method,'external_reference',p_external_reference);
   v_cached:=private.begin_idempotent_request(v_payment.business_id,'record_refund',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
-  perform 1 from public.payments where business_id=v_payment.business_id and id=p_payment_id for update;
+  select * into v_payment from public.payments where business_id=v_payment.business_id and id=p_payment_id for update;
   if v_payment.status<>'posted' then raise exception using errcode='22023',message='Only posted payments can be refunded'; end if;
   if p_source_bucket='allocated' then
     if p_allocation_id is null then raise exception using errcode='22023',message='Allocation is required'; end if;
