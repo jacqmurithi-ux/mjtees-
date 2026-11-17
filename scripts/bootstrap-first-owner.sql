@@ -30,6 +30,10 @@ declare
   v_reason text := current_setting('mj.bootstrap_reason');
   v_business uuid;
 begin
+  -- Serialize the one-time bootstrap check and write so concurrent operators cannot
+  -- create two businesses with different slugs and two active first owners.
+  perform pg_advisory_xact_lock(hashtextextended('mj-tees:first-owner-bootstrap',0));
+
   if length(btrim(v_name)) not between 1 and 160
      or v_slug !~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
      or length(btrim(v_reason)) not between 1 and 500 then
