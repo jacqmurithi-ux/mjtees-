@@ -896,7 +896,7 @@ revoke all on all tables in schema private from public, anon, authenticated;
 
 -- RLS is enabled for every public business table. Reads are owner-only; all writes
 -- remain closed until narrowly scoped transactional RPCs are introduced.
-do $$
+do $do$
 declare
   t text;
 begin
@@ -921,7 +921,7 @@ begin
       t || '_owner_select',t
     );
   end loop;
-end $;
+end $do$;
 
 alter table public.businesses enable row level security;
 revoke all on public.businesses from anon, authenticated;
