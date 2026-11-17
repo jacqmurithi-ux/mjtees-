@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(31);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-ops-owner@example.invalid','',now(),
@@ -213,10 +213,19 @@ select is(
   'received','Supplier delivery completes when accepted and rejected quantities account for the ordered quantity'
 );
 
+-- Owners can configure service categories used by costing and quotations.
+select set_config('mj.test.category_id',
+  public.owner_upsert_service_category('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,
+    'Apparel','apparel','Garments and branded apparel','80000000-0000-4000-8000-000000000029')->>'id',true);
+select is(
+  (select name from public.service_categories where id=current_setting('mj.test.category_id')::uuid),
+  'Apparel','Owner can create a service category for quotations and costing'
+);
+
 -- Public catalogue is deliberately limited to active, published rows and safe display fields.
 select is(
   public.owner_upsert_catalogue_item(
-    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,null,'Custom T-shirt','custom-t-shirt',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,current_setting('mj.test.category_id')::uuid,'Custom T-shirt','custom-t-shirt',
     'product','Made to order branded apparel',850,true,10,
     '80000000-0000-4000-8000-000000000026')->>'is_published',
   'true','Owner can publish a catalogue product'
@@ -237,6 +246,12 @@ select is(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
+select throws_ok(
+  $test$select public.owner_upsert_service_category(
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,'Unauthorized category','unauthorized-category',null,
+    '80000000-0000-4000-8000-000000000030')$test$,
+  '42501',null,'Authenticated non-owner cannot create service categories'
+);
 select throws_ok(
   $test$select public.owner_upsert_catalogue_item(
     'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',null,null,'Unauthorized item','unauthorized-item',
