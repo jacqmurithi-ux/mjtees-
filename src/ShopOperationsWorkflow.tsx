@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { supabase } from "./lib/supabase";
 
 type Stock={id:string;sku:string;name:string;stock_kind:string;base_unit:string;purchase_unit:string;purchase_to_base_factor:number;reorder_level:number;current_average_unit_cost:number;default_supplier_id:string|null;is_active:boolean};
@@ -53,7 +54,7 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
  const supplierName=(id:string)=>suppliers.find(x=>x.id===id)?.display_name??"Supplier";
  const stockName=(id:string)=>stock.find(x=>x.id===id)?.name??"Stock item";
  const onHand=(id:string)=>movements.filter(m=>m.stock_item_id===id).reduce((sum,m)=>sum+Number(m.quantity),0);
- const createSupplier=async(e:React.FormEvent)=>{
+ const createSupplier=async(e:FormEvent)=>{
   e.preventDefault();await run("owner_upsert_supplier",{p_business_id:businessId,p_supplier_id:null,p_display_name:supplierForm.name.trim(),p_contact_name:null,p_phone:supplierForm.phone.trim()||null,p_email:supplierForm.email.trim()||null,p_notes:null,p_request_id:rid()},"Supplier saved.");setSupplierForm({name:"",phone:"",email:""});
  };
  const createStock=async(e:React.FormEvent)=>{
