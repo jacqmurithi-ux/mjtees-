@@ -1,0 +1,33 @@
+name: Temporary Supabase CLI migration generator
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/supabase-cli-runner.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate an empty migration with Supabase CLI
+        run: npx --yes supabase@latest migration new first_release_schema
+      - name: Upload CLI-generated migration
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-cli-generated-migration
+          path: supabase/migrations/*.sql
+          if-no-files-found: error
+          retention-days: 3
