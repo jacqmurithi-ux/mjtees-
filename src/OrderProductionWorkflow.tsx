@@ -13,7 +13,7 @@ const money=(n:number)=>new Intl.NumberFormat("en-KE",{style:"currency",currency
 
 export default function OrderProductionWorkflow({businessId,customers,onChanged}:{businessId:string;customers:{id:string;display_name:string}[];onChanged:()=>void}){
  const [orders,setOrders]=useState<Order[]>([]);const [items,setItems]=useState<Item[]>([]);const [methods,setMethods]=useState<Method[]>([]);
- const [jobs,setJobs]=useState<Job[]>([]);const [checks,setChecks]=useState<Check[]>([]);const [stock,setStock]=useState<Stock[]>([]);const [locations,setLocations]=useState<Location[]>([]);
+ const [jobs,setJobs]=useState<Job[]>([]);const [checks,setChecks]=useState<Check[]>([]);const [stock,setStock]=useState<Stock[]>([]);const [locations,setLocations]=useState<Location[]>([]);const [currentUserId,setCurrentUserId]=useState("");
  const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
  const [requiredBy,setRequiredBy]=useState<Record<string,string>>({});const [turnaround,setTurnaround]=useState<Record<string,string>>({});
  const [methodByItem,setMethodByItem]=useState<Record<string,string>>({});const [jobDue,setJobDue]=useState<Record<string,string>>({});
@@ -32,7 +32,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
    client.from("inventory_locations").select("id,name").eq("business_id",businessId).eq("is_active",true).order("name")
   ]);
   const failure=o.error||i.error||m.error||j.error||q.error||s.error||l.error;if(failure)throw failure;
-  setOrders((o.data??[]) as Order[]);setItems((i.data??[]) as Item[]);setMethods((m.data??[]) as Method[]);setJobs((j.data??[]) as Job[]);setChecks((q.data??[]) as Check[]);setStock((s.data??[]) as Stock[]);setLocations((l.data??[]) as Location[]);
+  setOrders((o.data??[]) as Order[]);setItems((i.data??[]) as Item[]);setMethods((m.data??[]) as Method[]);setJobs((j.data??[]) as Job[]);setChecks((q.data??[]) as Check[]);setStock((s.data??[]) as Stock[]);setLocations((l.data??[]) as Location[]);const {data:userData}=await client.auth.getUser();setCurrentUserId(userData.user?.id||"");
  },[businessId]);
  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
  const call=async(name:string,args:Record<string,unknown>,success:string)=>{
@@ -59,8 +59,8 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  };
  const qualityCheck=(job:Job)=>{
   const v=qc[job.id]||{result:"pass",mode:"self",inspector:"",notes:""};
-  const inspector=v.mode==="self"?null:v.inspector.trim()||null;
-  if(v.mode==="second_person"&&!inspector){setError("Enter the second inspector's registered user ID.");return;}
+  const inspector=v.mode==="self"?currentUserId:v.inspector.trim()||null;
+  if(!inspector){setError("Could not identify the inspector. Confirm the signed-in owner or enter a second inspector user ID.");return;}
   void call("owner_record_quality_check",{p_job_id:job.id,p_result:v.result,p_inspection_mode:v.mode,p_inspector_user_id:inspector,p_notes:v.notes.trim()||null,p_request_id:rid()}, "Quality check recorded.");
  };
  const handoverOrder=(order:Order)=>{
