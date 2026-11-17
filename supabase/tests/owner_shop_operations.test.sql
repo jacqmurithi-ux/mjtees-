@@ -51,9 +51,9 @@ select is(
 select is(
   public.owner_receive_purchase('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     (select id from public.suppliers where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and display_name='Test Supplier'),
-    (select id from public.purchase_orders where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb),
+    (select id from public.purchase_orders where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
     now(),jsonb_build_array(jsonb_build_object(
-      'purchase_order_item_id',(select id from public.purchase_order_items where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb),
+      'purchase_order_item_id',(select id from public.purchase_order_items where business_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
       'location_id','dddddddd-dddd-4ddd-8ddd-dddddddddddd','accepted_quantity',5,'rejected_quantity',0,'actual_unit_cost',100)),
     '80000000-0000-4000-8000-000000000005')->>'status',
   'received','Goods receipt completes the purchase order'
