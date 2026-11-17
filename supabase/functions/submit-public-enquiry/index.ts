@@ -46,8 +46,10 @@ Deno.serve(async (request: Request) => {
   const contactName = body.contact_name;
   const service = body.requested_service;
   const description = body.description;
-  const phone = typeof body.phone === "string" ? body.phone.trim() : null;
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : null;
+  const phoneValue = typeof body.phone === "string" ? body.phone.trim() : "";
+  const emailValue = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const phone = phoneValue || null;
+  const email = emailValue || null;
   const token = body.turnstile_token;
   const requestId = typeof body.request_id === "string" && uuidPattern.test(body.request_id) ? body.request_id : crypto.randomUUID();
 
@@ -67,7 +69,14 @@ Deno.serve(async (request: Request) => {
   let desiredBy: string | null = null;
   if (body.desired_by !== undefined && body.desired_by !== null && body.desired_by !== "") {
     if (typeof body.desired_by !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.desired_by)) return reply({ message: "Invalid requested date" }, 400);
+    const parsedDate = new Date(body.desired_by + "T00:00:00Z");
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== body.desired_by) {
+      return reply({ message: "Invalid requested date" }, 400);
+    }
     desiredBy = body.desired_by;
+  }
+  if (body.customer_supplies_item !== undefined && typeof body.customer_supplies_item !== "boolean") {
+    return reply({ message: "Invalid customer-supplied item choice" }, 400);
   }
 
   let artworkUrl: string | null = null;
@@ -104,7 +113,7 @@ Deno.serve(async (request: Request) => {
     const bytes = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
     return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
   }
-  const networkId = forwardedIp || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const networkId = forwardedIp || "unknown";
   const contactId = phone ? phone.replace(/[^\d+]/g, "") : (email ?? "");
   const ipHash = await hmac("ip:" + networkId);
   const contactHash = await hmac("contact:" + contactId.toLowerCase());
