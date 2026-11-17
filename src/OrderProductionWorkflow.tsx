@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 
 type Order={id:string;order_number:string;customer_id:string;status:string;total_amount:number;received_at:string;required_by:string|null;promised_turnaround_hours:number|null};
-type Item={id:string;order_id:string;description:string;quantity:number;unit:string;sale_mode:string;customer_supplies_item:boolean;production_method_id:string|null;production_specification:unknown};
+type Item={id:string;order_id:string;description:string;quantity:number;unit:string;sale_mode:string;customer_supplies_item:boolean;stock_item_id:string|null;production_method_id:string|null;production_specification:unknown};
 type Method={id:string;code:string;name:string};
 type Job={id:string;order_item_id:string;status:string;planned_quantity:number;due_at:string|null;notes:string|null};
 type Check={id:string;job_id:string;result:string;inspection_mode:string;checked_at:string;notes:string|null};
@@ -27,7 +27,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
   const client=supabase;if(!client)return;
   const [o,i,m,j,q,rw,ce,s,l]=await Promise.all([
    client.from("orders").select("id,order_number,customer_id,status,total_amount,received_at,required_by,promised_turnaround_hours").eq("business_id",businessId).order("received_at",{ascending:false}).limit(200),
-   client.from("order_items").select("id,order_id,description,quantity,unit,sale_mode,customer_supplies_item,production_method_id,production_specification").eq("business_id",businessId).limit(500),
+   client.from("order_items").select("id,order_id,description,quantity,unit,sale_mode,customer_supplies_item,stock_item_id,production_method_id,production_specification").eq("business_id",businessId).limit(500),
    client.from("production_methods").select("id,code,name").eq("is_active",true).order("name"),
    client.from("production_jobs").select("id,order_item_id,status,planned_quantity,due_at,notes").eq("business_id",businessId).order("created_at",{ascending:false}).limit(300),
    client.from("quality_checks").select("id,job_id,result,inspection_mode,checked_at,notes").eq("business_id",businessId).order("checked_at",{ascending:false}).limit(500),
@@ -92,6 +92,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
    return <article className="enquiry-card" key={order.id}>
     <div className="enquiry-top"><div><b>{order.order_number} · {customer(order.customer_id)}</b><small>{new Date(order.received_at).toLocaleDateString("en-KE")} · {money(order.total_amount)}</small></div><span className={"status-chip "+order.status}>{order.status.replaceAll("_"," ")}</span></div>
     <div className="schedule-editor"><label>Required by<input type="date" value={requiredBy[order.id]??order.required_by??""} onChange={e=>setRequiredBy(v=>({...v,[order.id]:e.target.value}))}/></label><label>Promised turnaround (hours)<input type="number" min="1" max="8760" value={turnaround[order.id]??(order.promised_turnaround_hours?.toString()||"")} onChange={e=>setTurnaround(v=>({...v,[order.id]:e.target.value}))}/></label><button className="secondary-action" disabled={busy} onClick={()=>updateSchedule(order)}>Save schedule</button></div>
+    {["confirmed","in_production"].includes(order.status)&&lines.some(i=>i.stock_item_id&&!i.customer_supplies_item&&["blank","value_added"].includes(i.sale_mode))&&<div className="handover-panel"><p>Reserve the shop-supplied blank garments or materials before production and handover.</p><button className="secondary-action" disabled={busy} onClick={()=>void call("owner_reserve_order_stock",{p_order_id:order.id,p_request_id:rid()},"Available stock reserved for this order.")}>Reserve order stock</button></div>}
     <h3>Order lines</h3>{lines.map(item=>{const job=jobFor(item.id);const check=job?latestCheck(job.id):undefined;const selectedMethod=methodByItem[item.id]||methods.find(m=>m.id===item.production_method_id)?.code||"";
      return <div className="production-line" key={item.id}><b>{item.description}</b><small>{item.quantity} {item.unit} · {item.sale_mode.replaceAll("_"," ")} · {item.customer_supplies_item?"Customer-supplied item":"Shop-supplied item"}</small>
       {!job&&item.sale_mode==="value_added"&&<div className="inline-controls"><select value={selectedMethod} onChange={e=>setMethodByItem(v=>({...v,[item.id]:e.target.value}))}><option value="">Production method</option>{methods.map(m=><option key={m.id} value={m.code}>{m.name}</option>)}</select><input type="datetime-local" aria-label="Production due date" value={jobDue[item.id]||""} onChange={e=>setJobDue(v=>({...v,[item.id]:e.target.value}))}/><button className="primary-action compact" disabled={busy} onClick={()=>startJob(item)}>Start production</button></div>}
