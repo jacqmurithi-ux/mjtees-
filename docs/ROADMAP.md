@@ -1,70 +1,44 @@
-# Development roadmap
+# Go-live readiness roadmap
 
-## Milestone 01 — foundation and architecture
+## Implemented on `first-release-build`
 
-- [x] Inspect GitHub repository and Supabase project read-only.
-- [x] Establish React + TypeScript + Vite direction for GitHub Pages.
-- [x] Add initial repository structure and project documentation.
-- [ ] Review and approve database domains, detailed schema and security model.
-- [ ] Install dependencies locally and generate/commit the package lockfile.
-- [ ] Verify local type-check and production build.
+- [x] MJ orange, blue and green identity and responsive public website.\n- [x] Owner-managed service categories and product/service catalogue, linked to quotation lines and public enquiry choices through a tenant-scoped read-only catalogue endpoint.
+- [x] Authenticated owner workspace with email/password sign-in and active-owner membership check.
+- [x] Owner customer and enquiry management.
+- [x] Quotation costing, pricing rules, revisions and customer acceptance-to-order conversion.
+- [x] Payment recording, manual M-Pesa verification, receipts, refund posting/cancellation and payment/allocation reversals.
+- [x] Order turnaround scheduling, production jobs, material issue, production cost entries, quality checks, rework and handover.
+- [x] Inventory items, variant attributes, logical storage locations, opening cost/quantity, movements, reservation and reorder monitoring.
+- [x] Suppliers, purchase orders, goods receipt, expense categories, owner-recorded expenses and operational reports.
+- [x] Restricted public enquiry Edge Function with Turnstile verification, origin allow-list, payload validation and database rate limits.
+- [x] Public enquiry form with Google Drive artwork-reference field and customer-supplied-item option.
+- [x] CI type-check/build and disposable local Supabase migration + pgTAP validation.
+- [x] Manual-only GitHub Pages deployment workflow (no automatic deployment on merge).
 
-## Milestone 02 — business setup and access
+## Final technical review still required
 
-- Business settings and licence information.
-- Owner identity and individual staff accounts.
-- Role/permission matrix and server-enforced access.
-- Shared-device session and inactivity controls.
-- Audit events for sensitive actions.
+- [ ] Re-run frontend build and full local Supabase migration/pgTAP validation after the latest catalogue and SQL delimiter fixes.
+- [ ] Review and correct any findings from production, refund/reversal, purchasing/receiving, catalogue publishing and cross-module workflow tests.
+- [ ] Verify the complete browser flow on an isolated hosted development project, including public enquiry/Turnstile, quote acceptance, owner operations, receipts, refund/reversal, inventory, QC and handover.
+- [ ] Verify anon, non-owner authenticated and owner access against every exposed table, view and RPC; review SECURITY DEFINER grants and Supabase advisors.
+- [ ] Validate pagination/report totals and backup/restore/recovery procedures.
+- [ ] Perform final owner acceptance review.
 
-## Milestone 03 — public website and customers
+## Live setup — separate approvals required
 
-- Public pages, product/service catalogue and portfolio.
-- Contact details and enquiry channels.
-- Customer profiles and interaction history.
-- Quotation enquiry intake.
+- [ ] Confirm hosted Supabase project settings, Auth redirect URLs, Data API exposure, RLS and backups.
+- [ ] Apply reviewed migrations to the hosted business database.
+- [ ] Configure Edge Function secrets, deploy the enquiry function and configure Turnstile allowed origins.
+- [ ] Configure GitHub Pages Actions secrets and Pages source.
+- [ ] Provision the first owner account through the trusted bootstrap process.
+- [ ] Merge PR #1 into `main` only after final review.
+- [ ] Manually run the GitHub Pages deployment workflow after deployment approval.
+- [ ] Verify public site, owner login and live business workflows after release.
 
-## Milestone 04 — catalogue, inventory and suppliers
+## Release boundaries
 
-- Products, variants, units and categories.
-- Opening stock and stock counts.
-- Stock movements and reservations.
-- Suppliers, purchase orders and receiving.
+No hosted migration, first-owner provisioning, PR merge, live-secret configuration or deployment is performed by local CI. The current green database validation is against a disposable local database, not the hosted business database.
 
-## Milestone 05 — POS, quotations, orders and payments
+## Deferred beyond first release
 
-- Walk-in sales and custom quotations.
-- Quote revisions, approvals and conversion to orders.
-- Deposits, instalments, balances and receipts.
-- Payment allocation and customer account history.
-
-## Milestone 06 — purchasing and financial controls
-
-- Supplier costs and payables.
-- Expenses and approvals.
-- Cash/Paybill reconciliation and account transfers.
-- Job costing and daily close.
-
-## Milestone 07 — artwork, production and outsourcing
-
-- Artwork repository and version approval.
-- Production jobs, tasks and staff assignments.
-- Materials, waste and quality checks.
-- Outsourced DTF tracking.
-
-## Milestone 08 — delivery and reporting
-
-- Collection/delivery and payment lock.
-- Owner dashboard and operational reports.
-- Reconciliation and exception reporting.
-
-## Milestone 09 — testing and pilot
-
-- RLS and permission tests.
-- Concurrent stock/payment workflow tests.
-- Backup and restore checks.
-- Staff training, pilot data and controlled launch.
-
-## Later integrations
-
-Daraja automatic payment confirmation, WhatsApp Business API, SMS and social publishing are deferred until core workflows are stable and provider requirements are confirmed.
+Staff accounts and permissions, automatic M-Pesa/Daraja confirmation, tax functionality, WhatsApp/SMS integrations and other additions remain deferred until operational use demonstrates the need.

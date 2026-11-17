@@ -1,0 +1,22 @@
+name: Generate MJ integrity migration filename
+on:
+  push:
+    branches: [first-release-build]
+    paths: [".github/workflows/generate-integrity-migration.yml"]
+permissions:
+  contents: read
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate migration using pinned Supabase CLI
+        run: npx --yes supabase@3.2.0 migration new enforce_ledger_and_inventory_integrity
+      - uses: actions/upload-artifact@v4
+        with:
+          name: integrity-migration-filename
+          path: supabase/migrations/*.sql
+          retention-days: 3
