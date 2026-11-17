@@ -385,12 +385,6 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 - Owner only. Does not create a new receipt number; records reprint audit event and returns the existing receipt snapshot.
 
 
-### 4.5 Handover safeguard
-
-**`owner_handover_order(p_order_id uuid, p_method text, p_recipient_name text, p_tracking_reference text, p_payment_exception_reason text, p_request_id uuid) RETURNS jsonb`**
-- Owner only. Rejects handover while balance_due > 0 unless a separate owner approval record is created with a reason and valid scope. Handover event and approval occur atomically.
-- This operation is not required to enable the initial customer/quote/payment screen, but its invariant is reserved now.
-
 ### 4.6 Owner setup and catalogue RPC contracts
 
 - **owner_upsert_service_category(p_business_id uuid, p_category_id uuid, p_name text, p_slug text, p_description text, p_costing_method text, p_is_active boolean, p_request_id uuid) RETURNS jsonb** — create/update an own-business category; enforce unique slug and safe archival.
