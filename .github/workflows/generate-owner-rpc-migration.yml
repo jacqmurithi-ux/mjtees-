@@ -1,6 +1,8 @@
 name: Generate owner RPC migration filename
 on:
-  workflow_dispatch:
+  push:
+    branches: [first-release-build]
+    paths: [".github/workflows/generate-owner-rpc-migration.yml"]
 permissions:
   contents: read
 jobs:
