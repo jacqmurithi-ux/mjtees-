@@ -141,7 +141,7 @@ Function names are design labels, not deployed RPCs. Exact parameter and return 
 
 - Foreign keys must include business boundaries where practical, so a quote/customer/order/payment cannot be joined across businesses.
 - Monetary columns use integer minor units or integer KES consistently; choose one representation before SQL. For KES-only release one, integer KES is simplest; if fractional currency is needed later, migrate deliberately.
-- Positive quantities and payment amounts; nonnegative discounts/tax; valid status CHECK constraints; unique business-scoped quote/order/receipt numbers. Quantities should use a fixed-precision numeric type (not integer) to support metres, square metres and other measured materials.
+- Positive quantities and payment amounts; nonnegative discounts; valid status CHECK constraints; unique business-scoped quote/order/receipt numbers. Quantities should use a fixed-precision numeric type (not integer) to support metres, square metres and other measured materials.
 - Enforce unique payment idempotency keys and unique normalized M-Pesa references (nullable for cash); define normalization consistently (trim, uppercase and remove permitted separators) and enforce uniqueness with a business-scoped unique index.
 - Use database transactions and row locks when allocating money or converting a quote to an order to prevent concurrent over-allocation or duplicate conversion.
 - Soft-archive customers/catalogue items; do not cascade-delete financial history.
@@ -169,7 +169,7 @@ The following points are mandatory before writing the first migration:
 4. **Public enquiry boundary:** the website form must create a limited enquiry, not a customer/order record directly. Rate-limit and validate it server-side.
 5. **Cross-business integrity:** use composite unique keys and foreign keys (for example `(business_id, customer_id)`) wherever related records carry a business boundary.
 6. **Number generation:** quote, order and receipt numbers must be generated transactionally per business; never rely on a browser-generated count.
-7. **Pricing and tax:** retain category-level pricing snapshots. Tax stays disabled unless the owner confirms the applicable tax configuration; do not infer tax treatment in code.
+7. **Pricing and tax:** retain category-level pricing snapshots. Tax is excluded from release one and deferred to a separately approved future change.
 8. **Measured quantities:** allow decimal quantities for materials sold/consumed by length or area while keeping money in integer KES.
 9. **Public acceptance tokens:** hash tokens at rest, expire them, make them single-use, and expose only the minimum quote summary required for acceptance.
 
