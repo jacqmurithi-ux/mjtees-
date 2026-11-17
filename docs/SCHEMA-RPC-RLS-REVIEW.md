@@ -397,7 +397,7 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 - **owner_update_purchase_order_status(p_purchase_order_id uuid, p_status text, p_reason text, p_request_id uuid) RETURNS jsonb** — validates allowed transitions; receipt operations alone move quantities into stock.
 - Owner bootstrap: first owner membership is provisioned through a one-time trusted administrative process after the owner has authenticated and identity is verified. No public RPC accepts a user_id/role to self-assign owner. Record bootstrap actor/time in audit log; disable bootstrap path after first owner exists.
 
-### 4.7 Purchase, production, costing and stock RPC contracts (fully scoped)
+### 4.6 Purchase, production, costing and stock RPC contracts (fully scoped)
 
 All are authenticated owner-only, derive actor from auth.uid(), validate business ownership, and accept p_request_id uuid for idempotency.
 
