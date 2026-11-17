@@ -5,30 +5,64 @@ import PublicEnquiryForm from "./PublicEnquiryForm";
 import PublicCatalogue from "./PublicCatalogue";
 
 const services = [
-  { title: "Custom apparel", description: "T-shirts, polos, caps and other garments for individuals, teams, schools and organisations." },
-  { title: "Screen printing", description: "In-house screen printing for suitable artwork, quantities and production requirements." },
-  { title: "Heat-applied branding", description: "Vinyl and sublimation customisation for apparel and selected merchandise." },
-  { title: "Stickers and decals", description: "Custom DTF stickers and vinyl graphics, including vehicle and motorcycle branding." },
-  { title: "Custom merchandise", description: "Personalised items such as mugs, reflector jackets and other made-to-order products." },
-  { title: "Artwork preparation", description: "Artwork setup and preparation for print and cutting workflows." },
+  { title: "Custom apparel", tag: "WEAR YOUR BRAND", description: "T-shirts, polos, jerseys, hoodies and caps for individuals, teams, schools and organisations." },
+  { title: "Vinyl & heat transfer", tag: "CUT · PRESS · FINISH", description: "Names, numbers and custom graphics applied to garments and selected products." },
+  { title: "Stickers & vehicle graphics", tag: "MAKE IT VISIBLE", description: "Custom vinyl stickers, decals and branding for vehicles, motorcycles and storefronts." },
+  { title: "Screen printing", tag: "BUILT FOR RUNS", description: "A practical option for suitable artwork, materials and repeat or larger-quantity orders." },
+  { title: "Sublimation & merchandise", tag: "PERSONALISED DETAILS", description: "Full-colour designs for suitable apparel, mugs and made-to-order merchandise." },
+  { title: "Artwork & finishing", tag: "THE FINAL TOUCH", description: "Artwork preparation, print positioning, finishing and presentation for a polished result." },
 ];
+
+const categories = [
+  { number: "01", name: "Apparel", detail: "T-shirts · Jerseys · Hoodies", tone: "blue", symbol: "T" },
+  { number: "02", name: "Vinyl & stickers", detail: "Names · Numbers · Decals", tone: "orange", symbol: "✳" },
+  { number: "03", name: "Business branding", detail: "Signs · Labels · Promotions", tone: "green", symbol: "M" },
+  { number: "04", name: "Custom merchandise", detail: "Mugs · Gifts · Teamwear", tone: "pink", symbol: "＋" },
+];
+
+function Brand({ footer = false }: { footer?: boolean }) {
+  return <a className={footer ? "brand footer-brand" : "brand"} href="#home" aria-label="MJ Printing and Branding home">
+    <img src="/assets/mj-printing-branding.svg" alt="MJ Printing & Branding — Design, Print, Brand" />
+  </a>;
+}
 
 function Website({ onOwner }: { onOwner: () => void }) {
   return <main className="public-site">
+    <div className="announcement-bar"><span>DESIGN</span><i /> <span>PRINT</span><i /> <span>BRAND</span><b>Custom printing and branding, made around your idea.</b></div>
     <header className="site-header">
-      <a className="brand" href="#home" aria-label="MJ Printing & Branding home"><span className="brand-mark">MJ</span><span>MJ PRINTING & BRANDING</span></a>
-      <nav aria-label="Main navigation"><a href="#services">Services</a><a href="#catalogue">Catalogue</a><a href="#process">How it works</a><a href="#enquire">Get a quote</a><button className="nav-portal" onClick={onOwner}>Owner workspace</button></nav>
+      <Brand />
+      <nav aria-label="Main navigation"><a href="#services">Services</a><a href="#catalogue">Explore products</a><a href="#process">How it works</a><a href="#enquire">Contact</a><button className="nav-portal" onClick={onOwner}>Owner workspace <span>↗</span></button></nav>
     </header>
     <section className="hero" id="home">
-      <div className="hero-copy"><p className="eyebrow">PRINTING · APPAREL · BRANDING</p><h1>Make your idea<br /><span>stand out.</span></h1><p className="hero-intro">Custom apparel, printing and branded merchandise for people, teams, schools, businesses and organisations.</p><a className="primary-link" href="#services">Explore our services <span aria-hidden="true">↗</span></a></div>
-      <div className="hero-art" aria-label="MJ Printing and Branding artwork"><div className="art-circle art-circle-one" /><div className="art-circle art-circle-two" /><div className="art-word">YOUR<br />IDENTITY.</div><div className="art-caption">DESIGNED TO BE SEEN</div></div>
+      <div className="hero-copy">
+        <p className="eyebrow"><span className="eyebrow-dot" /> YOUR IDEA. OUR PRINT. YOUR BRAND.</p>
+        <h1>Make it yours.<br /><span>Make it seen.</span></h1>
+        <p className="hero-intro">From custom apparel and teamwear to stickers, signage and branded merchandise — we turn your ideas into things people can see, use and wear.</p>
+        <div className="hero-actions"><a className="primary-link" href="#enquire">Start a project <span aria-hidden="true">↗</span></a><a className="text-link" href="#catalogue">Explore what we make <span>↓</span></a></div>
+        <div className="hero-proof"><span><b>01</b> Made to order</span><span><b>02</b> Your design, your way</span><span><b>03</b> Personal and business orders</span></div>
+      </div>
+      <div className="hero-art">
+        <div className="hero-art-top"><span>MJ PRINTING & BRANDING</span><span>DESIGN / PRINT / BRAND</span></div>
+        <div className="hero-logo-wrap"><img src="/assets/mj-printing-branding.svg" alt="MJ Printing & Branding logo" /></div>
+        <div className="hero-colour-swatch"><i /><i /><i /><i /><i /></div>
+        <div className="hero-art-bottom"><strong>YOUR BRAND,</strong><strong>IN EVERY DETAIL.</strong><span>MADE TO STAND OUT ↗</span></div>
+        <span className="hero-stamp">MJ<br/>TEES</span>
+      </div>
     </section>
-    <section className="section services-section" id="services"><div className="section-heading"><p className="eyebrow">WHAT WE DO</p><h2>Ideas into<br />something tangible.</h2><p>From a single customised item to a larger group order, each job is quoted according to its requirements.</p></div><div className="service-grid">{services.map((service, index) => <article className="service-card" key={service.title}><span className="service-number">0{index + 1}</span><h3>{service.title}</h3><p>{service.description}</p></article>)}</div></section>
+    <section className="category-section" aria-label="Product categories">
+      <div className="category-intro"><p className="eyebrow">FIND YOUR STARTING POINT</p><h2>What are you<br/>looking to make?</h2></div>
+      <div className="category-grid">{categories.map(item=><a className={`category-card ${item.tone}`} href="#enquire" key={item.number}><span className="category-number">{item.number}</span><span className="category-symbol">{item.symbol}</span><strong>{item.name}</strong><small>{item.detail}</small><span className="category-arrow">↗</span></a>)}</div>
+    </section>
+    <section className="section services-section" id="services">
+      <div className="section-heading"><p className="eyebrow">WHAT WE DO</p><h2>Good ideas deserve<br/>great execution.</h2><p>Choose a service or bring us your idea. We help work out the right material, print method and finish for the job.</p><a className="section-cta" href="#enquire">Talk to us about your project ↗</a></div>
+      <div className="service-grid">{services.map((service, index) => <article className="service-card" key={service.title}><span className="service-number">0{index + 1}</span><span className="service-tag">{service.tag}</span><h3>{service.title}</h3><p>{service.description}</p><a href="#enquire" aria-label={`Enquire about ${service.title}`}>Enquire <span>↗</span></a></article>)}</div>
+    </section>
     <PublicCatalogue />
+    <section className="bring-your-own"><div className="bring-icon">↗</div><div><p className="eyebrow">ALREADY HAVE THE ITEM?</p><h2>Bring it in. We’ll brand it.</h2><p>Have your own jersey, T-shirt, jacket, mug or other suitable item? Tell us what you have and what you want printed. We’ll review the material and the best way to customise it.</p></div><a href="#enquire">Print on my own item <span>↗</span></a></section>
     <PublicEnquiryForm />
-    <section className="process-section" id="process"><div><p className="eyebrow">A CLEAR PROCESS</p><h2>From enquiry<br />to finished order.</h2></div><ol className="process-list"><li><span>01</span><div><strong>Share your idea</strong><p>Tell us what you need, quantities, sizes, colours and your deadline.</p></div></li><li><span>02</span><div><strong>Review the quote</strong><p>We assess the artwork, materials and production method before confirming the price.</p></div></li><li><span>03</span><div><strong>Approve and produce</strong><p>Once the order details and payment arrangements are confirmed, production can begin.</p></div></li><li><span>04</span><div><strong>Collect or arrange delivery</strong><p>We confirm completion and the outstanding balance before handover.</p></div></li></ol></section>
-    <section className="portal-section" id="shop-access"><div><p className="eyebrow">SHOP OPERATIONS</p><h2>Built around the work.</h2><p>The private owner workspace is accessed separately. Only an account with an active owner membership can enter business operations.</p></div><button className="portal-status" onClick={onOwner}>Open owner workspace ↗</button></section>
-    <footer className="site-footer"><a className="brand" href="#home"><span className="brand-mark">MJ</span><span>MJ PRINTING & BRANDING</span></a><p>Printing, apparel and branding.</p><span>© {new Date().getFullYear()} MJ Printing & Branding</span></footer>
+    <section className="process-section" id="process"><div><p className="eyebrow">HOW IT WORKS</p><h2>From first idea<br/>to final finish.</h2><p className="process-intro">A straightforward process keeps your order clear from the first conversation to collection.</p></div><ol className="process-list"><li><span>01</span><div><strong>Tell us what you need</strong><p>Share the item, design, quantity, sizes, colours and your preferred deadline.</p></div></li><li><span>02</span><div><strong>We prepare your quote</strong><p>We review the artwork, materials, print positions and production method, then confirm the price.</p></div></li><li><span>03</span><div><strong>Approve and production begins</strong><p>Once the details and payment arrangements are confirmed, your job moves into production.</p></div></li><li><span>04</span><div><strong>Quality check and handover</strong><p>We confirm when your order is ready and arrange collection or delivery.</p></div></li></ol></section>
+    <section className="portal-section" id="shop-access"><div><p className="eyebrow">BEHIND EVERY GOOD ORDER</p><h2>Organised from quote<br/>to production.</h2><p>Our private workspace keeps quotations, materials, purchasing and production connected so we can manage each job carefully.</p></div><button className="portal-status" onClick={onOwner}>Owner workspace ↗</button></section>
+    <footer className="site-footer"><Brand footer /><p>Design. Print. Brand.</p><span>© {new Date().getFullYear()} MJ Printing & Branding</span></footer>
   </main>;
 }
 
