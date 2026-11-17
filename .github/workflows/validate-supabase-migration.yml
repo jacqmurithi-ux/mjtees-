@@ -33,6 +33,10 @@ jobs:
           npx --yes supabase@3.2.0 start --debug || { docker ps -a; for id in $(docker ps -aq); do echo "--- container $id ---"; docker logs --tail 150 "$id" || true; done; exit 1; }
       - name: Apply migrations to disposable local database
         run: npx --yes supabase@3.2.0 db reset --local --debug
+      - name: Run database workflow tests
+        run: |
+          npx --yes supabase@3.2.0 test db --help
+          npx --yes supabase@3.2.0 test db
       - name: Upload generated project config and migration validation logs
         if: always()
         uses: actions/upload-artifact@v4
