@@ -8,7 +8,7 @@ drop view if exists public.public_catalogue;
 create view public.public_catalogue
 with (security_barrier = true)
 as
-select c.id, c.business_id, c.name, c.slug, c.item_type, c.description,
+select c.name, c.slug, c.item_type, c.description,
        c.public_starting_price, c.display_order,
        s.name as category_name, s.slug as category_slug
 from public.catalogue_items c
@@ -828,27 +828,27 @@ end;
 $$;
 
 -- Public wrappers are SECURITY INVOKER; all writes happen inside private definer functions.
-create or replace function public.owner_adjust_stock(uuid,uuid,numeric,text,text,uuid)
+create or replace function public.owner_adjust_stock(p_stock_item_id uuid,p_location_id uuid,p_quantity numeric,p_adjustment_type text,p_reason text,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_adjust_stock($1,$2,$3,$4,$5,$6); $$;
-create or replace function public.owner_transfer_stock(uuid,uuid,uuid,numeric,text,uuid)
+create or replace function public.owner_transfer_stock(p_stock_item_id uuid,p_source_location_id uuid,p_destination_location_id uuid,p_quantity numeric,p_reason text,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_transfer_stock($1,$2,$3,$4,$5,$6); $$;
-create or replace function public.owner_start_production_job(uuid,text,jsonb,uuid)
+create or replace function public.owner_start_production_job(p_order_item_id uuid,p_method_code text,p_plan jsonb,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_start_production_job($1,$2,$3,$4); $$;
-create or replace function public.owner_issue_job_material(uuid,uuid,uuid,numeric,text,uuid)
+create or replace function public.owner_issue_job_material(p_job_id uuid,p_stock_item_id uuid,p_location_id uuid,p_quantity numeric,p_reason text,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_issue_job_material($1,$2,$3,$4,$5,$6); $$;
-create or replace function public.owner_record_job_waste(uuid,uuid,numeric,text,text,uuid)
+create or replace function public.owner_record_job_waste(p_job_id uuid,p_issue_id uuid,p_quantity numeric,p_waste_type text,p_reason text,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_record_job_waste($1,$2,$3,$4,$5,$6); $$;
-create or replace function public.owner_return_job_offcut(uuid,uuid,uuid,numeric,uuid)
+create or replace function public.owner_return_job_offcut(p_job_id uuid,p_issue_id uuid,p_location_id uuid,p_quantity numeric,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_return_job_offcut($1,$2,$3,$4,$5); $$;
-create or replace function public.owner_add_production_cost(uuid,text,text,numeric,text,bigint,uuid)
+create or replace function public.owner_add_production_cost(p_job_id uuid,p_cost_type text,p_description text,p_quantity numeric,p_unit text,p_unit_rate bigint,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_add_production_cost($1,$2,$3,$4,$5,$6,$7); $$;
-create or replace function public.owner_record_quality_check(uuid,text,text,uuid,text,uuid)
+create or replace function public.owner_record_quality_check(p_job_id uuid,p_result text,p_inspection_mode text,p_inspector_user_id uuid,p_notes text,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_record_quality_check($1,$2,$3,$4,$5,$6); $$;
-create or replace function public.owner_complete_production_job(uuid,uuid)
+create or replace function public.owner_complete_production_job(p_job_id uuid,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_complete_production_job($1,$2); $$;
-create or replace function public.owner_open_rework_event(uuid,uuid,text,uuid)
+create or replace function public.owner_open_rework_event(p_job_id uuid,p_quality_check_id uuid,p_reason text,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_open_rework_event($1,$2,$3,$4); $$;
-create or replace function public.owner_close_rework_event(uuid,text,uuid)
+create or replace function public.owner_close_rework_event(p_rework_event_id uuid,p_notes text,p_request_id uuid)
 returns jsonb language sql security invoker set search_path='' as $$ select private.owner_close_rework_event($1,$2,$3); $$;
 
 
@@ -876,29 +876,29 @@ grant execute on function private.is_active_owner(uuid),
  private.owner_handover_order(uuid,text,text,text,text,uuid)
 to authenticated;
 
-revoke all on function public.owner_adjust_stock(uuid,uuid,numeric,text,text,uuid),
- public.owner_transfer_stock(uuid,uuid,uuid,numeric,text,uuid),
- public.owner_start_production_job(uuid,text,jsonb,uuid),
- public.owner_issue_job_material(uuid,uuid,uuid,numeric,text,uuid),
- public.owner_record_job_waste(uuid,uuid,numeric,text,text,uuid),
- public.owner_return_job_offcut(uuid,uuid,uuid,numeric,uuid),
- public.owner_add_production_cost(uuid,text,text,numeric,text,bigint,uuid),
- public.owner_record_quality_check(uuid,text,text,uuid,text,uuid),
- public.owner_complete_production_job(uuid,uuid),
- public.owner_open_rework_event(uuid,uuid,text,uuid),
- public.owner_close_rework_event(uuid,text,uuid)
+revoke all on function public.owner_adjust_stock(p_stock_item_id uuid,p_location_id uuid,p_quantity numeric,p_adjustment_type text,p_reason text,p_request_id uuid),
+ public.owner_transfer_stock(p_stock_item_id uuid,p_source_location_id uuid,p_destination_location_id uuid,p_quantity numeric,p_reason text,p_request_id uuid),
+ public.owner_start_production_job(p_order_item_id uuid,p_method_code text,p_plan jsonb,p_request_id uuid),
+ public.owner_issue_job_material(p_job_id uuid,p_stock_item_id uuid,p_location_id uuid,p_quantity numeric,p_reason text,p_request_id uuid),
+ public.owner_record_job_waste(p_job_id uuid,p_issue_id uuid,p_quantity numeric,p_waste_type text,p_reason text,p_request_id uuid),
+ public.owner_return_job_offcut(p_job_id uuid,p_issue_id uuid,p_location_id uuid,p_quantity numeric,p_request_id uuid),
+ public.owner_add_production_cost(p_job_id uuid,p_cost_type text,p_description text,p_quantity numeric,p_unit text,p_unit_rate bigint,p_request_id uuid),
+ public.owner_record_quality_check(p_job_id uuid,p_result text,p_inspection_mode text,p_inspector_user_id uuid,p_notes text,p_request_id uuid),
+ public.owner_complete_production_job(p_job_id uuid,p_request_id uuid),
+ public.owner_open_rework_event(p_job_id uuid,p_quality_check_id uuid,p_reason text,p_request_id uuid),
+ public.owner_close_rework_event(p_rework_event_id uuid,p_notes text,p_request_id uuid)
 from public,anon;
-grant execute on function public.owner_adjust_stock(uuid,uuid,numeric,text,text,uuid),
- public.owner_transfer_stock(uuid,uuid,uuid,numeric,text,uuid),
- public.owner_start_production_job(uuid,text,jsonb,uuid),
- public.owner_issue_job_material(uuid,uuid,uuid,numeric,text,uuid),
- public.owner_record_job_waste(uuid,uuid,numeric,text,text,uuid),
- public.owner_return_job_offcut(uuid,uuid,uuid,numeric,uuid),
- public.owner_add_production_cost(uuid,text,text,numeric,text,bigint,uuid),
- public.owner_record_quality_check(uuid,text,text,uuid,text,uuid),
- public.owner_complete_production_job(uuid,uuid),
- public.owner_open_rework_event(uuid,uuid,text,uuid),
- public.owner_close_rework_event(uuid,text,uuid)
+grant execute on function public.owner_adjust_stock(p_stock_item_id uuid,p_location_id uuid,p_quantity numeric,p_adjustment_type text,p_reason text,p_request_id uuid),
+ public.owner_transfer_stock(p_stock_item_id uuid,p_source_location_id uuid,p_destination_location_id uuid,p_quantity numeric,p_reason text,p_request_id uuid),
+ public.owner_start_production_job(p_order_item_id uuid,p_method_code text,p_plan jsonb,p_request_id uuid),
+ public.owner_issue_job_material(p_job_id uuid,p_stock_item_id uuid,p_location_id uuid,p_quantity numeric,p_reason text,p_request_id uuid),
+ public.owner_record_job_waste(p_job_id uuid,p_issue_id uuid,p_quantity numeric,p_waste_type text,p_reason text,p_request_id uuid),
+ public.owner_return_job_offcut(p_job_id uuid,p_issue_id uuid,p_location_id uuid,p_quantity numeric,p_request_id uuid),
+ public.owner_add_production_cost(p_job_id uuid,p_cost_type text,p_description text,p_quantity numeric,p_unit text,p_unit_rate bigint,p_request_id uuid),
+ public.owner_record_quality_check(p_job_id uuid,p_result text,p_inspection_mode text,p_inspector_user_id uuid,p_notes text,p_request_id uuid),
+ public.owner_complete_production_job(p_job_id uuid,p_request_id uuid),
+ public.owner_open_rework_event(p_job_id uuid,p_quality_check_id uuid,p_reason text,p_request_id uuid),
+ public.owner_close_rework_event(p_rework_event_id uuid,p_notes text,p_request_id uuid)
 to authenticated;
 
 commit;
