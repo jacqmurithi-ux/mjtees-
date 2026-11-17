@@ -62,7 +62,7 @@ export default function PaymentWorkflow({businessId,customers,onChanged}:{busine
   if(!refundPayment||!Number.isSafeInteger(amountValue)||amountValue<=0||!refundReason.trim()){setError("Choose a posted payment and enter a positive amount and reason.");return;}
   if(refundBucket==="allocated"&&!refundAllocation){setError("Choose the order allocation being refunded.");return;}
   setBusy(true);setError("");setNotice("");
-  const {data,error:rpcError}=await supabase.rpc("owner_record_refund",{p_payment_id:refundPayment,p_allocation_id:refundBucket==="allocated"?refundAllocation:null,p_source_bucket:refundBucket,p_amount:amountValue,p_reason:refundReason.trim(),p_refund_method:refundMethod,p_external_reference:refundReference.trim()||null,p_request_id:requestId()});
+  const {error:rpcError}=await supabase.rpc("owner_record_refund",{p_payment_id:refundPayment,p_allocation_id:refundBucket==="allocated"?refundAllocation:null,p_source_bucket:refundBucket,p_amount:amountValue,p_reason:refundReason.trim(),p_refund_method:refundMethod,p_external_reference:refundReference.trim()||null,p_request_id:requestId()});
   if(rpcError)setError(rpcError.message);else{setNotice("Refund recorded as pending. It has not changed the order balance until posted.");setRefundAmount("");setRefundReason("");setRefundReference("");await load();onChanged();}
   setBusy(false);
  }
