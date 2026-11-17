@@ -126,6 +126,7 @@ Deno.serve(async (request: Request) => {
       return reply({ message: "We could not receive your enquiry. Please try again later." }, 503);
     }
     const result = await response.json();
+    if (result?.rate_limited === true) return reply({ message: "Please wait before sending another enquiry" }, 429);
     if (typeof result?.public_reference !== "string") return reply({ message: "We could not receive your enquiry. Please try again later." }, 503);
     return reply({ ok: true, public_reference: result.public_reference, message: "Enquiry received" }, 201);
   } catch {
