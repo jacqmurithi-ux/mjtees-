@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(13);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('44444444-4444-4444-8444-444444444444','authenticated','authenticated','mj-quote-owner@example.invalid','',now(),
@@ -39,12 +39,25 @@ select is(
   1,'Costing profile is versioned and created with material, blank item and labour components'
 );
 
-select ok(
-  (public.owner_upsert_pricing_rule('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',null,
+select set_config('mj.test.pricing_rule_id',
+  public.owner_upsert_pricing_rule('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',null,
     'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb',null,'Apparel 100 percent markup',
-    'percentage_on_cost',100,current_date,null,true,'90000000-0000-4000-8000-000000000002')->>'pricing_rule_id') is not null,
-  'Owner can configure a category pricing rule'
-);
+    'percentage_on_cost',100,current_date,null,true,'90000000-0000-4000-8000-000000000002')->>'pricing_rule_id',true);
+
+select ok(current_setting('mj.test.pricing_rule_id')<>'','Owner can configure a category pricing rule');
+
+select is(
+  (public.owner_upsert_pricing_rule('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+    current_setting('mj.test.pricing_rule_id')::uuid,'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb',null,
+    'Retired apparel pricing','percentage_on_cost',100,current_date,null,false,
+    '90000000-0000-4000-8000-000000000006')->>'created')::boolean,
+  false,'Owner can deactivate an existing pricing rule');
+
+select is(
+  (public.owner_upsert_pricing_rule('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',null,
+    'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb',null,'Replacement apparel pricing',
+    'percentage_on_cost',120,current_date,null,true,'90000000-0000-4000-8000-000000000007')->>'created')::boolean,
+  true,'Inactive historical pricing rules do not block a replacement rule');
 
 select is(
   (public.owner_create_quotation('aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
