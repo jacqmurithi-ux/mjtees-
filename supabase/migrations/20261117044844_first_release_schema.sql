@@ -877,7 +877,7 @@ language sql
 stable
 security definer
 set search_path = ''
-as $
+as $function$
   select exists (
     select 1 from public.business_memberships m
     where m.business_id = p_business_id
@@ -885,7 +885,7 @@ as $
       and m.role = 'owner'
       and m.status = 'active'
   );
-$$;
+$function$;
 revoke all on function private.is_active_owner(uuid) from public, anon;
 grant usage on schema private to authenticated;
 grant execute on function private.is_active_owner(uuid) to authenticated;
