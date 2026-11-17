@@ -28,6 +28,16 @@ alter table public.order_items
   add constraint order_items_total_consistency
   check (line_total = round(quantity*unit_price)::bigint-line_discount);
 
+create unique index if not exists product_costing_profile_version_uq
+on public.product_costing_profiles(
+  business_id,
+  coalesce(catalogue_item_id,'00000000-0000-0000-0000-000000000000'::uuid),
+  coalesce(category_id,'00000000-0000-0000-0000-000000000000'::uuid),
+  sale_mode,
+  coalesce(production_method_id,'00000000-0000-0000-0000-000000000000'::uuid),
+  version
+);
+
 create unique index if not exists order_item_discount_allocation_version_uq
 on public.order_item_discount_allocations(business_id,order_id,order_item_id,discount_source,allocation_version);
 
@@ -66,7 +76,7 @@ as $$
 declare
   v_actor uuid; v_cached jsonb; v_payload jsonb; v_profile uuid; v_version integer;
   v_component jsonb; v_stock uuid; v_type text; v_driver text; v_factor numeric;
-  v_waste numeric; v_fixed bigint; v_result jsonb; v_effective timestamptz:=clock_timestamp();
+  v_waste numeric; v_fixed bigint; v_result jsonb; v_effective timestamptz:=clock_timestamp(); v_lock_key text;
 begin
   v_actor:=private.assert_active_owner(p_business_id);
   if (p_catalogue_item_id is null and p_category_id is null)
@@ -89,6 +99,8 @@ begin
   v_cached:=private.begin_idempotent_request(p_business_id,'create_costing_profile',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
 
+  v_lock_key:=p_business_id::text||':'||coalesce(p_catalogue_item_id::text,'-')||':'||coalesce(p_category_id::text,'-')||':'||p_sale_mode||':'||coalesce(p_production_method_id::text,'-');
+  perform pg_advisory_xact_lock(hashtextextended(v_lock_key,0));
   select coalesce(max(version),0)+1 into v_version from public.product_costing_profiles
   where business_id=p_business_id and catalogue_item_id is not distinct from p_catalogue_item_id
     and category_id is not distinct from p_category_id and sale_mode=p_sale_mode
@@ -155,6 +167,14 @@ begin
   end if;
   if p_catalogue_item_id is not null and not exists(select 1 from public.catalogue_items where business_id=p_business_id and id=p_catalogue_item_id) then
     raise exception using errcode='22023',message='Pricing catalogue item belongs to another business';
+  end if;
+  v_lock_key:=p_business_id::text||':'||coalesce(p_category_id::text,'-')||':'||coalesce(p_catalogue_item_id::text,'-');
+  perform pg_advisory_xact_lock(hashtextextended(v_lock_key,0));
+  if exists(select 1 from public.pricing_rules r where r.business_id=p_business_id and r.id is distinct from p_rule_id
+    and r.category_id is not distinct from p_category_id and r.catalogue_item_id is not distinct from p_catalogue_item_id
+    and daterange(r.effective_from,coalesce(r.effective_to,'infinity'::date),'[]')
+      && daterange(p_effective_from,coalesce(p_effective_to,'infinity'::date),'[]')) then
+    raise exception using errcode='23P01',message='Pricing rule effective dates overlap an existing rule for this target';
   end if;
   v_payload:=jsonb_build_object('rule_id',p_rule_id,'category_id',p_category_id,'catalogue_item_id',p_catalogue_item_id,
     'name',p_name,'markup_method',p_markup_method,'markup_value',p_markup_value,'effective_from',p_effective_from,
