@@ -7,7 +7,7 @@
 - [x] Add initial repository structure and project documentation.
 - [x] Build responsive owner workspace shell, navigation and dashboard layout.
 - [x] Apply MJ orange, blue and green identity to the public site and owner workspace.
-- [x] Draft database domains, detailed schema and security model for review (docs/DATABASE-SECURITY-DESIGN.md).\n- [ ] Finalise and approve schema, RLS policies, RPC contracts and test plan.
+- [x] Draft database domains, detailed schema and security model for review (docs/DATABASE-SECURITY-DESIGN.md).\n- [x] Draft detailed table schema, RPC contracts, RLS policy matrix and security test plan for review (docs/SCHEMA-RPC-RLS-REVIEW.md).\n- [ ] Review and approve schema, RLS policies, RPC contracts and test plan.
 - [ ] Implement authentication and connect real owner data after schema approval.
 - [ ] Install dependencies locally and generate/commit the package lockfile.
 - [ ] Verify type-check and production build.
