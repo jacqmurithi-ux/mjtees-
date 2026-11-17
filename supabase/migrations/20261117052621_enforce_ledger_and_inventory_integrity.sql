@@ -682,8 +682,8 @@ begin
   if v_cached is not null then return v_cached; end if;
   select * into v_job from public.production_jobs where business_id=v_job.business_id and id=p_job_id for update;
   if v_job.status in ('completed','cancelled') then raise exception using errcode='22023',message='Job is closed to new quality checks'; end if;
-  insert into public.quality_checks(business_id,job_id,result,inspection_mode,inspector_user_id,notes)
-  values(v_job.business_id,p_job_id,p_result,p_inspection_mode,p_inspector_user_id,p_notes)
+  insert into public.quality_checks(business_id,job_id,result,inspection_mode,inspector_user_id,checked_at,notes)
+  values(v_job.business_id,p_job_id,p_result,p_inspection_mode,p_inspector_user_id,clock_timestamp(),p_notes)
   returning id into v_check;
   update public.production_jobs set status=case when p_result='pass' then 'quality_check' else 'rework' end
   where business_id=v_job.business_id and id=p_job_id;
