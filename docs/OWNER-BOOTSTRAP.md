@@ -4,7 +4,7 @@
 
 ## Before running
 
-1. The intended owner creates an Auth account using the agreed email sign-in method.
+1. An authorised operator creates or invites the intended owner through the Supabase Auth administrative interface. Public self-service signup is disabled in the local project configuration.
 2. An authorised operator verifies the owner's identity out of band.
 3. The operator confirms the exact Auth user UUID from the Supabase Auth user record.
 4. The operator obtains their own identified Auth user UUID for the audit record.
