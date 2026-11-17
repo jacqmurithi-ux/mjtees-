@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(12);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('44444444-4444-4444-8444-444444444444','authenticated','authenticated','mj-quote-owner@example.invalid','',now(),
@@ -94,6 +94,11 @@ select set_config('request.jwt.claim.sub','44444444-4444-4444-8444-444444444444'
 select is(
   (select estimated_total_cost from public.order_items where order_id=(select id from public.orders where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'))),
   81::bigint,'Order conversion preserves the server-calculated cost snapshot'
+);
+
+select is(
+  (select status from public.quotations where business_id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa'),
+  'accepted','Quote is marked accepted after order conversion'
 );
 
 select is(
