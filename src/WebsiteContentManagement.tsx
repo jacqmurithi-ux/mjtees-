@@ -35,7 +35,7 @@ export default function WebsiteContentManagement({businessId}:Props){
   setLoading(true);setError("");
   const {data,error:loadError}=await supabase.from("website_content").select("id,content,is_published").eq("business_id",businessId).maybeSingle();
   if(loadError){setError(loadError.message);setLoading(false);return;}
-  if(data){const merged={...defaults,...(data.content as Partial<WebsiteContent>),brand:{...defaults.brand,...(data.content as WebsiteContent).brand},contact:{...defaults.contact,...(data.content as WebsiteContent).contact},hero:{...defaults.hero,...(data.content as WebsiteContent).hero},social:{...defaults.social,...(data.content as WebsiteContent).social},theme:{...defaults.theme,...(data.content as WebsiteContent).theme}} as WebsiteContent;setContent(merged);setRowId(data.id);setPublished(data.is_published);setFaqs(merged.faq??[]);setClientsText((merged.clients??[]).join("\\n"));}
+  if(data){const merged={...defaults,...(data.content as Partial<WebsiteContent>),brand:{...defaults.brand,...(data.content as WebsiteContent).brand},contact:{...defaults.contact,...(data.content as WebsiteContent).contact},hero:{...defaults.hero,...(data.content as WebsiteContent).hero},social:{...defaults.social,...(data.content as WebsiteContent).social},theme:{...defaults.theme,...(data.content as WebsiteContent).theme}} as WebsiteContent;setContent(merged);setRowId(data.id);setPublished(data.is_published);setFaqs(merged.faq??[]);setClientsText((merged.clients??[]).join("\n"));}
   setLoading(false);
  },[businessId]);
  useEffect(()=>{void load()},[load]);
@@ -57,7 +57,7 @@ export default function WebsiteContentManagement({businessId}:Props){
  async function save(nextPublished=published){
   if(!supabase)return;
   const faq=faqs.filter(item=>item.question.trim()&&item.answer.trim());
-  const clients=clientsText.split("\\n").map(item=>item.trim()).filter(Boolean);
+  const clients=clientsText.split("\n").map(item=>item.trim()).filter(Boolean);
   setSaving(true);setError("");setMessage("");
   const payload={...content,faq,clients};
   const record={business_id:businessId,content:payload,is_published:nextPublished};
