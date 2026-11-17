@@ -49,6 +49,7 @@ All business tables carry `business_id` even though there is one business initia
 
 ### Customers and quotations
 
+- **enquiries** — public website requests for a quote/contact, with customer-provided name, phone/email, requested service, description, quantity, desired date, customer-supplied-item flag, optional artwork Drive link, consent/spam controls, status and timestamps. Public submission creates an enquiry only; it does not create an order or expose customer records. A trusted owner action converts/links it to a customer and quotation.
 - **customers** — display name, phone, optional email, optional business name, notes, created/updated timestamps and archive status. Phone is stored in normalized form for searching but should not be assumed globally unique (families and organisations can share a contact).
 - **customer_addresses** — optional delivery address, locality, recipient and contact phone. Keep address data only when needed for delivery.
 - **service_categories** — configurable service grouping and costing basis (e.g. screen printing, sublimation, vinyl branding, stickers, outsourced DTF).
@@ -64,10 +65,12 @@ All business tables carry `business_id` even though there is one business initia
 - **orders** — business, order number, source quotation (nullable for direct orders), customer, status, currency, subtotal/discount/tax/total snapshots, required-by date, promised turnaround, received date, notes, creator. Order total is frozen from the accepted quote unless an owner-authorized change is recorded as an order amendment.
 - **order_items** — line snapshots copied from accepted quote; quantity, description, agreed price, category, customer-supplied item flag, and production specification. Changes after acceptance create a dated amendment event.
 - **order_events** — append-only lifecycle events: created, confirmed, in production, quality checked, ready, collected/delivered, cancelled, payment exception approved. Record actor, time, status transition and reason.
-- **payments** — business, payment reference, payment date/time, method (cash or mpesa_manual initially), amount, currency, payer details where useful, M-Pesa transaction code where applicable, receiving user, verification/reconciliation status and notes. A manually entered M-Pesa record is not labelled provider-confirmed. A unique normalized M-Pesa transaction reference prevents duplicate entry where a reference exists.
+- **payments** — business, payment reference, received date/time, method (cash or mpesa_manual initially), amount, currency, payer details where useful, normalized M-Pesa transaction code where applicable, receiving user, status and notes. Cash is posted when physically received and recorded. A manually entered M-Pesa transaction remains pending verification and cannot be allocated or counted as paid until the owner verifies it. Manual verification is not labelled provider-confirmed. A unique normalized M-Pesa transaction reference prevents duplicate entry where a reference exists.
 - **payment_allocations** — payment, order, amount allocated, created timestamp and actor. Enforce positive allocation and prevent total allocations from exceeding the payment amount or order's payable amount; enforce this transactionally in trusted database code.
 - **receipts** — receipt number, payment, issued timestamp, amount/currency snapshot, customer snapshot and issuer. Receipt is generated only after a payment is successfully recorded. Reprints preserve the original receipt identity and are logged.
 - **payment_events** — append-only verification, reconciliation, reversal and refund events. Do not overwrite original payment facts to hide a correction.
+- **payment_refunds** — separate refund records linked to the original posted payment and (where relevant) order allocation; amount, reason, method/reference, status, actor and timestamp. Refunds cannot exceed the unreversed payment amount. A refund reduces net paid only when it is completed/posted.
+- **allocation_reversals** (or an equivalent signed allocation-ledger design) — records the reversal of a previously posted allocation without deleting or editing the original allocation. This is required when correcting a payment allocation or reversing a payment.
 - **order_balance view/function** — derives paid amount from valid allocations and outstanding balance from frozen order total less net allocated payments/refunds. It is read-only and must not become a writable balance column maintained by the browser.
 
 ### Operational tables retained in the model
@@ -88,12 +91,12 @@ All business tables carry `business_id` even though there is one business initia
 2. An order is created only from an accepted quote or an explicitly recorded owner-created direct order.
 3. Record each receipt of money as its own payment. Deposits and instalments are multiple payment rows, not overwritten paid-to-date figures.
 4. Allocate payments to orders through payment_allocations. The database transaction validates allocation amounts and prevents over-allocation.
-5. Outstanding balance is derived: `order_total - net_allocated_payments`. A refund/reversal is represented by a separate event/record and correctly reduces net paid.
+5. Outstanding balance is derived: `order_total - net posted allocations + completed refunds attributable to the order`. Pending/unverified M-Pesa entries and pending refunds do not change the balance. Reversed allocations are excluded through their explicit reversal records.
 6. A receipt is issued for the payment amount received, not for the whole order value unless the whole amount was received.
-7. Cash and manual M-Pesa are distinct methods. For M-Pesa, store transaction code and mark it pending verification until checked. Do not claim automatic confirmation before Daraja is implemented.
+7. Cash and manual M-Pesa are distinct methods. Cash is posted when received; manual M-Pesa remains pending verification until the owner checks the transaction code and confirms receipt. Pending M-Pesa is not allocated, receipted as received, or included in paid totals. Do not claim automatic confirmation before Daraja is implemented.
 8. Full payment is required before collection or dispatch. Any exception requires a recorded owner approval with reason; the handover action checks this rule on the server.
 9. Never accept amount, order total, allocation status, receipt number, owner role or payment verification status as trusted values from the browser.
-10. Use idempotency/request IDs for payment submission so a retry cannot create duplicate money records. M-Pesa transaction references should be unique per business after normalization where present.
+10. Use idempotency/request IDs for payment submission so a retry cannot create duplicate money records. M-Pesa transaction references should be unique per business after normalization where present. Record who verified each M-Pesa entry, when, and the outcome.
 
 ## 5. Security model
 
@@ -101,7 +104,7 @@ All business tables carry `business_id` even though there is one business initia
 
 - Supabase Auth authenticates users. The first owner is created/invited through a trusted setup flow.
 - Authorization comes from `business_memberships` and server-checked permissions, never from editable `user_metadata`, local storage, route visibility or a role value supplied by the client.
-- Public visitors can read only active public catalogue content and submit a constrained enquiry. They cannot query customers, quotes, orders, payments, receipts, inventory or expenses.
+- Public visitors can read only active public catalogue content and submit a constrained enquiry through a narrowly scoped Edge Function/RPC with server-side validation, rate limiting and spam controls. Public callers cannot list or read enquiries, customers, quotes, orders, payments, receipts, inventory or expenses. The public response returns only a generic acknowledgement/reference.
 - Owner can access all business operations in release one. Expense create/update and all financial exception approvals are owner-only.
 - Later staff roles will be least-privilege: for example production staff can see assigned production details without seeing customer financial records. Do not grant this in release one by assumption.
 
@@ -123,7 +126,9 @@ Implement as atomic server-side operations, not sequences of client writes:
 
 - `create_quote` / `revise_quote`: validate customer and lines; calculate totals; snapshot pricing.
 - `accept_quote_and_create_order`: validate acceptance token or owner action; prevent duplicate conversion; create order and copied item snapshots in one transaction.
-- `record_payment_and_allocate`: validate owner permission, amount, method, idempotency key and M-Pesa reference; create payment, allocation, receipt and audit event atomically.
+- `record_payment_and_allocate`: validate owner permission, amount, method, idempotency key and M-Pesa reference; post cash immediately when recorded as received, but leave manual M-Pesa pending until separately verified; create allocation, receipt and audit event atomically only for posted/verified funds.
+- `verify_manual_mpesa_payment`: owner-only; validate pending status and transaction reference; record verifier/time/outcome; only on successful verification post funds and enable allocation/receipt.
+- `record_refund` / `reverse_allocation`: owner-only; validate remaining refundable/unallocated amount, record reason and immutable reversal/refund rows, and update derived order balance.
 - `reverse_payment` / `record_refund`: append correction and recompute derived balance; never delete the original payment.
 - `approve_payment_exception`: record owner reason and approval; handover function must check this record.
 - `handover_order`: reject if net paid is below amount due and no valid owner exception exists; append order event atomically.
@@ -134,8 +139,8 @@ Function names are design labels, not deployed RPCs. Exact parameter and return 
 
 - Foreign keys must include business boundaries where practical, so a quote/customer/order/payment cannot be joined across businesses.
 - Monetary columns use integer minor units or integer KES consistently; choose one representation before SQL. For KES-only release one, integer KES is simplest; if fractional currency is needed later, migrate deliberately.
-- Positive quantities and payment amounts; nonnegative discounts/tax; valid status CHECK constraints; unique business-scoped quote/order/receipt numbers.
-- Enforce unique payment idempotency keys and unique normalized M-Pesa references (nullable for cash).
+- Positive quantities and payment amounts; nonnegative discounts/tax; valid status CHECK constraints; unique business-scoped quote/order/receipt numbers. Quantities should use a fixed-precision numeric type (not integer) to support metres, square metres and other measured materials.
+- Enforce unique payment idempotency keys and unique normalized M-Pesa references (nullable for cash); define normalization consistently (trim, uppercase and remove permitted separators) and enforce uniqueness with a business-scoped unique index.
 - Use database transactions and row locks when allocating money or converting a quote to an order to prevent concurrent over-allocation or duplicate conversion.
 - Soft-archive customers/catalogue items; do not cascade-delete financial history.
 - Store timestamps as `timestamptz`; render in Africa/Nairobi.
@@ -143,7 +148,7 @@ Function names are design labels, not deployed RPCs. Exact parameter and return 
 
 ## 7. Build sequence after design review
 
-1. Finalise table columns, enums/status transitions, constraints, RPC contracts and RLS policy matrix.
+1. Finalise table columns, enums/status transitions, constraints, RPC contracts and RLS policy matrix. Specify the exact payment states (pending verification, posted, rejected, reversed), refund states and the point at which balances/receipts change.
 2. Implement Auth, owner membership provisioning and session controls.
 3. Implement customer CRUD and public enquiry intake.
 4. Implement category/service catalogue and quote builder with price snapshots and quote revision/acceptance.
@@ -152,6 +157,20 @@ Function names are design labels, not deployed RPCs. Exact parameter and return 
 7. Connect the owner dashboard to real records; remove preview-only values/states.
 8. Add automated tests for permissions, duplicate requests, concurrent allocations, quote conversion, receipt correctness and payment-gated handover.
 
-## 8. Approval boundary
+## 8. Review findings and decisions still required
+
+The following points are mandatory before writing the first migration:
+
+1. **Owner bootstrap:** document the one-time trusted process to create the first owner membership. Never let an arbitrary public signup claim the owner role.
+2. **Payment state machine:** implement the distinction between pending M-Pesa evidence and verified funds. Only posted funds may be allocated or counted as paid.
+3. **Refund and correction ledger:** use explicit refund and allocation-reversal records; a generic event log alone is not enough to calculate net paid safely.
+4. **Public enquiry boundary:** the website form must create a limited enquiry, not a customer/order record directly. Rate-limit and validate it server-side.
+5. **Cross-business integrity:** use composite unique keys and foreign keys (for example `(business_id, customer_id)`) wherever related records carry a business boundary.
+6. **Number generation:** quote, order and receipt numbers must be generated transactionally per business; never rely on a browser-generated count.
+7. **Pricing and tax:** retain category-level pricing snapshots. Tax stays disabled unless the owner confirms the applicable tax configuration; do not infer tax treatment in code.
+8. **Measured quantities:** allow decimal quantities for materials sold/consumed by length or area while keeping money in integer KES.
+9. **Public acceptance tokens:** hash tokens at rest, expire them, make them single-use, and expose only the minimum quote summary required for acceptance.
+
+## 9. Approval boundary
 
 This draft does not authorize a migration, production SQL execution, deployment, PR merge or real customer/payment data entry. Those remain separate steps. Before the first migration, the final SQL, RLS policies, RPC definitions and test plan must be reviewed together and explicitly approved.
