@@ -238,6 +238,9 @@ begin
   v_number:=private.next_document_number(p_business_id,'payment');
   v_status:=case when p_method='cash' then 'posted' else 'pending_verification' end;
   v_reference:=case when p_method='mpesa_manual' then upper(regexp_replace(btrim(p_mpesa_reference),'[^A-Za-z0-9]','','g')) else null end;
+  if p_method='mpesa_manual' and length(coalesce(v_reference,'')) not between 6 and 32 then
+    raise exception using errcode='22023',message='M-Pesa reference must contain 6 to 32 letters or digits';
+  end if;
   insert into public.payments(business_id,payment_number,method,status,amount,received_at,payer_name,payer_phone,
     mpesa_reference,mpesa_reference_normalized,intended_order_id,idempotency_key,received_by,notes)
   values(p_business_id,v_number,p_method,v_status,p_amount,p_received_at,nullif(btrim(p_payer_name),''),
