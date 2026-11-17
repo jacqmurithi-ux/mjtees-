@@ -5,6 +5,7 @@ import {
   calculateLineProfitability,
   calculateMinimumNetSellingAmount,
   evaluateMinimumMargin,
+  calculateQuotationProfitability,
 } from "../src/lib/pricing.js";
 
 test("percentage-on-cost pricing matches the database rule", () => {
@@ -67,4 +68,32 @@ test("invalid target margin is rejected", () => {
   assert.throws(() => calculateRuleUnitPrice({
     unitCost: 1000, method: "margin_on_price", value: 100,
   }), /below 100/);
+});
+
+
+test("quotation profitability checks the final total after line and allocated order discounts", () => {
+  const lines = [
+    { quantity: 1, unitPrice: 1200, lineDiscount: 20, orderDiscountAllocated: 60, estimatedTotalCost: 700 },
+    { quantity: 1, unitPrice: 300, lineDiscount: 0, orderDiscountAllocated: 0, estimatedTotalCost: 300 },
+  ];
+  const below = calculateQuotationProfitability({ lines });
+  assert.equal(below.netSellingAmount, 1420);
+  assert.equal(below.estimatedTotalCost, 1000);
+  assert.equal(below.minimumNetSellingAmount, 1429);
+  assert.equal(below.shortfall, 9);
+  assert.equal(below.status, "below_floor");
+  const atFloor = calculateQuotationProfitability({
+    lines: [
+      { quantity: 1, unitPrice: 1200, lineDiscount: 20, orderDiscountAllocated: 51, estimatedTotalCost: 700 },
+      { quantity: 1, unitPrice: 300, lineDiscount: 0, orderDiscountAllocated: 0, estimatedTotalCost: 300 },
+    ],
+  });
+  assert.equal(atFloor.netSellingAmount, 1429);
+  assert.equal(atFloor.status, "passes");
+});
+
+test("quotation profitability rejects allocated discounts beyond a line's post-line-discount amount", () => {
+  assert.throws(() => calculateQuotationProfitability({
+    lines: [{ quantity: 1, unitPrice: 100, lineDiscount: 20, orderDiscountAllocated: 81, estimatedTotalCost: 50 }],
+  }), /Allocated order discount/);
 });
