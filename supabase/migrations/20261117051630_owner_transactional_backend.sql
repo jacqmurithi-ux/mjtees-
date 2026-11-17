@@ -301,7 +301,7 @@ begin
     update public.payments set status='posted',verified_by=v_actor,verified_at=now()
     where business_id=v_payment.business_id and id=p_payment_id;
     insert into public.payment_allocations(business_id,payment_id,order_id,amount,created_by)
-    values(v_payment.business_id,p_payment.id,v_order.id,v_payment.amount,v_actor);
+    values(v_payment.business_id,v_payment.id,v_order.id,v_payment.amount,v_actor);
     v_receipt:=private.next_document_number(v_payment.business_id,'receipt');
     insert into public.receipts(business_id,receipt_number,payment_id,customer_name_snapshot,amount,issued_by)
     values(v_payment.business_id,v_receipt,p_payment_id,
