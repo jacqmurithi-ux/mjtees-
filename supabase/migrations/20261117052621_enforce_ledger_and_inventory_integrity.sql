@@ -6,7 +6,7 @@ begin;
 revoke all on public.catalogue_items, public.service_categories from anon;
 drop view if exists public.public_catalogue;
 create view public.public_catalogue
-with (security_barrier = true)
+with (security_barrier = true, security_invoker = false)
 as
 select c.name, c.slug, c.item_type, c.description,
        c.public_starting_price, c.display_order,
