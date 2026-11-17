@@ -5,7 +5,7 @@
 **Hosting target:** GitHub Pages (manual deployment only)  
 **Backend:** Supabase project `rbbluwsniiwzixlvdnwz`
 
-This repository contains the public website and the private, owner-first shop operations application. The first release covers customer enquiries, customers, quotations and revisions, order conversion, payments and receipts, refunds and reversals, stock, purchasing, production, expenses, delivery and reporting.
+This repository contains the public website and the private, owner-first shop operations application. The first release covers a published public product/service catalogue managed by the owner, customer enquiries, customers, quotations and revisions, order conversion, payments and receipts, refunds and reversals, stock, purchasing, production, expenses, delivery and reporting.
 
 ## Current release status
 
