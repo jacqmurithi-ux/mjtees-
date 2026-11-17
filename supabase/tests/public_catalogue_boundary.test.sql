@@ -12,6 +12,10 @@ values
  ('dddddddd-4444-4444-8444-dddddddddddd','aaaaaaaa-4444-4444-8444-aaaaaaaaaaaa','bbbbbbbb-4444-4444-8444-bbbbbbbbbbbb',
   'Internal Draft','internal-draft','product','Unpublished item',700,false);
 
+insert into public.businesses(id,name,slug) values('eeeeeeee-4444-4444-8444-eeeeeeeeeeee','Other Tenant','other-tenant');
+insert into public.catalogue_items(id,business_id,name,slug,item_type,is_published)
+values('ffffffff-4444-4444-8444-ffffffffffff','eeeeeeee-4444-4444-8444-eeeeeeeeeeee','Other Tenant Item','other-tenant-item','product',true);
+
 set local role anon;
 
 select is((select count(*) from public.get_public_catalogue('catalogue-boundary')),1::bigint,
