@@ -1,17 +1,19 @@
 # Development roadmap
 
-## Milestone 01 — foundation and architecture
+## Milestone 01 — foundation and owner workspace
 
 - [x] Inspect GitHub repository and Supabase project read-only.
 - [x] Establish React + TypeScript + Vite direction for GitHub Pages.
 - [x] Add initial repository structure and project documentation.
+- [x] Build responsive owner workspace shell, navigation and dashboard layout.
+- [x] Apply MJ orange, blue and green identity to the public site and owner workspace.
 - [ ] Review and approve database domains, detailed schema and security model.
+- [ ] Implement authentication and connect real owner data after schema approval.
 - [ ] Install dependencies locally and generate/commit the package lockfile.
-- [ ] Verify local type-check and production build.
+- [ ] Verify type-check and production build.
 
 ## Milestone 02 — business setup and access
 
-- Business settings and licence information.
 - Owner identity and individual staff accounts.
 - Role/permission matrix and server-enforced access.
 - Shared-device session and inactivity controls.
@@ -55,7 +57,7 @@
 ## Milestone 08 — delivery and reporting
 
 - Collection/delivery and payment lock.
-- Owner dashboard and operational reports.
+- Owner dashboard live metrics and reports.
 - Reconciliation and exception reporting.
 
 ## Milestone 09 — testing and pilot
