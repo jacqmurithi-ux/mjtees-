@@ -876,8 +876,8 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = pg_catalog, public, auth
-as $$
+set search_path = ''
+as $
   select exists (
     select 1 from public.business_memberships m
     where m.business_id = p_business_id
