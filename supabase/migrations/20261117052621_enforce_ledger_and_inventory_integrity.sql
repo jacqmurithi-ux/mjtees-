@@ -766,7 +766,7 @@ create or replace function private.owner_open_rework_event(
   p_job_id uuid,p_quality_check_id uuid,p_reason text,p_request_id uuid
 ) returns jsonb
 language plpgsql security definer set search_path=''
-as $
+as $$
 declare v_job public.production_jobs%rowtype; v_actor uuid; v_check public.quality_checks%rowtype;
   v_cached jsonb; v_payload jsonb; v_event uuid; v_result jsonb;
 begin
@@ -796,13 +796,13 @@ begin
     jsonb_build_object('job_id',p_job_id,'quality_check_id',p_quality_check_id,'reason',p_reason));
   return v_result;
 end;
-$;
+$$;
 
 create or replace function private.owner_close_rework_event(
   p_rework_event_id uuid,p_notes text,p_request_id uuid
 ) returns jsonb
 language plpgsql security definer set search_path=''
-as $
+as $$
 declare v_rework public.rework_events%rowtype; v_actor uuid; v_job public.production_jobs%rowtype;
   v_cached jsonb; v_payload jsonb; v_result jsonb;
 begin
@@ -825,7 +825,7 @@ begin
     jsonb_build_object('job_id',v_rework.job_id,'notes',p_notes));
   return v_result;
 end;
-$;
+$$;
 
 -- Public wrappers are SECURITY INVOKER; all writes happen inside private definer functions.
 create or replace function public.owner_adjust_stock(uuid,uuid,numeric,text,text,uuid)
