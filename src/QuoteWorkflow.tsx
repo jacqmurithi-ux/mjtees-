@@ -34,6 +34,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const [costCategory,setCostCategory]=useState("");
   const [costAmount,setCostAmount]=useState("");
   const [costSaleMode,setCostSaleMode]=useState("value_added");
+  const [acceptanceLink,setAcceptanceLink]=useState("");
 
   const load=useCallback(async()=>{
     if(!supabase)return;
@@ -82,14 +83,14 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     setBusy(true);setError("");setNotice("");
     const {data,error:rpcError}=await supabase.rpc("owner_send_quotation",{p_quotation_id:q.id,p_expires_at:q.expires_at,p_request_id:rid()});
     if(rpcError)setError(rpcError.message);
-    else setNotice("Quotation "+data.quote_number+" marked sent. Acceptance token created; customer-facing acceptance page still needs to be connected.");
+    else {const link=window.location.origin+window.location.pathname+"?accept_quote="+encodeURIComponent(data.acceptance_token);setAcceptanceLink(link);setNotice("Quotation "+data.quote_number+" marked sent. Share the secure acceptance link with the customer.");}
     await load();setBusy(false);
   }
   const customerName=(id:string)=>customers.find(c=>c.id===id)?.display_name??"Customer";
   return <section className="connected-panel quote-workflow">
     <div className="panel-toolbar"><div><h2>Quotations and orders</h2><p>Live records and costing tools. Prices are in KES; tax is excluded.</p></div><button className="secondary-action" onClick={()=>void load()}>Refresh records</button></div>
     <div className="workflow-tabs"><button className={tab==="quotes"?"active":""} onClick={()=>setTab("quotes")}>Quotations</button><button className={tab==="costing"?"active":""} onClick={()=>setTab("costing")}>Costing profiles</button><button className={tab==="orders"?"active":""} onClick={()=>setTab("orders")}>Orders</button></div>
-    {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}
+    {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}{acceptanceLink&&<div className="acceptance-link"><input readOnly value={acceptanceLink}/><button className="secondary-action" onClick={()=>void navigator.clipboard.writeText(acceptanceLink)}>Copy customer link</button></div>}
     {tab==="quotes"&&<><form className="record-form" onSubmit={createQuote}>
       <h3 className="wide-field">Create quotation</h3>
       <label>Customer *<select required value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">Choose customer</option>{customers.map(c=><option key={c.id} value={c.id}>{c.display_name}</option>)}</select></label>
