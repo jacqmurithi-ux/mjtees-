@@ -229,7 +229,7 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff acc
 
 **Product and material model**
 
-- A catalogue item can be sold as a blank product, as a value-added product, or both. Keep the sellable catalogue identity separate from the physical stock item/material used to make it.
+- An order line explicitly records sale_mode as blank or value_added. A catalogue item can be offered in either mode or both. Keep the sellable catalogue identity separate from the physical stock item/material used to make it.
 - stock_items represents purchasable/consumable stock: blank garments, caps, mugs, hot-peel vinyl, sticker vinyl, sublimation paper/ink, screen-printing ink, emulsion, screens, transfer media, packaging and other supplies. Fields include business, SKU, name, stock type, base unit, purchase unit, conversion factor, default supplier, reorder point, active flag and timestamps.
 - stock_variants supports size/colour/other variant attributes for blank products. Track each variant as its own stock-keeping unit; never combine different sizes/colours into one balance.
 - inventory_locations are logical storage areas inside the one shop, not separate branches.
@@ -240,12 +240,12 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff acc
 
 For hot-peel vinyl, sticker vinyl and any material purchased in metres or rolls, store roll/material usable width in millimetres, purchase length in metres and purchase cost, usable width after edge/trim allowance, job cut width and height in millimetres, quantity and orientation/rotation permission, estimated layout/yield, actual linear metres consumed, offcuts returned to usable stock, and waste with a reason.
 
-The estimator shows an efficient layout estimate and actual production consumption. Material cost = consumed linear metres × weighted-average cost per metre. For area-priced materials, derive consumed area from usable roll width × consumed length. Charge waste to the job, not invisible overhead; reusable offcuts returned to stock are credited back. Owner can override estimated consumption with actual issued quantity and a reason.
+The estimator shows an efficient layout estimate and actual production consumption. Material cost = consumed linear metres × weighted-average cost per metre. For area-priced materials, derive consumed area from usable roll width × consumed length. Store layout inputs and outputs (usable width, cut dimensions, quantity, spacing/gap, rotation permission, estimated pieces per row, rows, linear metres and algorithm version) so the estimate is reproducible. Do not treat a simple rectangular yield estimate as guaranteed nesting; actual issued metres remain the cost basis. Material issued to a job is deducted once. Waste is a classification of that already-issued quantity, not a second stock deduction. Reusable offcuts returned to stock create a separate return movement and reduce net material cost charged to the job. Owner can override estimated consumption with actual issued quantity and a reason.
 
 **Production and value-added costing**
 
 - product_costing_profiles defines a recipe per catalogue item/category and sale mode (blank or value_added). A blank sale costs the blank item only. A value-added sale costs the blank item (unless customer-supplied), plus material and process components.
-- costing_components supports blank_item, meter_material, area_material, consumable, machine_time, labour_time, outsourced_service, setup, packaging and other. Each component has a unit, quantity driver/formula, expected waste allowance and optional stock item.
+- costing_components supports blank_item, meter_material, area_material, consumable, machine_time, labour_time, outsourced_service, setup, packaging and other. Each component has a unit, a constrained driver type (per_piece, per_order, per_metre, per_square_metre, per_minute, per_hour, fixed_setup or manual), numeric factor, expected waste allowance and optional stock item. Do not store executable SQL/JavaScript formulas in the database; implement versioned calculation rules in application/backend code and snapshot their inputs and outputs.
 - production_methods includes vinyl_cut, sticker_cut, sublimation, screen_printing, no_cut_printing, dtf_outsourced and configurable methods. Each process has its own setup, material, ink/consumable, machine-time and labour cost drivers.
 - production_jobs links order line to method, quantity, planned/due/completed timestamps and status. production_material_issues snapshots actual stock quantity and unit cost. production_cost_entries captures labour, machine time, setup and outsourced work. production_waste records scrap, test prints, misprints, spoiled material and unusable offcuts.
 - quality_checks record pass/fail, inspector, timestamp and notes. Prefer second-person inspection; allow self-inspection when one person is available and record it. Failed checks can create rework_events, whose additional materials/time are charged to the same order line/job.
@@ -253,7 +253,7 @@ The estimator shows an efficient layout estimate and actual production consumpti
 
 **Actual cost and profit snapshots**
 
-For every order line retain estimated_unit_cost, actual_unit_cost, estimated_total_cost, actual_total_cost, sale_mode (blank or value_added), selected production method and cost breakdown snapshot, selling price, discount and gross profit.
+For every order line retain sale_mode (blank or value_added), selected production method, estimated_unit_cost, actual_unit_cost, estimated_total_cost, actual_total_cost, cost breakdown snapshot, selling price, discount and gross profit. The sale_mode must be fixed on the accepted order line; a blank sale cannot silently become value-added after acceptance without an order amendment.
 
 Gross profit is selling revenue less direct actual cost (blank item/materials/consumables/labour/machine/setup/outsourcing/packaging attributable to the job). Show estimated gross profit before production and variance after completion. Delivery/carrier charge is a separate customer-paid pass-through and is not production revenue or production cost. Customer-supplied garments have zero blank-stock cost but still incur decoration process costs. Later recipe changes never rewrite completed order costs.
 
