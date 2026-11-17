@@ -98,7 +98,15 @@ export default function WebsiteContentManagement({businessId}:Props){
    {(["facebook","instagram","tiktok","x"] as const).map(k=><label key={k}>{k==="x"?"X":k[0].toUpperCase()+k.slice(1)} URL<input type="url" placeholder="https://" value={content.social[k]} onChange={e=>setGroup("social",k,e.target.value)}/></label>)}
   </div></section>
   <section className="connected-panel"><h2>Brand colours</h2><p className="website-admin-help">Use HEX colour values. These are the approved MJ Tees website colours.</p><div className="website-colour-grid">{Object.entries(content.theme).map(([key,value])=><label key={key}><span>{key}</span><input type="color" value={/^#[0-9a-f]{6}$/i.test(value)?value:"#1F8ED6"} onChange={e=>setGroup("theme",key,e.target.value)}/><code>{value}</code></label>)}</div></section>
-  <section className="connected-panel"><h2>FAQs and client names</h2><p className="website-admin-help">Edit these as JSON arrays. Keep each FAQ item in the format shown in the example.</p><div className="website-admin-grid"><label className="wide-field">FAQs<textarea className="json-editor" value={faqText} onChange={e=>setFaqText(e.target.value)}/><small>{"Example: [{\"question\":\"What is your turnaround time?\",\"answer\":\"It depends on the product and quantity.\"}]"}</small></label><label className="wide-field">Client / partner names<textarea className="json-editor" value={clientsText} onChange={e=>setClientsText(e.target.value)}/><small>{"Example: [\"School A\",\"Club B\"]"}</small></label></div></section>
+  <section className="connected-panel">
+   <div className="panel-toolbar"><div><h2>Frequently asked questions</h2><p className="website-admin-help">Add or remove questions without editing code.</p></div><button type="button" className="secondary-action" onClick={()=>setFaqs(items=>[...items,{question:"",answer:""}])}>+ Add FAQ</button></div>
+   <div className="website-faq-editor">{faqs.map((item,index)=><div className="website-faq-row" key={index}>
+    <label>Question {index+1}<input value={item.question} onChange={e=>setFaqs(items=>items.map((row,i)=>i===index?{...row,question:e.target.value}:row))}/></label>
+    <label>Answer<textarea value={item.answer} onChange={e=>setFaqs(items=>items.map((row,i)=>i===index?{...row,answer:e.target.value}:row))}/></label>
+    <button type="button" className="text-action" onClick={()=>setFaqs(items=>items.filter((_,i)=>i!==index))}>Remove question</button>
+   </div>)}{!faqs.length&&<p className="website-admin-help">No FAQs added yet.</p>}</div>
+  </section>
+  <section className="connected-panel"><h2>Client and partner names</h2><p className="website-admin-help">Enter one name per line. Only add organisations you have permission to feature.</p><div className="website-admin-grid"><label className="wide-field">Names<textarea value={clientsText} onChange={e=>setClientsText(e.target.value)} placeholder={"School name\\nSports club\\nBusiness name"}/></label></div></section>
   <section className="connected-panel"><h2>Product and service listings</h2><p className="website-admin-help">Use the existing Catalogue module to add, edit, publish, hide or reorder the products and services shown on the website.</p><p><b>Owner Workspace → Catalogue</b></p></section>
  </div>;
 }
