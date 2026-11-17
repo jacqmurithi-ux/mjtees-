@@ -2,76 +2,52 @@
 
 ## Milestone 01 — foundation and owner workspace
 
-- [x] Inspect GitHub repository and Supabase project read-only.
-- [x] Establish React + TypeScript + Vite direction for GitHub Pages.
-- [x] Add initial repository structure and project documentation.
-- [x] Build responsive owner workspace shell, navigation and dashboard layout.
-- [x] Apply MJ orange, blue and green identity to the public site and owner workspace.
-- [x] Draft database domains, detailed schema and security model for review (docs/DATABASE-SECURITY-DESIGN.md).
-- [x] Draft detailed table schema, RPC contracts, RLS policy matrix and security test plan for review (docs/SCHEMA-RPC-RLS-REVIEW.md).
-- [x] Extend schema review to cover inventory, supplier receiving, blank/value-added sale modes, vinyl metre costing, production methods, waste/offcut returns, QC, expenses, delivery and job profitability.
-- [ ] Complete final consistency review of all table definitions, costing rules, RPCs, RLS and tests.
-- [ ] Prepare timestamped Supabase migration using the Supabase CLI and commit SQL for owner approval only.
-- [ ] Implement and test migration/RPCs in a safe development environment after approval.
-- [ ] Implement authentication and connect real owner data after schema approval.
-- [ ] Install dependencies locally and generate/commit the package lockfile.
-- [ ] Verify type-check and production build.
+- [x] Inspect repository and linked Supabase project read-only.
+- [x] Establish React + TypeScript + Vite and GitHub Pages direction.
+- [x] Create responsive public-site and owner-workspace preview shell.
+- [x] Apply MJ orange, blue and green identity.
+- [x] Draft database, RPC, RLS and security design.
+- [x] Implement seven timestamped database migrations on `first-release-build`.
+- [x] Implement owner transactional RPCs and database integrity guards.
+- [x] Implement constrained public enquiry Edge Function and database rate limiting.
+- [x] Add pgTAP coverage for schema security, financial flows, costing, purchasing, production and reversals.
+- [x] Validate migrations against a disposable local Supabase stack (83 assertions passed at last completed validation).
+- [ ] Complete final implementation review and resolve findings.
+- [ ] Complete concurrency, recovery and full workflow regression tests.
+- [ ] Present complete implementation for review before any hosted database execution.
 
-## Milestone 02 — business setup and access
+## Milestone 02 — owner access and business setup
 
-- Owner identity and individual staff accounts.
-- Role/permission matrix and server-enforced access.
-- Shared-device session and inactivity controls.
-- Audit events for sensitive actions.
+- [x] Design trusted first-owner bootstrap script; not run.
+- [ ] Make bootstrap safe under concurrent execution and validate its safeguards.
+- [ ] Configure and verify owner Auth sign-in and session handling.
+- [ ] Provision first owner only after separate approval for hosted execution.
 
-## Milestone 03 — public website and customers
+## Milestone 03 — public website and enquiries
 
-- Public pages, product/service catalogue and portfolio.
-- Contact details and enquiry channels.
-- Customer profiles and interaction history.
-- Quotation enquiry intake.
+- [x] Create initial public services and process presentation.
+- [x] Implement Edge Function source for public enquiry intake.
+- [ ] Build public enquiry form and artwork Drive-reference fields.
+- [ ] Configure and deploy Edge Function secrets, allowed origins and Turnstile.
+- [ ] Connect public catalogue projection and enquiry receipt flow.
 
-## Milestone 04 — catalogue, inventory and suppliers
+## Milestone 04 — owner operations application
 
-- Products sold blank or value-added, variants, materials, units and categories.
-- Opening stock and stock counts.
-- Stock movements, reservations, issues, returns and waste.
-- Suppliers, purchase orders and receiving with weighted-average material cost.
+- [ ] Implement authenticated owner application and real Supabase data access.
+- [ ] Customers, enquiries, quotations, revisions and quote acceptance.
+- [ ] Orders, turnaround tracking, payment recording, receipts and handover lock.
+- [ ] Stock variants, logical shop locations, reservations, purchasing and receiving.
+- [ ] Production jobs, materials, waste/offcuts, QC and rework.
+- [ ] Owner-only expenses, delivery pass-through charges and audit trail.
+- [ ] Daily overview, reports and financial reconciliation.
 
-## Milestone 05 — POS, quotations, orders and payments
+## Milestone 05 — verification and pilot
 
-- Walk-in sales and custom quotations.
-- Quote revisions, approvals and conversion to orders.
-- Deposits, instalments, balances and receipts.
-- Payment allocation and customer account history.
+- [ ] Complete browser-based end-to-end workflows against an isolated development project.
+- [ ] Verify RLS and RPC permissions with owner, other authenticated user and anon sessions.
+- [ ] Verify backup/restore and operational recovery.
+- [ ] Owner acceptance review and controlled pilot.
 
-## Milestone 06 — purchasing and financial controls
+## Deferred
 
-- Supplier costs and payables.
-- Expenses and approvals.
-- Cash/Paybill reconciliation and account transfers.
-- Job costing and daily close.
-
-## Milestone 07 — artwork, production and outsourcing
-
-- Google Drive artwork references, version approval and history.
-- Production jobs for vinyl/stickers, sublimation, screen printing, no-cut printing and outsourced work.
-- Material issue, actual consumption, waste/offcut returns, labour/machine/setup costs.
-- Quality checks, self-inspection recording and rework.
-
-## Milestone 08 — delivery and reporting
-
-- Collection/delivery and payment lock.
-- Owner dashboard live metrics and reports, including estimated vs actual cost and gross profit by product, order, category and production method.
-- Reconciliation and exception reporting.
-
-## Milestone 09 — testing and pilot
-
-- RLS and permission tests.
-- Concurrent stock/payment workflow tests.
-- Backup and restore checks.
-- Staff training, pilot data and controlled launch.
-
-## Later integrations
-
-Daraja automatic payment confirmation, WhatsApp Business API, SMS and social publishing are deferred until core workflows are stable and provider requirements are confirmed.
+Daraja automatic M-Pesa confirmation, staff accounts/permissions, WhatsApp/SMS integrations and tax functionality remain outside the first-release scope. M-Pesa is manually recorded and owner-verified. Tax is excluded.
