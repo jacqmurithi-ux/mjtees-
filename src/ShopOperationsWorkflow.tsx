@@ -60,7 +60,7 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
  const createSupplier=async(e:FormEvent)=>{
   e.preventDefault();await run("owner_upsert_supplier",{p_business_id:businessId,p_supplier_id:null,p_display_name:supplierForm.name.trim(),p_contact_name:null,p_phone:supplierForm.phone.trim()||null,p_email:supplierForm.email.trim()||null,p_notes:null,p_request_id:rid()},"Supplier saved.");setSupplierForm({name:"",phone:"",email:""});
  };
- const createStock=async(e:React.FormEvent)=>{
+ const createStock=async(e:FormEvent)=>{
   e.preventDefault();const f=stockForm;
   await run("owner_upsert_stock_item",{p_business_id:businessId,p_stock_item_id:null,p_parent_stock_item_id:null,p_sku:f.sku.trim(),p_name:f.name.trim(),p_stock_kind:f.kind,p_base_unit:f.base.trim(),p_purchase_unit:f.purchase.trim(),p_purchase_to_base_factor:Number(f.factor),p_roll_width_mm:null,p_usable_width_mm:null,p_variant_attributes:{},p_reorder_level:Number(f.reorder),p_default_supplier_id:f.supplier||null,p_request_id:rid()},"Stock item created.");setStockForm({sku:"",name:"",kind:"blank_product",base:"each",purchase:"each",factor:"1",reorder:"0",supplier:""});
  };
