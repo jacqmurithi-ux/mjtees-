@@ -17,7 +17,7 @@ const today=()=>new Date().toISOString().slice(0,10);
 export default function ShopOperationsWorkflow({businessId,section,onChanged}:{businessId:string;section:"Inventory"|"Purchasing"|"Expenses"|"Reports";onChanged:()=>void}){
  const [stock,setStock]=useState<Stock[]>([]);const [locations,setLocations]=useState<Location[]>([]);const [suppliers,setSuppliers]=useState<Supplier[]>([]);
  const [orders,setOrders]=useState<PO[]>([]);const [lines,setLines]=useState<POLine[]>([]);const [categories,setCategories]=useState<Category[]>([]);
- const [expenses,setExpenses]=useState<Expense[]>([]);const [movements,setMovements]=useState<Movement[]>([]);
+ const [expenses,setExpenses]=useState<Expense[]>([]);const [movements,setMovements]=useState<Movement[]>([]);const [salesOrders,setSalesOrders]=useState<{id:string;status:string;total_amount:number}[]>([]);
  const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
  const [supplierForm,setSupplierForm]=useState({name:"",phone:"",email:""});
  const [locationForm,setLocationForm]=useState({name:"",code:"",description:""});
@@ -31,7 +31,7 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
  const load=useCallback(async()=>{
   const client=supabase;if(!client)return;
   setError("");
-  const [s,l,su,po,li,ca,ex,mv]=await Promise.all([
+  const [s,l,su,po,li,ca,ex,mv,so]=await Promise.all([
    client.from("stock_items").select("id,sku,name,stock_kind,base_unit,purchase_unit,purchase_to_base_factor,reorder_level,current_average_unit_cost,default_supplier_id,is_active").eq("business_id",businessId).is("archived_at",null).order("name"),
    client.from("inventory_locations").select("id,name,code").eq("business_id",businessId).eq("is_active",true).order("name"),
    client.from("suppliers").select("id,display_name,phone,email").eq("business_id",businessId).is("archived_at",null).order("display_name"),
@@ -39,12 +39,13 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
    client.from("purchase_order_items").select("id,purchase_order_id,stock_item_id,ordered_quantity,purchase_unit,purchase_to_base_factor,unit_price,line_total").eq("business_id",businessId).limit(500),
    client.from("expense_categories").select("id,name,is_active").eq("business_id",businessId).order("name"),
    client.from("expenses").select("id,category_id,amount,expense_date,payee,payment_method,receipt_reference,notes").eq("business_id",businessId).order("expense_date",{ascending:false}).limit(300),
-   client.from("stock_movements").select("stock_item_id,location_id,quantity").eq("business_id",businessId).limit(2000)
+   client.from("stock_movements").select("stock_item_id,location_id,quantity").eq("business_id",businessId).limit(2000),
+   client.from("orders").select("id,status,total_amount").eq("business_id",businessId).limit(1000)
   ]);
-  const fail=s.error||l.error||su.error||po.error||li.error||ca.error||ex.error||mv.error;if(fail)throw fail;
+  const fail=s.error||l.error||su.error||po.error||li.error||ca.error||ex.error||mv.error||so.error;if(fail)throw fail;
   setStock((s.data??[]) as Stock[]);setLocations((l.data??[]) as Location[]);setSuppliers((su.data??[]) as Supplier[]);
   setOrders((po.data??[]) as PO[]);setLines((li.data??[]) as POLine[]);setCategories((ca.data??[]) as Category[]);
-  setExpenses((ex.data??[]) as Expense[]);setMovements((mv.data??[]) as Movement[]);
+  setExpenses((ex.data??[]) as Expense[]);setMovements((mv.data??[]) as Movement[]);setSalesOrders((so.data??[]) as {id:string;status:string;total_amount:number}[]);
  },[businessId]);
  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
  const run=async(name:string,args:Record<string,unknown>,message:string)=>{
@@ -80,7 +81,7 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
  const totalExpenses=expenses.reduce((s,x)=>s+x.amount,0);
  const purchaseOutstanding=orders.filter(x=>["ordered","part_received"].includes(x.status)).length;
  const categoryName=(id:string)=>categories.find(c=>c.id===id)?.name??"Category";
- const sales=orders.filter(x=>x.status!=="cancelled").length;
+ const sales=salesOrders.filter(x=>x.status!=="cancelled").length;
  return <section className="connected-panel shop-operations">
   <div className="panel-toolbar"><div><h2>{section}</h2><p>{section==="Inventory"?"Track shop materials, apparel, vinyl, stickers and consumables.":section==="Purchasing"?"Manage suppliers, purchase orders and goods received.":section==="Expenses"?"Record owner-approved shop operating expenses.":"Live operational summary from recorded shop transactions."}</p></div><button className="secondary-action" onClick={()=>void load()} disabled={busy}>Refresh</button></div>
   {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}
@@ -104,7 +105,7 @@ export default function ShopOperationsWorkflow({businessId,section,onChanged}:{b
    <div className="record-list">{expenses.map(x=><article className="record-row" key={x.id}><div><b>{x.payee} · {money(x.amount)}</b><small>{x.expense_date} · {categoryName(x.category_id)} · {x.payment_method.toUpperCase()}</small></div><small>{x.receipt_reference||"No receipt reference"}</small></article>)}</div>
   </>}
   {section==="Reports"&&<>
-   <div className="connected-metrics"><article><span>Non-cancelled orders</span><strong>{sales}</strong></article><article><span>Order value recorded</span><strong>{money(orders.reduce((s,x)=>s+(x.status==="cancelled"?0:Number(x.total_amount)),0))}</strong></article><article><span>Expenses recorded</span><strong>{money(totalExpenses)}</strong></article><article><span>Purchase orders outstanding</span><strong>{purchaseOutstanding}</strong></article></div>
+   <div className="connected-metrics"><article><span>Non-cancelled orders</span><strong>{sales}</strong></article><article><span>Order value recorded</span><strong>{money(salesOrders.reduce((s,x)=>s+(x.status==="cancelled"?0:Number(x.total_amount)),0))}</strong></article><article><span>Expenses recorded</span><strong>{money(totalExpenses)}</strong></article><article><span>Purchase orders outstanding</span><strong>{purchaseOutstanding}</strong></article></div>
    <h3>Expense breakdown</h3><div className="record-list">{categories.map(c=>{const total=expenses.filter(x=>x.category_id===c.id).reduce((s,x)=>s+x.amount,0);return <article className="record-row" key={c.id}><b>{c.name}</b><strong>{money(total)}</strong></article>;})}</div>
    <h3>Stock alerts</h3><div className="record-list">{stock.filter(x=>onHand(x.id)<=x.reorder_level).map(x=><article className="record-row" key={x.id}><div><b>{x.name}</b><small>On hand {onHand(x.id)} {x.base_unit} · reorder level {x.reorder_level}</small></div><span className="status-chip new">Reorder</span></article>)}{!stock.some(x=>onHand(x.id)<=x.reorder_level)&&<p className="empty-records">No stock items are currently at or below their reorder levels.</p>}</div>
    <p className="small-note">Figures are based on records currently loaded from the shop database (up to 300 expenses, 150 purchase orders and 2,000 stock movements). Order value is not the same as cash collected; use Payments for receipts and outstanding balances. Tax is excluded from this first release.</p>
