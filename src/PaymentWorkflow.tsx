@@ -16,15 +16,15 @@ export default function PaymentWorkflow({businessId,customers,onChanged}:{busine
  const [payerName,setPayerName]=useState("");const [payerPhone,setPayerPhone]=useState("");const [reference,setReference]=useState("");const [notes,setNotes]=useState("");
  const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");const [receipt,setReceipt]=useState<Receipt|null>(null);
  const load=useCallback(async()=>{
-  if(!supabase)return;
+  const client=supabase;if(!client)return;
   const [o,p,r]=await Promise.all([
-   supabase.from("orders").select("id,order_number,customer_id,status,total_amount,received_at").eq("business_id",businessId).order("received_at",{ascending:false}).limit(150),
-   supabase.from("payments").select("id,payment_number,method,status,amount,received_at,payer_name,payer_phone,mpesa_reference,intended_order_id,notes").eq("business_id",businessId).order("received_at",{ascending:false}).limit(200),
-   supabase.from("receipts").select("id,receipt_number,payment_id,customer_name_snapshot,amount,issued_at").eq("business_id",businessId).order("issued_at",{ascending:false}).limit(200)
+   client.from("orders").select("id,order_number,customer_id,status,total_amount,received_at").eq("business_id",businessId).order("received_at",{ascending:false}).limit(150),
+   client.from("payments").select("id,payment_number,method,status,amount,received_at,payer_name,payer_phone,mpesa_reference,intended_order_id,notes").eq("business_id",businessId).order("received_at",{ascending:false}).limit(200),
+   client.from("receipts").select("id,receipt_number,payment_id,customer_name_snapshot,amount,issued_at").eq("business_id",businessId).order("issued_at",{ascending:false}).limit(200)
   ]);
   if(o.error||p.error||r.error)throw o.error||p.error||r.error;
   const orderRows=(o.data??[]) as Order[];setOrders(orderRows);setPayments((p.data??[]) as Payment[]);setReceipts((r.data??[]) as Receipt[]);
-  const result=await Promise.all(orderRows.map(async order=>{const {data,error}=await supabase.rpc("owner_get_order_balance",{p_order_id:order.id});if(error)throw error;return [order.id,data as Balance] as const;}));
+  const result=await Promise.all(orderRows.map(async order=>{const {data,error}=await client.rpc("owner_get_order_balance",{p_order_id:order.id});if(error)throw error;return [order.id,data as Balance] as const;}));
   setBalances(Object.fromEntries(result));if(!selectedOrder&&orderRows.length)setSelectedOrder(orderRows[0].id);
  },[businessId,selectedOrder]);
  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
