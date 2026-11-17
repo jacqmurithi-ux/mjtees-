@@ -7,8 +7,6 @@ const tasks = [
   { id: "MJ-002", title: "Customer and quotation workflow", detail: "Next build area", status: "Planned", tone: "orange" },
   { id: "MJ-003", title: "Production and quality tracking", detail: "Artwork approvals and rework", status: "Planned", tone: "green" },
 ];
-const money = (value: string) => value;
-
 function OwnerDashboard({ onExit }: { onExit: () => void }) {
   const [active, setActive] = useState<ModuleKey>("Overview");
   const [period, setPeriod] = useState("Today");
