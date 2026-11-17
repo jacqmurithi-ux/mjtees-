@@ -90,3 +90,74 @@
 /* Inventory, purchasing, expense and reporting workspace */
 .shop-operations{display:grid;gap:18px}.shop-operations>.record-form{margin:0}.shop-operations h3{margin:8px 0 0;font-size:16px}.shop-operations .connected-metrics{margin:0}.shop-operations .record-row{gap:14px}.shop-operations .stock-quantity{display:grid;justify-items:end;gap:4px;text-align:right}.shop-operations .stock-quantity small{color:#69777f;font-size:12px}.shop-operations .inline-controls{padding:12px;background:#f7f9fa;border-radius:9px}.shop-operations .inline-controls>span{flex:1;min-width:180px;font-size:13px;font-weight:600}.shop-operations .inline-controls input,.shop-operations .inline-controls select{width:130px;min-width:90px}.shop-operations .enquiry-card{display:grid;gap:10px}.shop-operations .record-form h3{grid-column:1/-1}
 @media(max-width:650px){.shop-operations .stock-quantity{justify-items:start;text-align:left}.shop-operations .inline-controls{display:grid;grid-template-columns:1fr}.shop-operations .inline-controls input,.shop-operations .inline-controls select{width:100%}.shop-operations .record-row{align-items:flex-start}}
+
+
+/* Public website and published catalogue */
+:root{font-family:"DM Sans",Inter,Arial,sans-serif;color:#17242c;background:#fff;font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0}
+button,input,select,textarea{font:inherit}
+a{color:inherit}
+.public-site{overflow:hidden;background:#fff}
+.site-header{max-width:1320px;margin:auto;padding:22px 34px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none;font-size:12px;font-weight:800;letter-spacing:.08em}
+.brand-mark{display:inline-grid;place-items:center;width:42px;height:42px;background:#f28c28;color:#17242c;font-weight:900;border-radius:9px;font-size:17px}
+.site-header nav{display:flex;align-items:center;gap:26px}
+.site-header nav a{text-decoration:none;font-size:13px;font-weight:650;color:#52616a}
+.site-header nav a:hover{color:#1675b9}
+.nav-portal{border:0;background:#17242c;color:#fff;border-radius:7px;padding:12px 16px;font-size:12px;font-weight:700;cursor:pointer}
+.hero{max-width:1320px;margin:auto;padding:72px 34px 90px;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:54px}
+.eyebrow{font-size:10px;font-weight:800;letter-spacing:.2em;color:#1675b9;margin:0 0 18px}
+.hero h1,.section-heading h2,.process-section h2,.portal-section h2{font-family:"Space Grotesk",Inter,sans-serif;font-size:clamp(48px,6vw,76px);line-height:.98;letter-spacing:-.065em;margin:0;color:#17242c}
+.hero h1 span{color:#f28c28}
+.hero-intro{max-width:490px;color:#68767e;font-size:17px;line-height:1.7;margin:26px 0 30px}
+.primary-link{display:inline-flex;gap:22px;align-items:center;text-decoration:none;background:#1675b9;color:#fff;padding:15px 19px;border-radius:7px;font-size:13px;font-weight:750}
+.hero-art{min-height:420px;position:relative;display:grid;place-items:center;background:#f3f7fa;border-radius:22px;overflow:hidden}
+.art-circle{position:absolute;border-radius:50%;border:32px solid #f28c28}
+.art-circle-one{width:340px;height:340px;left:-70px;top:-80px}
+.art-circle-two{width:280px;height:280px;right:-55px;bottom:-95px;border-color:#279447}
+.art-word{position:relative;z-index:1;font-family:"Space Grotesk",sans-serif;font-size:clamp(55px,7vw,90px);font-weight:900;line-height:.8;letter-spacing:-.08em;color:#1675b9;transform:rotate(-7deg)}
+.art-caption{position:absolute;bottom:28px;right:30px;font-size:10px;letter-spacing:.2em;font-weight:800;color:#586772}
+.section{max-width:1320px;margin:auto;padding:82px 34px}
+.services-section{display:grid;grid-template-columns:.8fr 1.2fr;gap:55px}
+.section-heading h2,.process-section h2,.portal-section h2{font-size:clamp(38px,4.6vw,58px)}
+.section-heading>p:last-child,.portal-section p:not(.eyebrow){max-width:470px;color:#71808a;line-height:1.7;font-size:15px}
+.service-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.service-card{border:1px solid #e5ebef;border-radius:12px;padding:24px;min-height:185px;background:#fff}
+.service-number{font-size:11px;font-weight:800;color:#f28c28}
+.service-card h3{font-family:"Space Grotesk",sans-serif;font-size:19px;margin:20px 0 9px}
+.service-card p{font-size:13px;color:#71808a;line-height:1.6;margin:0}
+.enquiry-section{max-width:none;background:#f4f7f9;padding-left:max(34px,calc((100vw - 1252px)/2));padding-right:max(34px,calc((100vw - 1252px)/2));display:grid;grid-template-columns:.75fr 1.25fr;gap:55px}
+.enquiry-section .record-form{background:#fff;border:1px solid #e6ecef}
+.enquiry-section .record-form select{width:100%;border:1px solid #d9e0e3;border-radius:9px;padding:12px;background:#fff}
+.public-enquiry-form .checkbox-field{display:flex;align-items:center;gap:10px}
+.public-enquiry-form .checkbox-field input{width:auto}
+.process-section{max-width:1320px;margin:auto;padding:86px 34px;display:grid;grid-template-columns:.8fr 1.2fr;gap:70px}
+.process-list{list-style:none;margin:0;padding:0}
+.process-list li{display:flex;gap:22px;padding:19px 0;border-bottom:1px solid #e8edf0}
+.process-list li>span{font-size:12px;font-weight:800;color:#f28c28}
+.process-list strong{font-size:15px}
+.process-list p{font-size:13px;color:#75828a;line-height:1.6;margin:7px 0 0}
+.portal-section{background:#17242c;color:#fff;padding:54px max(34px,calc((100vw - 1252px)/2));display:flex;align-items:center;justify-content:space-between;gap:30px}
+.portal-section h2{color:#fff}
+.portal-section p:not(.eyebrow){color:#c2cdd2}
+.portal-status{flex:0 0 auto;border:1px solid #71818a;background:transparent;color:#fff;border-radius:7px;padding:14px 18px;font-weight:700;cursor:pointer}
+.site-footer{max-width:1320px;margin:auto;padding:27px 34px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.site-footer p,.site-footer>span{font-size:11px;color:#849099}
+.catalogue-section{display:grid;grid-template-columns:.7fr 1.3fr;gap:48px}
+.catalogue-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.catalogue-card{border:1px solid #e3e9ed;border-radius:12px;padding:22px;display:flex;flex-direction:column;align-items:flex-start;min-height:190px}
+.catalogue-kind{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#1675b9;font-weight:800}
+.catalogue-card h3{font-family:"Space Grotesk",sans-serif;font-size:20px;margin:15px 0 8px}
+.catalogue-card p{font-size:13px;line-height:1.6;color:#72808a;margin:0 0 12px}
+.catalogue-card strong{font-size:14px;margin-top:auto}
+.catalogue-card a{margin-top:17px;color:#1675b9;font-size:12px;font-weight:800;text-decoration:none}
+.catalogue-item-actions{display:flex;align-items:center;gap:9px}
+.catalogue-management .record-row{align-items:center}
+.catalogue-management .record-row>div:first-child{min-width:0}
+.catalogue-management .record-row small{overflow-wrap:anywhere}
+.catalogue-management .checkbox-field{display:flex;align-items:center;gap:10px}
+.catalogue-management .checkbox-field input{width:auto}
+@media(max-width:850px){.site-header{padding:18px 20px}.site-header nav{gap:14px}.hero,.services-section,.catalogue-section,.process-section,.enquiry-section{grid-template-columns:1fr;gap:35px}.hero{padding:48px 20px 65px}.hero-art{min-height:330px}.section,.process-section{padding:58px 20px}.enquiry-section{padding:58px 20px}.portal-section{padding:42px 20px}.site-footer{padding:22px 20px}.section-heading h2,.process-section h2,.portal-section h2{font-size:44px}}
+@media(max-width:560px){.site-header{align-items:flex-start}.site-header nav{display:grid;grid-template-columns:repeat(2,auto);gap:9px 15px;justify-items:start}.site-header nav a,.nav-portal{font-size:11px}.brand{font-size:10px}.brand-mark{width:36px;height:36px}.hero h1{font-size:54px}.hero-intro{font-size:15px}.hero-art{min-height:280px}.service-grid,.catalogue-grid{grid-template-columns:1fr}.service-card{min-height:0}.portal-section{align-items:flex-start;flex-direction:column}.site-footer{align-items:flex-start;flex-direction:column;gap:7px}.enquiry-section .record-form{grid-template-columns:1fr}.enquiry-section .wide-field,.enquiry-section .form-actions{grid-column:auto}.catalogue-management .record-row{display:grid}.catalogue-item-actions{justify-content:space-between}}
