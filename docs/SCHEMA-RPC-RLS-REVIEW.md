@@ -7,11 +7,11 @@ This document translates the database design into a concrete first-release schem
 
 ## 1. First-release scope and explicit exclusions
 
-Included: one business, one physical shop, owner account, public catalogue/enquiries, customers, quotations, order conversion, cash and manually entered M-Pesa, deposits/instalments, allocations, receipts, balances and audit trail.
+Included: one business, one physical shop, owner account, public catalogue/enquiries, customers, quotations, order conversion, cash and manually entered M-Pesa, deposits/instalments, allocations, receipts, balances, inventory, purchasing/receiving, material costing, production tracking, quality checks, expenses, delivery/handover and audit trail. This is the complete owner-first operational release; staff-specific permissions can follow later.
 
 **Tax is later.** No tax calculation, tax rate, tax line, tax registration setting or tax amount is included in the first-release quote/order/payment totals. The schema uses `subtotal_amount`, `discount_amount` and `total_amount` only. A future tax feature will be designed as a separately reviewed change; do not add a hidden default tax or silently change existing quote totals.
 
-Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp, staff access roles, supplier purchasing, full inventory ledger, production/QC, delivery workflow and expense management. Their future data domains remain in the broader design but are not part of this first migration.
+Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp and expanded staff access roles. Manual supplier purchasing, stock movements, production/QC, delivery and owner-only expenses are included in release one.
 
 ## 2. Common conventions
 
@@ -224,7 +224,45 @@ Deferred: automatic M-Pesa Daraja callbacks, SMS/WhatsApp, staff access roles, s
 - Net paid = sum of allocations for posted payments minus allocation reversals and posted refunds attributable to the order. Pending M-Pesa and pending refunds are excluded.
 - Balance is derived, not stored or browser-maintained.
 
-### 3.5 Numbering and concurrency
+
+### 3.5 Inventory, material costing and production (first release)
+
+**Product and material model**
+
+- A catalogue item can be sold as a blank product, as a value-added product, or both. Keep the sellable catalogue identity separate from the physical stock item/material used to make it.
+- stock_items represents purchasable/consumable stock: blank garments, caps, mugs, hot-peel vinyl, sticker vinyl, sublimation paper/ink, screen-printing ink, emulsion, screens, transfer media, packaging and other supplies. Fields include business, SKU, name, stock type, base unit, purchase unit, conversion factor, default supplier, reorder point, active flag and timestamps.
+- stock_variants supports size/colour/other variant attributes for blank products. Track each variant as its own stock-keeping unit; never combine different sizes/colours into one balance.
+- inventory_locations are logical storage areas inside the one shop, not separate branches.
+- stock_movements is append-only: purchase receipt, opening balance, reservation, issue to job, return, waste, adjustment and transfer. Each movement stores quantity, unit, unit cost snapshot, source reference, reason and actor. On-hand and available stock are derived from movements and reservations.
+- Supplier purchases and goods receipts create stock only when goods are actually received. Use weighted-average cost for replenishable stock in release one and preserve receipt-time unit cost for audit and job-cost snapshots.
+
+**Meter-based vinyl and sheet material costing**
+
+For hot-peel vinyl, sticker vinyl and any material purchased in metres or rolls, store roll/material usable width in millimetres, purchase length in metres and purchase cost, usable width after edge/trim allowance, job cut width and height in millimetres, quantity and orientation/rotation permission, estimated layout/yield, actual linear metres consumed, offcuts returned to usable stock, and waste with a reason.
+
+The estimator shows an efficient layout estimate and actual production consumption. Material cost = consumed linear metres × weighted-average cost per metre. For area-priced materials, derive consumed area from usable roll width × consumed length. Charge waste to the job, not invisible overhead; reusable offcuts returned to stock are credited back. Owner can override estimated consumption with actual issued quantity and a reason.
+
+**Production and value-added costing**
+
+- product_costing_profiles defines a recipe per catalogue item/category and sale mode (blank or value_added). A blank sale costs the blank item only. A value-added sale costs the blank item (unless customer-supplied), plus material and process components.
+- costing_components supports blank_item, meter_material, area_material, consumable, machine_time, labour_time, outsourced_service, setup, packaging and other. Each component has a unit, quantity driver/formula, expected waste allowance and optional stock item.
+- production_methods includes vinyl_cut, sticker_cut, sublimation, screen_printing, no_cut_printing, dtf_outsourced and configurable methods. Each process has its own setup, material, ink/consumable, machine-time and labour cost drivers.
+- production_jobs links order line to method, quantity, planned/due/completed timestamps and status. production_material_issues snapshots actual stock quantity and unit cost. production_cost_entries captures labour, machine time, setup and outsourced work. production_waste records scrap, test prints, misprints, spoiled material and unusable offcuts.
+- quality_checks record pass/fail, inspector, timestamp and notes. Prefer second-person inspection; allow self-inspection when one person is available and record it. Failed checks can create rework_events, whose additional materials/time are charged to the same order line/job.
+- artwork_references stores Google Drive URL/file ID, filename, version, source and approval status only; artwork binaries remain in Drive.
+
+**Actual cost and profit snapshots**
+
+For every order line retain estimated_unit_cost, actual_unit_cost, estimated_total_cost, actual_total_cost, sale_mode (blank or value_added), selected production method and cost breakdown snapshot, selling price, discount and gross profit.
+
+Gross profit is selling revenue less direct actual cost (blank item/materials/consumables/labour/machine/setup/outsourcing/packaging attributable to the job). Show estimated gross profit before production and variance after completion. Delivery/carrier charge is a separate customer-paid pass-through and is not production revenue or production cost. Customer-supplied garments have zero blank-stock cost but still incur decoration process costs. Later recipe changes never rewrite completed order costs.
+
+**Expenses and delivery**
+
+- expenses are owner-created in release one, with category, amount, date, payee, payment method, receipt reference, notes and audit. Shop overhead remains separate from direct job cost unless explicitly allocated to a job.
+- deliveries stores collection/delivery method, carrier, tracking reference, customer-paid carrier charge, dispatch/handover timestamp and recipient. Carrier charges do not inflate product sales or production margin.
+
+### 3.6 Numbering and concurrency
 
 Use a `document_counters` table keyed by `(business_id, document_type)` for quote/order/payment/receipt sequences. Increment and return the next number inside the same transaction using row-level locking or atomic `UPDATE ... RETURNING`. Do not use `MAX(number)+1`, timestamps alone, or browser counters.
 
@@ -316,7 +354,22 @@ Use JSONB payloads for line arrays only where the function validates every key/t
 **`owner_reprint_receipt(p_receipt_id uuid, p_request_id uuid) RETURNS jsonb`**
 - Owner only. Does not create a new receipt number; records reprint audit event and returns the existing receipt snapshot.
 
-### 4.5 Handover safeguard (future order-completion stage)
+
+### 4.5 Inventory, costing and production operations
+
+- owner_receive_purchase(business_id, supplier_id, lines, request_id): records received quantities and receipt-time unit costs; creates stock movements and updates weighted-average cost atomically.
+- owner_adjust_stock(stock_item_id, quantity, adjustment_type, reason, request_id): owner-only, reason required; creates an immutable adjustment movement.
+- owner_reserve_order_stock(order_id, request_id): reserves available blank goods/materials for confirmed work without treating reservations as consumption.
+- owner_start_production_job(order_item_id, method, plan, request_id): creates a job and cost estimate from the selected recipe, order specification, quantity and customer-supplied-item flag.
+- owner_issue_job_material(job_id, stock_item_id, quantity, request_id): consumes stock using current weighted-average cost; validates available stock or records an owner-approved shortage/purchase workflow.
+- owner_record_job_waste(job_id, stock_item_id, quantity, reason, request_id): records waste against the job and its actual cost.
+- owner_complete_production_job(job_id, actual_costs, request_id): finalizes actual material/process cost and line-level gross-profit snapshot after QC/rework.
+- owner_record_quality_check(job_id, result, inspection_mode, notes, request_id): inspection_mode is second_person or self; actor is derived from auth.
+- owner_record_expense(business_id, category_id, amount, expense_date, payee, notes, request_id): owner-only expense record.
+
+All stock and costing operations are transactional and audited. The client may request a calculation preview, but the server recomputes all accepted cost/stock movements before committing.
+
+### 4.6 Handover safeguard
 
 **`owner_handover_order(p_order_id uuid, p_method text, p_recipient_name text, p_tracking_reference text, p_payment_exception_reason text, p_request_id uuid) RETURNS jsonb`**
 - Owner only. Rejects handover while balance_due > 0 unless a separate owner approval record is created with a reason and valid scope. Handover event and approval occur atomically.
@@ -341,6 +394,9 @@ Enable RLS on every table in exposed schemas. The private schema containing help
 | payments/allocations/events/refunds | none | own business SELECT | owner RPC only |
 | receipts | none | own business SELECT | generated only by payment RPC |
 | audit_events | none | own business SELECT | trusted operations only |
+| stock, suppliers, purchase/receipt, movements, reservations | none | own business SELECT | owner RPC only |
+| production profiles, components, jobs, issues, waste, cost entries, QC, rework | none | own business SELECT | owner RPC only |
+| expenses, expense categories, deliveries, artwork references | none | own business SELECT | owner RPC only |
 
 ### Policy predicates (normative, not migration SQL)
 
@@ -426,3 +482,20 @@ Before migration authoring, review and approve:
 - [ ] Tax explicitly excluded from release one and deferred to a later change.
 
 Only after the user explicitly approves the final migration plan may SQL be applied to Supabase. A PR merge, production deployment and real customer/payment entry remain separate approvals.
+
+## 10. Costing acceptance tests (additional mandatory cases)
+
+1. A blank T-shirt sale consumes the correct size/colour variant and has no decoration costs.
+2. A value-added T-shirt sale includes the blank garment plus the selected decoration process.
+3. Customer-supplied apparel does not consume or cost a blank garment, but decoration materials and production costs are captured.
+4. Vinyl estimator calculates expected linear metres from roll width, cut dimensions, quantity, orientation and usable width; actual issue can override estimate with a reason.
+5. Sticker and hot-peel vinyl waste is charged to the job; reusable offcuts returned to stock are credited and not double-charged.
+6. Sublimation cost includes blank substrate (unless customer-supplied), paper, ink/consumables, setup, machine/labour time and recorded spoilage.
+7. Screen-printing cost supports setup/screen preparation, emulsion, ink, screens/consumables, print run and spoilage; per-unit cost changes with run quantity.
+8. No-cut printing cost uses its own process profile and material/ink/outsourcing drivers, not the vinyl-cut workflow.
+9. Production rework adds actual material/time cost to the original job and reduces gross profit.
+10. Recipe or supplier-cost changes do not rewrite completed order cost snapshots.
+11. Stock reservations do not reduce physical on-hand; issues do. Returns, waste and adjustments reconcile correctly.
+12. Weighted-average material cost updates on receipts and is applied consistently to issues.
+13. Direct job costs are distinct from overhead expenses; carrier delivery charge is separate from sales and production margin.
+14. Reports show estimated vs actual cost and gross profit by order line, order, category, sale mode and production method.
