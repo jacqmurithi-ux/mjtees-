@@ -119,6 +119,14 @@ begin
   if tg_op='DELETE' then
     raise exception using errcode='55000',message='Delivery attempt history cannot be deleted';
   end if;
+  if tg_op='INSERT' then
+    if new.failed_at is not null then new.attempt_status:='failed';
+    elsif new.handed_over_at is not null then new.attempt_status:='handed_over';
+    elsif new.dispatched_at is not null then new.attempt_status:='dispatched';
+    else new.attempt_status:='prepared'; end if;
+    new.updated_at:=now();
+    return new;
+  end if;
   if old.attempt_status in ('failed','handed_over','cancelled') then
     raise exception using errcode='55000',message='A terminal delivery attempt is immutable; create a new attempt';
   end if;
@@ -136,7 +144,7 @@ begin
 end;
 $$;
 create trigger deliveries_guard_attempt_history
-before update or delete on public.deliveries
+before insert or update or delete on public.deliveries
 for each row execute function private.guard_delivery_attempt_history();
 
 create or replace function private.owner_record_cash_movement(
@@ -183,7 +191,7 @@ create or replace function private.owner_save_daily_closing(
 ) returns jsonb language plpgsql security definer set search_path=''
 as $$
 declare
-  v_actor uuid; v_cached jsonb; v_payload jsonb; v_existing public.daily_closings%rowtype;
+  v_actor uuid; v_cached jsonb; v_payload jsonb; v_existing public.daily_closings%rowtype; v_has_existing boolean:=false;
   v_opening bigint; v_previous bigint; v_receipts bigint; v_refunds bigint; v_expenses bigint;
   v_topups bigint; v_deposits bigint; v_withdrawals bigint; v_other_in bigint; v_other_out bigint;
   v_expected bigint; v_difference bigint; v_id uuid; v_result jsonb;
@@ -201,7 +209,8 @@ begin
   if v_cached is not null then return v_cached; end if;
   select * into v_existing from public.daily_closings
   where business_id=p_business_id and business_date=p_business_date for update;
-  if found and v_existing.status='closed' then
+  v_has_existing:=found;
+  if v_has_existing and v_existing.status='closed' then
     raise exception using errcode='55000',message='This business date is already closed; record an adjustment instead';
   end if;
   select actual_cash into v_previous from public.daily_closings
@@ -236,7 +245,7 @@ begin
   if p_close and v_difference<>0 and length(btrim(coalesce(p_variance_reason,'')))=0 then
     raise exception using errcode='22023',message='Explain the cash shortage or excess before closing';
   end if;
-  if found then
+  if v_has_existing then
     update public.daily_closings set opening_float=v_opening,posted_cash_receipts=v_receipts,posted_cash_refunds=v_refunds,
       cash_expenses=v_expenses,cash_top_ups=v_topups,cash_bank_deposits=v_deposits,cash_owner_withdrawals=v_withdrawals,
       other_cash_in=v_other_in,other_cash_out=v_other_out,expected_cash=v_expected,actual_cash=p_actual_cash,
@@ -277,7 +286,7 @@ create or replace function private.owner_save_payment_reconciliation(
 ) returns jsonb language plpgsql security definer set search_path=''
 as $$
 declare v_actor uuid; v_cached jsonb; v_payload jsonb; v_receipts bigint; v_refunds bigint; v_id uuid;
-  v_net_system bigint; v_net_statement bigint; v_difference bigint; v_existing public.daily_payment_reconciliations%rowtype; v_result jsonb;
+  v_net_system bigint; v_net_statement bigint; v_difference bigint; v_existing public.daily_payment_reconciliations%rowtype; v_result jsonb; v_has_existing boolean:=false;
 begin
   v_actor:=private.assert_active_owner(p_business_id);
   if p_business_date is null or p_business_date>(now() at time zone 'Africa/Nairobi')::date
@@ -294,10 +303,16 @@ begin
   if v_cached is not null then return v_cached; end if;
   select * into v_existing from public.daily_payment_reconciliations
   where business_id=p_business_id and business_date=p_business_date and method=p_method for update;
-  if found and v_existing.status='confirmed' then
+  v_has_existing:=found;
+  if v_has_existing and v_existing.status='confirmed' then
     raise exception using errcode='55000',message='This reconciliation is confirmed and immutable';
   end if;
   if p_method='mpesa' then
+    if p_confirm and exists(select 1 from public.payments where business_id=p_business_id and method='mpesa_manual'
+      and status='pending_verification' and received_at>=p_business_date::timestamp at time zone 'Africa/Nairobi'
+      and received_at<(p_business_date+1)::timestamp at time zone 'Africa/Nairobi') then
+      raise exception using errcode='22023',message='Verify or reject all M-Pesa evidence for this date before confirming reconciliation';
+    end if;
     select coalesce(sum(amount),0)::bigint into v_receipts from public.payments
     where business_id=p_business_id and status='posted' and method='mpesa_manual'
       and received_at>=p_business_date::timestamp at time zone 'Africa/Nairobi'
@@ -314,7 +329,7 @@ begin
   if p_confirm and v_difference<>0 and length(btrim(coalesce(p_variance_reason,'')))=0 then
     raise exception using errcode='22023',message='Explain the statement variance before confirming';
   end if;
-  if found then
+  if v_has_existing then
     update public.daily_payment_reconciliations set system_receipts=v_receipts,system_refunds=v_refunds,
       statement_receipts=p_statement_receipts,statement_refunds=p_statement_refunds,net_system=v_net_system,
       net_statement=v_net_statement,difference=v_difference,statement_reference=nullif(btrim(p_statement_reference),''),
@@ -409,3 +424,107 @@ end;
 $$;
 revoke all on function public.owner_get_daily_operations_summary(uuid,date) from public,anon;
 grant execute on function public.owner_get_daily_operations_summary(uuid,date) to authenticated;
+
+
+-- Terminal snapshots and cash movements are append-only.
+create or replace function private.guard_milestone08_immutable_rows()
+returns trigger language plpgsql security definer set search_path=''
+as $$
+begin
+  if tg_table_name='cash_movements' then
+    raise exception using errcode='55000',message='Cash movements are append-only; record a correcting movement';
+  end if;
+  if tg_op='DELETE' then
+    if (tg_table_name='daily_closings' and old.status='closed')
+      or (tg_table_name='daily_payment_reconciliations' and old.status='confirmed') then
+      raise exception using errcode='55000',message='Confirmed financial snapshots cannot be deleted';
+    end if;
+    return old;
+  end if;
+  if tg_table_name='daily_closings' and old.status='closed' then
+    raise exception using errcode='55000',message='A closed daily snapshot is immutable';
+  end if;
+  if tg_table_name='daily_payment_reconciliations' and old.status='confirmed' then
+    raise exception using errcode='55000',message='A confirmed reconciliation is immutable';
+  end if;
+  return new;
+end;
+$$;
+create trigger cash_movements_immutable before update or delete on public.cash_movements
+for each row execute function private.guard_milestone08_immutable_rows();
+create trigger daily_closings_immutable before update or delete on public.daily_closings
+for each row execute function private.guard_milestone08_immutable_rows();
+create trigger daily_payment_reconciliations_immutable before update or delete on public.daily_payment_reconciliations
+for each row execute function private.guard_milestone08_immutable_rows();
+
+-- Do not allow cashbook inputs to be backdated into a closed cash day.
+create or replace function private.guard_closed_cash_day()
+returns trigger language plpgsql security definer set search_path=''
+as $$
+declare v_date date; v_business uuid; v_is_cash boolean:=false;
+begin
+  if tg_table_name='payments' then
+    v_date:=(new.received_at at time zone 'Africa/Nairobi')::date;
+    v_business:=new.business_id;
+    v_is_cash:=new.method='cash';
+  elsif tg_table_name='expenses' then
+    v_date:=new.expense_date;
+    v_business:=new.business_id;
+    v_is_cash:=new.payment_method='cash';
+  end if;
+  if v_is_cash and exists(select 1 from public.daily_closings where business_id=v_business and business_date=v_date and status='closed') then
+    raise exception using errcode='55000',message='This cash day is already closed; use a current-day correction movement';
+  end if;
+  return new;
+end;
+$$;
+create trigger payments_guard_closed_cash_day before insert on public.payments
+for each row execute function private.guard_closed_cash_day();
+create trigger expenses_guard_closed_cash_day before insert on public.expenses
+for each row execute function private.guard_closed_cash_day();
+
+-- A failed delivery remains historical. The next recording call creates a fresh attempt.
+create or replace function private.owner_record_delivery(
+  p_order_id uuid,p_method text,p_carrier text,p_tracking_reference text,
+  p_customer_paid_charge bigint,p_recipient_name text,p_request_id uuid
+) returns jsonb language plpgsql security definer set search_path=''
+as $$
+declare v_order public.orders%rowtype; v_actor uuid; v_cached jsonb; v_payload jsonb;
+  v_id uuid; v_existing public.deliveries%rowtype; v_result jsonb;
+begin
+  select * into v_order from public.orders where id=p_order_id;
+  if not found then raise exception using errcode='P0002',message='Order not found'; end if;
+  v_actor:=private.assert_active_owner(v_order.business_id);
+  if v_order.status<>'ready' or p_method is null or p_method not in ('collection','courier')
+    or p_customer_paid_charge is null or p_customer_paid_charge<0
+    or length(btrim(coalesce(p_recipient_name,''))) not between 1 and 180
+    or (p_method='courier' and length(btrim(coalesce(p_carrier,'')))=0) then
+    raise exception using errcode='22023',message='Order must be ready and delivery details must be valid';
+  end if;
+  v_payload:=jsonb_build_object('order_id',p_order_id,'method',p_method,'carrier',p_carrier,
+    'tracking_reference',p_tracking_reference,'customer_paid_charge',p_customer_paid_charge,'recipient_name',p_recipient_name);
+  v_cached:=private.begin_idempotent_request(v_order.business_id,'record_delivery',p_request_id,v_payload);
+  if v_cached is not null then return v_cached; end if;
+  select * into v_existing from public.deliveries
+  where business_id=v_order.business_id and order_id=p_order_id and handed_over_at is null
+    and failed_at is null and attempt_status in ('prepared','dispatched')
+  order by created_at desc,id desc limit 1 for update;
+  if found then
+    if v_existing.method<>p_method then raise exception using errcode='22023',message='An active delivery exists with a different method'; end if;
+    update public.deliveries set carrier=nullif(btrim(p_carrier),''),tracking_reference=nullif(btrim(p_tracking_reference),''),
+      customer_paid_charge=p_customer_paid_charge,recipient_name=btrim(p_recipient_name),
+      dispatched_at=case when p_method='courier' then coalesce(dispatched_at,now()) else null end
+    where business_id=v_order.business_id and id=v_existing.id returning id into v_id;
+  else
+    insert into public.deliveries(business_id,order_id,method,carrier,tracking_reference,customer_paid_charge,recipient_name,dispatched_at)
+    values(v_order.business_id,p_order_id,p_method,nullif(btrim(p_carrier),''),nullif(btrim(p_tracking_reference),''),
+      p_customer_paid_charge,btrim(p_recipient_name),case when p_method='courier' then now() else null end)
+    returning id into v_id;
+  end if;
+  v_result:=jsonb_build_object('delivery_id',v_id,'method',p_method,'customer_paid_charge',p_customer_paid_charge);
+  perform private.finish_idempotent_request(v_order.business_id,'record_delivery',p_request_id,v_result);
+  perform private.write_audit(v_order.business_id,v_actor,'delivery.recorded','delivery',v_id,p_request_id,
+    jsonb_build_object('customer_paid_charge',p_customer_paid_charge,'method',p_method));
+  return v_result;
+end;
+$$;
