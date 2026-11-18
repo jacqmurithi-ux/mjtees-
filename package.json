@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "test:pricing": "node --test tests/pricing.test.mjs"
+    "test:pricing": "node --test tests/pricing.test.mjs",
+    "test:bulk-printing": "node --test tests/bulk-printing.test.mjs"
   },
   "dependencies": {
     "react": "19.3.1",
