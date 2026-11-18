@@ -1,7 +1,7 @@
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
 begin;
-select plan(19);
+select plan(22);
 select has_table('public','customer_contacts','customer contacts table exists');
 select has_table('public','customer_interactions','customer interaction history exists');
 select has_table('public','customer_loyalty_rules','loyalty rules table exists');
@@ -16,6 +16,8 @@ select ok((select relrowsecurity from pg_class where oid='public.customer_reward
 select ok(has_table_privilege('authenticated','public.customer_contacts','SELECT'),'authenticated owner workspace can read contacts subject to RLS');
 select ok(not has_table_privilege('authenticated','public.customer_contacts','INSERT'),'clients cannot directly insert contacts');
 select ok(not has_table_privilege('authenticated','public.customer_reward_ledger','INSERT'),'clients cannot directly post rewards');
+select ok(not has_table_privilege('authenticated','public.customer_interactions','INSERT'),'clients cannot directly insert interactions');
+select ok(not has_table_privilege('authenticated','public.customer_loyalty_rules','INSERT'),'clients cannot directly change reward rules');
 select ok(has_function_privilege('authenticated','public.owner_save_customer_profile(uuid,uuid,text,text,text,text,text,text,text,text,text,text,uuid)','EXECUTE'),'authenticated can call owner-checked profile RPC');
 select ok(not has_function_privilege('anon','public.owner_save_customer_profile(uuid,uuid,text,text,text,text,text,text,text,text,text,text,uuid)','EXECUTE'),'anonymous users cannot call profile RPC');
 select ok(has_function_privilege('authenticated','public.owner_record_customer_reward(uuid,uuid,uuid,uuid,text,text,bigint,text,text,uuid,uuid)','EXECUTE'),'authenticated can call owner-checked reward RPC');
