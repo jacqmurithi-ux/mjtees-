@@ -73,6 +73,7 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
 
  const closed=closing?.status==="closed";
+ const liveDifference=closing?.expected_cash!==undefined&&actualCash!==""&&Number.isSafeInteger(Number(actualCash))?Number(actualCash)-Number(closing.expected_cash):null;
  const currentMovements=useMemo(()=>movements.reduce((n,m)=>n+(m.direction==="in"?Number(m.amount):-Number(m.amount)),0),[movements]);
  async function saveClosing(close:boolean){
   if(!supabase)return;
@@ -160,16 +161,16 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   {error&&<div className="notice error" role="alert">{error}</div>}{notice&&<div className="notice success" role="status">{notice}</div>}
   {section==="Daily Closing"&&<>
    <div className="connected-metrics">{card("Posted cash receipts",money(closing?.posted_cash_receipts))}{card("Cash refunds",money(closing?.posted_cash_refunds))}{card("Cash expenses",money(closing?.cash_expenses))}{card("Expected till",money(closing?.expected_cash))}{card("Till movements net",money(currentMovements))}{card("Closing status",closed?"Closed":closing?"Draft":"Not started")}</div>
-   <section className="connected-panel"><div className="panel-toolbar"><div><h2>Daily cash closing</h2><p>{closed?"This confirmed snapshot is locked.": "Save a draft as you work, then confirm the physical count at the end of the day."}</p></div>{closed&&<span className="status-chip completed">Closed</span>}</div>
+   <section className="connected-panel"><div className="panel-toolbar"><div><h2>Daily cash closing</h2><p>{closed?"This confirmed snapshot is locked.": "Save a draft as you work, then confirm the physical count at the end of the day."}</p></div><div className="inline-controls"><button type="button" className="secondary-action" disabled={busy} onClick={()=>void load()}>Refresh totals</button>{closed&&<span className="status-chip completed">Closed</span>}</div></div>
     <div className="record-form">
      <label>Opening cash float (KES)<input type="number" min="0" step="1" disabled={closed} value={openingFloat} onChange={e=>setOpeningFloat(e.target.value)} placeholder="Opening till cash"/></label>
      <label>Physical cash count (KES)<input type="number" min="0" step="1" disabled={closed} value={actualCash} onChange={e=>setActualCash(e.target.value)} placeholder="Count cash in till"/></label>
      <label className="wide-field">Closing notes<textarea disabled={closed} value={closingNotes} onChange={e=>setClosingNotes(e.target.value)} placeholder="Optional notes"/></label>
-     {closing?.difference!==null&&closing?.difference!==undefined&&closing.difference!==0&&<p className="wide-field small-note">Recorded difference: {money(closing.difference)}. Explain the shortage or excess before confirming.</p>}
+     {liveDifference!==null&&liveDifference!==0&&<p className="wide-field small-note">Estimated difference from the last saved totals: {money(liveDifference)}. Explain the shortage or excess before confirming.</p>}
      <label className="wide-field">Variance explanation (required if cash differs)<textarea disabled={closed} value={varianceReason} onChange={e=>setVarianceReason(e.target.value)} placeholder="Explain any cash shortage or excess"/></label>
      {!closed&&<div className="form-actions"><button className="secondary-action" disabled={busy} onClick={()=>void saveClosing(false)}>Save draft</button><button className="primary-action" disabled={busy} onClick={()=>void saveClosing(true)}>Confirm daily close</button></div>}
     </div>
-    {closing&&<div className="record-list"><article className="record-row"><div><b>Expected cash</b><small>Opening float + posted cash receipts − posted cash refunds − cash expenses + top-ups − deposits − withdrawals + other movements</small></div><strong>{money(closing.expected_cash)}</strong></article>{closing.actual_cash!==null&&<article className="record-row"><div><b>Actual physical count</b></div><strong>{money(closing.actual_cash)}</strong></article>}{closing.difference!==null&&<article className="record-row"><div><b>Difference</b><small>{closing.variance_reason||"No variance"}</small></div><strong>{money(closing.difference)}</strong></article>}</div>}
+    {closing&&<div className="record-list"><article className="record-row"><div><b>Expected cash</b><small>Opening float + posted cash receipts − posted cash refunds − cash expenses + top-ups − deposits − withdrawals + other movements</small></div><strong>{money(closing.expected_cash)}</strong></article>{closing.actual_cash!==null&&<article className="record-row"><div><b>Actual physical count</b></div><strong>{money(closing.actual_cash)}</strong></article>}{(liveDifference!==null||closing.difference!==null)&&<article className="record-row"><div><b>Difference</b><small>{closing.variance_reason||"Calculated from current count and last saved expected cash"}</small></div><strong>{money(liveDifference??closing.difference)}</strong></article>}</div>}
    </section>
    {!closed&&<section className="connected-panel"><div className="panel-toolbar"><div><h2>Record till movement</h2><p>Banking and owner withdrawals are cash movements, not expenses or sales.</p></div></div>
     <form className="record-form" onSubmit={recordMovement}>
