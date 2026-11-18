@@ -37,6 +37,14 @@ jobs:
         run: deno check supabase/functions/submit-public-enquiry/index.ts
       - name: Check Supabase CLI version
         run: npx --yes supabase@3.2.0 --version
+      - name: Use isolated local Supabase ports
+        run: |
+          # Avoid collisions with runner-reserved/default Supabase ports.
+          sed -i 's/^port = 54321$/port = 55421/' supabase/config.toml
+          sed -i 's/^port = 54322$/port = 55432/' supabase/config.toml
+          sed -i 's/^shadow_port = 54320$/shadow_port = 55430/' supabase/config.toml
+          sed -i 's/^port = 54323$/port = 55423/' supabase/config.toml
+          grep -E '^(port|shadow_port) = ' supabase/config.toml
       - name: Show local-only CLI command options
         run: |
           npx --yes supabase@3.2.0 start --help
