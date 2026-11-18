@@ -573,15 +573,16 @@ begin
     v_total_cost:=coalesce((v_line.cost_estimate_snapshot->>'estimated_total_cost')::bigint,0);
     v_unit_cost:=coalesce((v_line.cost_estimate_snapshot->>'estimated_unit_cost')::bigint,0);
     insert into public.order_items(
-      business_id,order_id,quotation_item_id,description,quantity,unit,unit_price,line_discount,line_total,
-      category_id,stock_item_id,customer_supplies_item,sale_mode,production_method_id,production_specification,
-      estimated_unit_cost,estimated_total_cost,cost_breakdown_snapshot,cost_calculation_version
+      business_id,order_id,quotation_item_id,description,quantity,unit,unit_price,line_discount,
+      order_discount_allocated,line_total,category_id,stock_item_id,customer_supplies_item,sale_mode,
+      production_method_id,production_specification,estimated_unit_cost,estimated_total_cost,
+      cost_breakdown_snapshot,cost_calculation_version
     )
     values(
       v_quote.business_id,v_order,v_line.id,v_line.description,v_line.quantity,v_line.unit,v_line.unit_price,
-      v_line.line_discount,v_line.line_total,v_line.category_id,v_line.stock_item_id,v_line.customer_supplies_item,
-      v_line.sale_mode,v_line.production_method_id,v_line.production_specification,v_unit_cost,v_total_cost,
-      v_line.cost_estimate_snapshot,v_line.cost_estimate_snapshot->>'calculation_version'
+      v_line.line_discount,v_line.order_discount_allocated,v_line.line_total,v_line.category_id,v_line.stock_item_id,
+      v_line.customer_supplies_item,v_line.sale_mode,v_line.production_method_id,v_line.production_specification,
+      v_unit_cost,v_total_cost,v_line.cost_estimate_snapshot,v_line.cost_estimate_snapshot->>'calculation_version'
     )
     returning id into v_order_item;
     if v_line.line_discount>0 then
@@ -592,6 +593,17 @@ begin
       values(
         v_quote.business_id,v_order,v_order_item,'line_discount',
         round(v_line.quantity*v_line.unit_price)::bigint,v_line.line_discount,'line-discount-v1',null
+      );
+    end if;
+    if v_line.order_discount_allocated>0 then
+      insert into public.order_item_discount_allocations(
+        business_id,order_id,order_item_id,discount_source,pre_discount_line_amount,
+        allocated_discount_amount,allocation_version,created_by
+      )
+      values(
+        v_quote.business_id,v_order,v_order_item,'order_discount',
+        round(v_line.quantity*v_line.unit_price)::bigint-v_line.line_discount,
+        v_line.order_discount_allocated,'order-discount-v1',null
       );
     end if;
   end loop;
