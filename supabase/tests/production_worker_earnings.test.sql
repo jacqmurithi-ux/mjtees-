@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(27);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('11111111-1111-4111-8111-111111111111','authenticated','authenticated',
@@ -199,6 +199,17 @@ select is(
 );
 
 select is(
+  (public.owner_confirm_worker_earnings(
+    (select id from public.production_worker_assignments where job_id=(
+      select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+    2,'Two approved work days','40000000-0000-4000-8000-000000000001'
+  )->>'earning_id')::uuid,
+  (select id from public.production_worker_earnings where job_id=(
+    select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+  'Idempotent earnings retry returns the original confirmed earning'
+);
+
+select is(
   (select count(*) from public.production_worker_earnings e
    join public.production_cost_entries c on c.business_id=e.business_id and c.id=e.cost_entry_id
    where e.job_id=(select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')
@@ -221,6 +232,22 @@ select is(
   )->>'status'),
   'posted',
   'Worker payment records a partial settlement against confirmed earnings'
+);
+
+select throws_ok(
+  $select public.owner_record_worker_payment(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.production_workers where full_name='Temporary Worker'),
+    601,'mpesa','OVERPAY','Overpayment attempt',now(),
+    jsonb_build_array(jsonb_build_object(
+      'earning_id',(select id from public.production_worker_earnings where job_id=(
+        select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+      'amount',601
+    )),
+    '50000000-0000-4000-8000-000000000002'
+  )$,
+  '23514','Worker payment exceeds the outstanding earning balance',
+  'Payment RPC rejects settlements above the remaining worker balance'
 );
 
 select is(
