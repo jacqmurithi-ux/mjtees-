@@ -48,7 +48,7 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Configure GitHub Pages base path
         id: pages
         uses: actions/configure-pages@v5
