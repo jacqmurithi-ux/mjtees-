@@ -31,11 +31,7 @@ create index if not exists production_output_entries_job_occurred_idx
   on public.production_output_entries(business_id,job_id,occurred_at desc);
 
 alter table public.production_output_entries enable row level security;
-drop policy if exists production_output_entries_owner_select on public.production_output_entries;
-create policy production_output_entries_owner_select on public.production_output_entries
-  for select to authenticated using (private.is_active_owner(business_id));
-grant select on public.production_output_entries to authenticated;
-revoke insert,update,delete on public.production_output_entries from anon,authenticated,public;
+revoke all on table public.production_output_entries from anon,authenticated,public;
 
 create or replace function private.owner_record_production_output(
   p_job_id uuid,
@@ -126,6 +122,41 @@ begin
   return v_result;
 end;
 $$;
+
+create or replace function private.owner_list_production_output(p_business_id uuid)
+returns jsonb language plpgsql security definer set search_path=''
+as $
+declare v_actor uuid; v_result jsonb;
+begin
+  v_actor:=private.assert_active_owner(p_business_id);
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id',e.id,'job_id',e.job_id,'quantity_printed',e.quantity_printed,
+    'quantity_accepted',e.quantity_accepted,'quantity_rejected',e.quantity_rejected,
+    'quantity_reworked',e.quantity_reworked,'worker_type',e.worker_type,
+    'worker_name',e.worker_name,'labour_cost',e.labour_cost,
+    'occurred_at',e.occurred_at,'notes',e.notes
+  ) order by e.occurred_at desc),'[]'::jsonb)
+  into v_result
+  from (
+    select * from public.production_output_entries
+    where business_id=p_business_id
+    order by occurred_at desc
+    limit 1000
+  ) e;
+  return v_result;
+end;
+$;
+revoke all on function private.owner_list_production_output(uuid) from public,anon;
+grant execute on function private.owner_list_production_output(uuid) to authenticated;
+
+create or replace function public.owner_list_production_output(p_business_id uuid)
+returns jsonb language sql set search_path=''
+as $ select private.owner_list_production_output($1); $;
+revoke all on function public.owner_list_production_output(uuid) from public,anon;
+grant execute on function public.owner_list_production_output(uuid) to authenticated;
+
+revoke all on function private.owner_record_production_output(uuid,numeric,numeric,numeric,text,text,bigint,timestamptz,text,uuid) from public,anon;
+grant execute on function private.owner_record_production_output(uuid,numeric,numeric,numeric,text,text,bigint,timestamptz,text,uuid) to authenticated;
 
 create or replace function public.owner_record_production_output(
   p_job_id uuid,p_quantity_printed numeric,p_quantity_rejected numeric,p_quantity_reworked numeric,
