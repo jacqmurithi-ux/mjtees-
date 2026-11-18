@@ -1,7 +1,7 @@
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 begin;
-select plan(23);
+select plan(25);
 
 select ok(to_regclass('public.cash_movements') is not null, 'cash movement ledger exists');
 select ok(to_regclass('public.daily_closings') is not null, 'daily closing snapshots exist');
@@ -14,6 +14,8 @@ select ok((select relrowsecurity from pg_class where oid='public.daily_payment_r
 select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='cash_movements' and cmd='SELECT'), 'cash movement owner read policy exists');
 select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='daily_closings' and cmd='SELECT'), 'daily closing owner read policy exists');
 select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='daily_payment_reconciliations' and cmd='SELECT'), 'reconciliation owner read policy exists');
+select ok(not has_table_privilege('authenticated','public.cash_movements','INSERT'), 'authenticated clients cannot directly insert cash movements');
+select ok(not has_table_privilege('authenticated','public.daily_closings','UPDATE'), 'authenticated clients cannot directly edit daily closings');
 select ok(exists(select 1 from information_schema.columns where table_schema='public' and table_name='deliveries' and column_name='attempt_status'), 'delivery attempt status exists');
 select ok(exists(select 1 from information_schema.columns where table_schema='public' and table_name='deliveries' and column_name='failed_at'), 'delivery failure timestamp exists');
 select ok(to_regprocedure('public.owner_record_cash_movement(uuid,date,text,bigint,text,text,text,text,uuid)') is not null, 'cash movement RPC exists');
