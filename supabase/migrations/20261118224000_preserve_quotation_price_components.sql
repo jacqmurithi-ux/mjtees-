@@ -270,7 +270,9 @@ declare
   v_gross_total bigint;
   v_garment_gross bigint;
   v_printing_gross bigint;
-  v_line_discount bigint[];
+  v_printing_unit bigint;
+  v_gross_parts bigint[];
+  v_line_discount bigint[]
   v_order_discount bigint[];
   v_printing_net bigint;
 begin
@@ -291,8 +293,10 @@ begin
 
   v_garment_unit := (v_components->>'garment_supply_unit_price')::bigint;
   v_gross_total := round(new.quantity*new.unit_price)::bigint;
-  v_garment_gross := round(new.quantity*v_garment_unit)::bigint;
-  v_printing_gross := v_gross_total-v_garment_gross;
+  v_printing_unit := new.unit_price-v_garment_unit;
+  v_gross_parts := private.allocate_two_component_discount(v_gross_total,v_garment_unit,v_printing_unit);
+  v_garment_gross := v_gross_parts[1];
+  v_printing_gross := v_gross_parts[2];
 
   if v_garment_gross < 0 or v_printing_gross < 0
     or v_garment_gross+v_printing_gross <> v_gross_total then
@@ -313,7 +317,7 @@ begin
     'version',1,
     'currency_code','KES',
     'garment_supply_unit_price',v_garment_unit,
-    'printing_unit_price',new.unit_price-v_garment_unit,
+    'printing_unit_price',v_printing_unit,
     'garment_supply_gross_amount',v_garment_gross,
     'printing_gross_amount',v_printing_gross,
     'line_discount_garment_supply',v_line_discount[1],
@@ -405,7 +409,9 @@ declare
   v_gross_total bigint;
   v_garment_gross bigint;
   v_printing_gross bigint;
-  v_line_discount bigint[];
+  v_printing_unit bigint;
+  v_gross_parts bigint[];
+  v_line_discount bigint[]
   v_order_discount bigint[];
   v_result jsonb;
 begin
@@ -440,8 +446,10 @@ begin
   end if;
 
   v_gross_total:=round(v_item.quantity*v_item.unit_price)::bigint;
-  v_garment_gross:=round(v_item.quantity*v_garment_unit)::bigint;
-  v_printing_gross:=v_gross_total-v_garment_gross;
+  v_printing_unit:=v_item.unit_price-v_garment_unit;
+  v_gross_parts:=private.allocate_two_component_discount(v_gross_total,v_garment_unit,v_printing_unit);
+  v_garment_gross:=v_gross_parts[1];
+  v_printing_gross:=v_gross_parts[2];
   v_line_discount:=private.allocate_two_component_discount(
     v_item.line_discount,v_garment_gross,v_printing_gross
   );
@@ -455,7 +463,7 @@ begin
     'version',1,
     'currency_code','KES',
     'garment_supply_unit_price',v_garment_unit,
-    'printing_unit_price',v_item.unit_price-v_garment_unit,
+    'printing_unit_price',v_printing_unit,
     'garment_supply_gross_amount',v_garment_gross,
     'printing_gross_amount',v_printing_gross,
     'line_discount_garment_supply',v_line_discount[1],
@@ -472,14 +480,14 @@ begin
 
   v_result:=jsonb_build_object('order_item_id',p_order_item_id,
     'garment_supply_unit_price',v_garment_unit,
-    'printing_unit_price',v_item.unit_price-v_garment_unit,
+    'printing_unit_price',v_printing_unit,
     'eligible_printing_revenue',v_printing_gross-v_line_discount[2]-v_order_discount[2],
     'classification','owner_manual');
   perform private.finish_idempotent_request(v_item.business_id,'classify_order_item_price_components',p_request_id,v_result);
   perform private.write_audit(v_item.business_id,v_actor,'order_item.price_components_classified',
     'order_item',p_order_item_id,p_request_id,
     jsonb_build_object('garment_supply_unit_price',v_garment_unit,
-      'printing_unit_price',v_item.unit_price-v_garment_unit,'reason',btrim(p_reason)));
+      'printing_unit_price',v_printing_unit,'reason',btrim(p_reason)));
   return v_result;
 end;
 $function$;
