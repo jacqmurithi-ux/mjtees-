@@ -1,7 +1,7 @@
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
 begin;
-select plan(26);
+select plan(27);
 select has_table('public','customer_contacts','customer contacts table exists');
 select has_table('public','customer_interactions','customer interaction history exists');
 select has_table('public','customer_loyalty_rules','loyalty rules table exists');
@@ -28,5 +28,6 @@ select ok(to_regclass('public.customer_reward_one_rule_award_per_order') is not 
 select ok(to_regprocedure('private.award_customer_rewards_on_order_completion()') is not null,'automatic reward evaluator exists');
 select ok(exists(select 1 from pg_trigger where tgrelid='public.orders'::regclass and tgname='award_customer_rewards_after_order_completion' and not tgisinternal),'automatic rewards run on order completion');
 select ok(position('ceil(v_unit_cost/0.70)' in pg_get_functiondef('private.owner_create_quotation(uuid,uuid,uuid,jsonb,timestamptz,text,text,uuid)'::regprocedure)) > 0,'missing rule defaults to cost-based 30 percent gross-margin floor');
+select ok(position('id <> new.id' in pg_get_functiondef('private.award_customer_rewards_on_order_completion()'::regprocedure)) > 0,'repeat-order reward requires a previously completed order');
 select * from finish();
 rollback;
