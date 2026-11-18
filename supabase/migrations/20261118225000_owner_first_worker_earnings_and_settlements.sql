@@ -428,6 +428,55 @@ begin
 end;
 $function$;
 
+create or replace function private.owner_close_worker_assignment(
+  p_assignment_id uuid,p_close_status text,p_reason text,p_request_id uuid
+)
+returns jsonb language plpgsql security definer set search_path=''
+as $function$
+declare
+  v_assignment public.production_worker_assignments%rowtype;
+  v_actor uuid; v_cached jsonb; v_payload jsonb; v_result jsonb;
+begin
+  select * into v_assignment from public.production_worker_assignments where id=p_assignment_id;
+  if not found then raise exception using errcode='P0002',message='Worker assignment not found'; end if;
+  v_actor:=private.assert_active_owner(v_assignment.business_id);
+  if p_request_id is null or p_close_status not in ('completed','cancelled')
+    or length(btrim(coalesce(p_reason,''))) not between 1 and 500 then
+    raise exception using errcode='22023',message='Valid assignment outcome, reason and request ID are required';
+  end if;
+
+  v_payload:=jsonb_build_object('assignment_id',p_assignment_id,'close_status',p_close_status,'reason',btrim(p_reason));
+  v_cached:=private.begin_idempotent_request(v_assignment.business_id,'close_worker_assignment',p_request_id,v_payload);
+  if v_cached is not null then return v_cached; end if;
+
+  select * into v_assignment from public.production_worker_assignments
+  where business_id=v_assignment.business_id and id=p_assignment_id for update;
+  if p_close_status='cancelled' then
+    if v_assignment.status<>'assigned' or v_assignment.commenced_at is not null then
+      raise exception using errcode='22023',message='Only an assignment that never commenced can be cancelled';
+    end if;
+  else
+    if v_assignment.status<>'working' or not exists(
+      select 1 from public.production_worker_earnings
+      where business_id=v_assignment.business_id and assignment_id=p_assignment_id
+    ) then
+      raise exception using errcode='23514',message='Confirm actual worker earnings before completing the assignment';
+    end if;
+  end if;
+
+  update public.production_worker_assignments
+  set status=p_close_status,notes=concat_ws(E'\n',nullif(notes,''),'Closure: '||btrim(p_reason)),updated_at=now()
+  where business_id=v_assignment.business_id and id=p_assignment_id;
+
+  v_result:=jsonb_build_object('assignment_id',p_assignment_id,'status',p_close_status);
+  perform private.finish_idempotent_request(v_assignment.business_id,'close_worker_assignment',p_request_id,v_result);
+  perform private.write_audit(v_assignment.business_id,v_actor,'production.worker_assignment_closed',
+    'production_worker_assignment',p_assignment_id,p_request_id,
+    jsonb_build_object('status',p_close_status,'reason',btrim(p_reason),'job_id',v_assignment.job_id));
+  return v_result;
+end;
+$function$;
+
 create or replace function private.owner_record_worker_payment(
   p_business_id uuid,p_worker_id uuid,p_amount bigint,p_payment_method text,
   p_reference text,p_notes text,p_paid_at timestamptz,p_allocations jsonb,p_request_id uuid
@@ -603,6 +652,11 @@ create or replace function public.owner_confirm_worker_earnings(
 ) returns jsonb language sql security invoker set search_path=''
 as $function$ select private.owner_confirm_worker_earnings($1,$2,$3,$4); $function$;
 
+create or replace function public.owner_close_worker_assignment(
+  p_assignment_id uuid,p_close_status text,p_reason text,p_request_id uuid
+) returns jsonb language sql security invoker set search_path=''
+as $function$ select private.owner_close_worker_assignment($1,$2,$3,$4); $function$;
+
 create or replace function public.owner_record_worker_payment(
   p_business_id uuid,p_worker_id uuid,p_amount bigint,p_payment_method text,
   p_reference text,p_notes text,p_paid_at timestamptz,p_allocations jsonb,p_request_id uuid
@@ -614,6 +668,7 @@ create or replace function public.owner_adjust_temporary_labour_allocation(
 ) returns jsonb language sql security invoker set search_path=''
 as $function$ select private.owner_adjust_temporary_labour_allocation($1,$2,$3,$4); $function$;
 
+revoke all on function private.owner_close_worker_assignment(uuid,text,text,uuid) from public,anon,authenticated;
 revoke all on function private.owner_upsert_production_worker(uuid,uuid,text,text,text,uuid),
   private.owner_assign_production_worker(uuid,uuid,text,bigint,text,text,uuid),
   private.owner_confirm_worker_commencement(uuid,uuid),
@@ -622,6 +677,7 @@ revoke all on function private.owner_upsert_production_worker(uuid,uuid,text,tex
   private.owner_adjust_temporary_labour_allocation(uuid,bigint,text,uuid)
 from public,anon,authenticated;
 grant usage on schema private to authenticated;
+grant execute on function private.owner_close_worker_assignment(uuid,text,text,uuid) to authenticated;
 grant execute on function private.owner_upsert_production_worker(uuid,uuid,text,text,text,uuid),
   private.owner_assign_production_worker(uuid,uuid,text,bigint,text,text,uuid),
   private.owner_confirm_worker_commencement(uuid,uuid),
@@ -630,6 +686,7 @@ grant execute on function private.owner_upsert_production_worker(uuid,uuid,text,
   private.owner_adjust_temporary_labour_allocation(uuid,bigint,text,uuid)
 to authenticated;
 
+revoke all on function public.owner_close_worker_assignment(uuid,text,text,uuid) from public,anon;
 revoke all on function public.owner_upsert_production_worker(uuid,uuid,text,text,text,uuid),
   public.owner_assign_production_worker(uuid,uuid,text,bigint,text,text,uuid),
   public.owner_confirm_worker_commencement(uuid,uuid),
@@ -637,6 +694,7 @@ revoke all on function public.owner_upsert_production_worker(uuid,uuid,text,text
   public.owner_record_worker_payment(uuid,uuid,bigint,text,text,text,timestamptz,jsonb,uuid),
   public.owner_adjust_temporary_labour_allocation(uuid,bigint,text,uuid)
 from public,anon;
+grant execute on function public.owner_close_worker_assignment(uuid,text,text,uuid) to authenticated;
 grant execute on function public.owner_upsert_production_worker(uuid,uuid,text,text,text,uuid),
   public.owner_assign_production_worker(uuid,uuid,text,bigint,text,text,uuid),
   public.owner_confirm_worker_commencement(uuid,uuid),
