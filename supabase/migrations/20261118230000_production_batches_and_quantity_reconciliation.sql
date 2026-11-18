@@ -167,16 +167,30 @@ begin
     when 'replacement_received' then v_from:=null; v_to:='pending';
     when 'started' then v_from:='pending'; v_to:='in_production';
     when 'accepted' then v_from:='in_production'; v_to:='accepted';
-    when 'rework' then
-      select case when exists(
-        select 1 from public.production_quantity_movements
-        where business_id=v_job.business_id and job_id=p_job_id and to_state='accepted'
-      ) then 'accepted' else 'in_production' end into v_from;
-      v_to:='rework';
+    when 'rework' then v_from:='in_production'; v_to:='rework';
     when 'rework_passed' then v_from:='rework'; v_to:='accepted';
     when 'rejected' then v_from:='in_production'; v_to:='rejected';
     when 'rework_rejected' then v_from:='rework'; v_to:='rejected';
   end case;
+
+  if p_movement_type in ('accepted','rework_passed') and not exists (
+    select 1 from public.quality_checks q
+    where q.business_id=v_job.business_id and q.job_id=p_job_id and q.result='pass'
+      and q.id=(select q2.id from public.quality_checks q2
+        where q2.business_id=v_job.business_id and q2.job_id=p_job_id
+        order by q2.checked_at desc,q2.id desc limit 1)
+  ) then
+    raise exception using errcode='23514',message='A latest passing quality check is required before accepting quantities';
+  end if;
+  if p_movement_type in ('rework','rejected','rework_rejected') and not exists (
+    select 1 from public.quality_checks q
+    where q.business_id=v_job.business_id and q.job_id=p_job_id and q.result='fail'
+      and q.id=(select q2.id from public.quality_checks q2
+        where q2.business_id=v_job.business_id and q2.job_id=p_job_id
+        order by q2.checked_at desc,q2.id desc limit 1)
+  ) then
+    raise exception using errcode='23514',message='A latest failed quality check is required before moving quantities to rework or rejection';
+  end if;
 
   if v_from is null then
     select coalesce(sum(quantity),0) into v_received
