@@ -45,7 +45,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
   ]);
   const failure=o.error||i.error||m.error||j.error||q.error||rw.error||ce.error||s.error||l.error||out.error||summary.error;if(failure)throw failure;
   setOrders((o.data??[]) as Order[]);setItems((i.data??[]) as Item[]);setMethods((m.data??[]) as Method[]);setJobs((j.data??[]) as Job[]);setChecks((q.data??[]) as Check[]);setReworks((rw.data??[]) as Rework[]);setCosts((ce.data??[]) as CostEntry[]);setStock((s.data??[]) as Stock[]);setLocations((l.data??[]) as Location[]);setOutputEntries((out.data??[]) as OutputEntry[]);setOutputSummary((summary.data??{}) as OutputSummary);const {data:userData}=await client.auth.getUser();setCurrentUserId(userData.user?.id||"");
- },[businessId]);
+ },[businessId,reportDate]);
  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
  const call=async(name:string,args:Record<string,unknown>,success:string)=>{
   if(!supabase)return;setBusy(true);setError("");setNotice("");
