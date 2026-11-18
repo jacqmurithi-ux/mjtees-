@@ -82,8 +82,6 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
   const suggested = Math.ceil(recommendedPrice / 5) * 5;
   const final = Number(finalPrice || suggested);
   const valid = Boolean(vinyl && categoryId && methodId && layout && directCost > 0 && ceilingPrice >= floorPrice && final >= floorPrice - 0.001 && final <= ceilingPrice + 0.001);
-  const selectedMethod = methods.find(x => x.id === methodId);
-
   useEffect(() => {
     if (!supabase || !categoryId) return;
     const category = categories.find(x => x.id === categoryId);
