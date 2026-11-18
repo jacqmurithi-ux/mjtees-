@@ -39,7 +39,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
    client.from("production_cost_entries").select("id,job_id,cost_type,description,quantity,unit,unit_rate,amount,occurred_at").eq("business_id",businessId).order("occurred_at",{ascending:false}).limit(500),
    client.from("stock_items").select("id,name,base_unit").eq("business_id",businessId).eq("is_active",true).order("name").limit(500),
    client.from("inventory_locations").select("id,name").eq("business_id",businessId).eq("is_active",true).order("name"),
-   client.from("production_output_entries").select("id,job_id,quantity_printed,quantity_accepted,quantity_rejected,quantity_reworked,worker_type,worker_name,labour_cost,occurred_at,notes").eq("business_id",businessId).order("occurred_at",{ascending:false}).limit(1000)
+   client.rpc("owner_list_production_output",{p_business_id:businessId})
   ]);
   const failure=o.error||i.error||m.error||j.error||q.error||rw.error||ce.error||s.error||l.error||out.error;if(failure)throw failure;
   setOrders((o.data??[]) as Order[]);setItems((i.data??[]) as Item[]);setMethods((m.data??[]) as Method[]);setJobs((j.data??[]) as Job[]);setChecks((q.data??[]) as Check[]);setReworks((rw.data??[]) as Rework[]);setCosts((ce.data??[]) as CostEntry[]);setStock((s.data??[]) as Stock[]);setLocations((l.data??[]) as Location[]);setOutputEntries((out.data??[]) as OutputEntry[]);const {data:userData}=await client.auth.getUser();setCurrentUserId(userData.user?.id||"");
