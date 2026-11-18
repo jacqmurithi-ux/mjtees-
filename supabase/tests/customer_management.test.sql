@@ -1,7 +1,7 @@
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
 begin;
-select plan(22);
+select plan(23);
 select has_table('public','customer_contacts','customer contacts table exists');
 select has_table('public','customer_interactions','customer interaction history exists');
 select has_table('public','customer_loyalty_rules','loyalty rules table exists');
@@ -23,5 +23,7 @@ select ok(not has_function_privilege('anon','public.owner_save_customer_profile(
 select ok(has_function_privilege('authenticated','public.owner_record_customer_reward(uuid,uuid,uuid,uuid,text,text,bigint,text,text,uuid,uuid)','EXECUTE'),'authenticated can call owner-checked reward RPC');
 select ok(has_function_privilege('authenticated','public.owner_upsert_customer_address(uuid,uuid,uuid,text,text,text,text,text,boolean,uuid)','EXECUTE'),'authenticated can call owner-checked address RPC');
 select ok(not has_function_privilege('anon','public.owner_record_customer_reward(uuid,uuid,uuid,uuid,text,text,bigint,text,text,uuid,uuid)','EXECUTE'),'anonymous users cannot post rewards');
+select ok(not has_function_privilege('anon','public.owner_upsert_customer_address(uuid,uuid,uuid,text,text,text,text,text,boolean,uuid)','EXECUTE'),'anonymous cannot save customer addresses');
+select ok(to_regclass('public.customer_reward_one_rule_award_per_order') is not null,'one rule cannot award the same order twice');
 select * from finish();
 rollback;
