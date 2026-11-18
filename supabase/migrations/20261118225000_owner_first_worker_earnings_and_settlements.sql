@@ -86,7 +86,7 @@ create table public.production_worker_payments (
   reference text,
   notes text,
   paid_at timestamptz not null default now(),
-  status text not null default 'posted' check (status in ('posted','reversed')),
+  status text not null default 'posted' check (status = 'posted'),
   recorded_by uuid not null references auth.users(id) on delete restrict,
   request_id uuid not null,
   created_at timestamptz not null default now(),
@@ -235,7 +235,7 @@ declare
   v_job public.production_jobs%rowtype; v_worker public.production_workers%rowtype;
   v_actor uuid; v_cached jsonb; v_payload jsonb; v_assignment uuid; v_result jsonb;
 begin
-  select * into v_job from public.production_jobs where id=p_job_id;
+  select * into v_job from public.production_jobs where id=p_job_id for update;
   if not found then raise exception using errcode='P0002',message='Production job not found'; end if;
   v_actor:=private.assert_active_owner(v_job.business_id);
   if p_request_id is null or p_earnings_method not in ('fixed_amount','daily_rate','quantity_rate')
@@ -302,6 +302,9 @@ begin
   where business_id=v_assignment.business_id and id=v_assignment.worker_id;
   select * into v_job from public.production_jobs
   where business_id=v_assignment.business_id and id=v_assignment.job_id for update;
+  if v_job.status not in ('in_progress','quality_check','rework') then
+    raise exception using errcode='22023',message='Production job must be active before worker commencement';
+  end if;
 
   if v_worker.worker_type='temporary' then
     if not exists (
@@ -354,6 +357,7 @@ as $function$
 declare
   v_assignment public.production_worker_assignments%rowtype;
   v_worker public.production_workers%rowtype;
+  v_job public.production_jobs%rowtype;
   v_actor uuid; v_cached jsonb; v_payload jsonb; v_amount bigint;
   v_cost_entry uuid; v_earning uuid; v_result jsonb;
 begin
@@ -374,6 +378,11 @@ begin
   where business_id=v_assignment.business_id and id=p_assignment_id for update;
   if v_assignment.status<>'working' then
     raise exception using errcode='22023',message='Worker must have commenced work before earnings can be confirmed';
+  end if;
+  select * into v_job from public.production_jobs
+  where business_id=v_assignment.business_id and id=v_assignment.job_id for update;
+  if v_job.status not in ('in_progress','quality_check','rework') then
+    raise exception using errcode='22023',message='Cannot confirm earnings against a closed production job';
   end if;
   select * into v_worker from public.production_workers
   where business_id=v_assignment.business_id and id=v_assignment.worker_id;
@@ -440,7 +449,14 @@ begin
   v_cached:=private.begin_idempotent_request(p_business_id,'record_worker_payment',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
 
-  for v_alloc in select value from jsonb_array_elements(p_allocations) loop
+  if exists (
+    select 1 from jsonb_array_elements(p_allocations) x(value)
+    group by x.value->>'earning_id' having count(*)>1
+  ) then
+    raise exception using errcode='22023',message='An earning may appear only once in a payment allocation';
+  end if;
+
+  for v_alloc in select value from jsonb_array_elements(p_allocations) order by value->>'earning_id' loop
     v_earning:=null;
     select * into v_earning from public.production_worker_earnings
     where business_id=p_business_id and id=(v_alloc.value->>'earning_id')::uuid
@@ -474,7 +490,7 @@ begin
     nullif(btrim(p_notes),''),coalesce(p_paid_at,now()),v_actor,p_request_id
   ) returning id into v_payment;
 
-  for v_alloc in select value from jsonb_array_elements(p_allocations) loop
+  for v_alloc in select value from jsonb_array_elements(p_allocations) order by value->>'earning_id' loop
     insert into public.production_worker_payment_allocations(
       business_id,payment_id,earning_id,amount
     ) values (
