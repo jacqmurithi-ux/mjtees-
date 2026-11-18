@@ -244,12 +244,10 @@ select is(
 
 select is(
   (public.owner_confirm_worker_earnings(
-    (select id from public.production_worker_assignments where job_id=(
-      select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+    (select id from public.production_worker_assignments where worker_id=(select id from public.production_workers where full_name='Temporary Worker')),
     2,'Two approved work days','40000000-0000-4000-8000-000000000001'
   )->>'earning_id')::uuid,
-  (select id from public.production_worker_earnings where job_id=(
-    select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+  (select id from public.production_worker_earnings where worker_id=(select id from public.production_workers where full_name='Temporary Worker')),
   'Idempotent earnings retry returns the original confirmed earning'
 );
 
