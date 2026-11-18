@@ -88,7 +88,7 @@ Report definitions:
 - Overdue = required_by before business-local today and order not handed over.
 - On-time handover = handed_over_at's Africa/Nairobi date on or before required_by.
 - Ready awaiting collection = ready order with no handed-over delivery attempt.
-- Outstanding courier = dispatched attempt without handover/failure/cancellation.
+- Outstanding courier = dispatched attempt without handover/failure/cancellation.\n- Outstanding customer balances = database-side sum of the existing order-balance calculation for open orders.
 - Customer balance = existing owner order balance logic; posted allocations less posted refunds and reversals.
 - Financial totals must not be labelled profit unless all direct costs and expenses are reconciled.
 
@@ -145,7 +145,7 @@ Use `Africa/Nairobi` for business-day boundaries. Query by timestamp half-open i
 
 1. Additive migration: cash movements, daily closings, reconciliation snapshots, delivery-attempt lifecycle, constraints/indexes/RLS.
 2. Owner-only transactional RPCs and database aggregate/report RPCs.
-3. Frontend Daily Closing, reconciliation, delivery attempt history and dashboard integration.
+3. Frontend Daily Closing, reconciliation, immutable correction entries, delivery attempt history and dashboard integration.
 4. Database tests and frontend build; verify live schema, RLS, RPC grants, advisors and sample read-only calculations.
 5. Deploy only through the existing GitHub Pages workflow after checks; no Vercel.
 
