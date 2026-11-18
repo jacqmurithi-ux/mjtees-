@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(29);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('11111111-1111-4111-8111-111111111111','authenticated','authenticated',
@@ -186,6 +186,33 @@ select is(
    where job_id=(select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
   784.00::numeric,
   'Initial allocation is exactly 20 percent of eligible net printing revenue'
+);
+
+select public.owner_upsert_production_worker(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Second Temporary Worker','0712345679','temporary',
+  '30000000-0000-4000-8000-000000000004'
+);
+select public.owner_assign_production_worker(
+  (select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+  (select id from public.production_workers where full_name='Second Temporary Worker'),
+  'quantity_rate',100,'piece','Additional worker on the same order line',
+  '30000000-0000-4000-8000-000000000005'
+);
+
+select is(
+  (public.owner_confirm_worker_commencement(
+    (select id from public.production_worker_assignments where worker_id=(
+      select id from public.production_workers where full_name='Second Temporary Worker')),
+    '30000000-0000-4000-8000-000000000006'
+  )->>'temporary_labour_allocation_id')::uuid,
+  (select id from public.temporary_labour_allocations where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+  'A second temporary worker uses the original order-line allocation'
+);
+
+select is(
+  (select count(*) from public.temporary_labour_allocations
+   where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+  1::bigint,'Only one initial temporary-labour allocation exists per order line'
 );
 
 select is(
