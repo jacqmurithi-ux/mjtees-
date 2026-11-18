@@ -1,6 +1,6 @@
 -- Milestone 08 follow-up: immutable corrections, cash movement retry safety and complete dashboard balances.
 
-create table public.daily_closing_adjustments (
+create table if not exists public.daily_closing_adjustments (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id),
   daily_closing_id uuid not null references public.daily_closings(id),
@@ -12,9 +12,9 @@ create table public.daily_closing_adjustments (
   created_at timestamptz not null default now(),
   unique (business_id,request_id)
 );
-create index daily_closing_adjustments_closing_idx on public.daily_closing_adjustments(business_id,daily_closing_id,created_at);
+create index if not exists daily_closing_adjustments_closing_idx on public.daily_closing_adjustments(business_id,daily_closing_id,created_at);
 
-create table public.daily_payment_reconciliation_adjustments (
+create table if not exists public.daily_payment_reconciliation_adjustments (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id),
   reconciliation_id uuid not null references public.daily_payment_reconciliations(id),
@@ -27,22 +27,26 @@ create table public.daily_payment_reconciliation_adjustments (
   created_at timestamptz not null default now(),
   unique (business_id,request_id)
 );
-create index daily_payment_reconciliation_adjustments_idx on public.daily_payment_reconciliation_adjustments(business_id,reconciliation_id,created_at);
+create index if not exists daily_payment_reconciliation_adjustments_idx on public.daily_payment_reconciliation_adjustments(business_id,reconciliation_id,created_at);
 
 alter table public.daily_closing_adjustments enable row level security;
 alter table public.daily_payment_reconciliation_adjustments enable row level security;
-create policy daily_closing_adjustments_owner_read on public.daily_closing_adjustments
- for select to authenticated using (private.is_active_owner(business_id));
-create policy daily_reconciliation_adjustments_owner_read on public.daily_payment_reconciliation_adjustments
- for select to authenticated using (private.is_active_owner(business_id));
+do $ begin
+ if not exists(select 1 from pg_policies where schemaname='public' and tablename='daily_closing_adjustments' and policyname='daily_closing_adjustments_owner_read') then
+  create policy daily_closing_adjustments_owner_read on public.daily_closing_adjustments for select to authenticated using (private.is_active_owner(business_id));
+ end if;
+ if not exists(select 1 from pg_policies where schemaname='public' and tablename='daily_payment_reconciliation_adjustments' and policyname='daily_reconciliation_adjustments_owner_read') then
+  create policy daily_reconciliation_adjustments_owner_read on public.daily_payment_reconciliation_adjustments for select to authenticated using (private.is_active_owner(business_id));
+ end if;
+end $;
 revoke insert,update,delete on public.daily_closing_adjustments,public.daily_payment_reconciliation_adjustments from anon,authenticated;
 grant select on public.daily_closing_adjustments,public.daily_payment_reconciliation_adjustments to authenticated;
 
-create index cash_movements_created_by_idx on public.cash_movements(created_by);
-create index daily_closings_prepared_by_idx on public.daily_closings(prepared_by);
-create index daily_closings_closed_by_idx on public.daily_closings(closed_by);
-create index daily_payment_reconciliations_prepared_by_idx on public.daily_payment_reconciliations(prepared_by);
-create index daily_payment_reconciliations_confirmed_by_idx on public.daily_payment_reconciliations(confirmed_by);
+create index if not exists cash_movements_created_by_idx on public.cash_movements(created_by);
+create index if not exists daily_closings_prepared_by_idx on public.daily_closings(prepared_by);
+create index if not exists daily_closings_closed_by_idx on public.daily_closings(closed_by);
+create index if not exists daily_payment_reconciliations_prepared_by_idx on public.daily_payment_reconciliations(prepared_by);
+create index if not exists daily_payment_reconciliations_confirmed_by_idx on public.daily_payment_reconciliations(confirmed_by);
 
 -- Idempotent retries must return the original result even if the business date has since been closed.
 create or replace function private.owner_record_cash_movement(
@@ -142,8 +146,10 @@ grant execute on function public.owner_record_reconciliation_adjustment(uuid,tex
 create or replace function private.guard_milestone08_adjustment_append_only()
 returns trigger language plpgsql security definer set search_path=''
 as $$ begin raise exception using errcode='55000',message='Financial adjustments are append-only'; end; $$;
+drop trigger if exists daily_closing_adjustments_append_only on public.daily_closing_adjustments;
 create trigger daily_closing_adjustments_append_only before update or delete on public.daily_closing_adjustments
 for each row execute function private.guard_milestone08_adjustment_append_only();
+drop trigger if exists daily_reconciliation_adjustments_append_only on public.daily_payment_reconciliation_adjustments;
 create trigger daily_reconciliation_adjustments_append_only before update or delete on public.daily_payment_reconciliation_adjustments
 for each row execute function private.guard_milestone08_adjustment_append_only();
 
