@@ -29,6 +29,7 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
  const [statement,setStatement]=useState({receipts:"",refunds:"0",reference:"",notes:"",varianceReason:""});
  const [deliveryForm,setDeliveryForm]=useState({order:"",method:"collection" as "collection"|"courier",carrier:"",tracking:"",recipient:"",charge:"0"});
  const [failureReasons,setFailureReasons]=useState<Record<string,string>>({});
+ const [paymentExceptions,setPaymentExceptions]=useState<Record<string,string>>({});
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
@@ -104,6 +105,15 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   if(e2)setError(e2.message);else{setNotice("Delivery attempt recorded. Courier dispatch remains outstanding until receipt confirmation.");setDeliveryForm({order:"",method:"collection",carrier:"",tracking:"",recipient:"",charge:"0"});await load();onChanged();}
   setBusy(false);
  }
+ async function confirmDelivery(delivery:Delivery){
+  if(!supabase)return;
+  setBusy(true);setError("");setNotice("");
+  const {error:e}=await supabase.rpc("owner_handover_order",{p_order_id:delivery.order_id,p_method:delivery.method,
+   p_recipient_name:delivery.recipient_name??"",p_tracking_reference:delivery.tracking_reference,
+   p_payment_exception_reason:(paymentExceptions[delivery.id]??"").trim()||null,p_request_id:rid()});
+  if(e)setError(e.message);else{setNotice(delivery.method==="courier"?"Courier receipt confirmed and order completed.":"Customer collection confirmed and order completed.");await load();onChanged();}
+  setBusy(false);
+ }
  async function failDelivery(delivery:Delivery){
   if(!supabase)return;const reason=(failureReasons[delivery.id]??"").trim();
   if(!reason){setError("Enter why this delivery attempt failed.");return;}
@@ -168,7 +178,11 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
     </form>
    </section>
    <section className="connected-panel"><div className="panel-toolbar"><div><h2>Delivery attempt history</h2><p>Dispatched parcels remain outstanding until receipt is confirmed.</p></div></div>
-    <div className="record-list">{deliveries.map(d=><article className="record-row" key={d.id}><div><b>{d.orders?.order_number??"Order"} · {d.method}</b><small>{d.recipient_name??"Recipient pending"}{d.carrier?" · "+d.carrier:""}{d.tracking_reference?" · "+d.tracking_reference:""} · {new Date(d.created_at).toLocaleString("en-KE")}</small>{d.failure_reason&&<small>Failure: {d.failure_reason}</small>}{d.attempt_status==="dispatched"&&<small>Awaiting courier receipt confirmation</small>}</div><div><span className={"status-chip "+d.attempt_status}>{d.attempt_status.replaceAll("_"," ")}</span>{["prepared","dispatched"].includes(d.attempt_status)&&!d.handed_over_at&&<div className="inline-controls"><input aria-label="Failure reason" placeholder="Failure reason" value={failureReasons[d.id]??""} onChange={e=>setFailureReasons(v=>({...v,[d.id]:e.target.value}))}/><button className="secondary-action" disabled={busy} onClick={()=>void failDelivery(d)}>Mark failed</button></div>}</div></article>)}{!deliveries.length&&<p className="empty-records">No delivery attempts recorded yet.</p>}</div>
+    <div className="record-list">{deliveries.map(d=><article className="record-row" key={d.id}><div><b>{d.orders?.order_number??"Order"} · {d.method}</b><small>{d.recipient_name??"Recipient pending"}{d.carrier?" · "+d.carrier:""}{d.tracking_reference?" · "+d.tracking_reference:""} · {new Date(d.created_at).toLocaleString("en-KE")}</small>{d.failure_reason&&<small>Failure: {d.failure_reason}</small>}{d.attempt_status==="dispatched"&&<small>Awaiting courier receipt confirmation</small>}</div><div><span className={"status-chip "+d.attempt_status}>{d.attempt_status.replaceAll("_"," ")}</span>{["prepared","dispatched"].includes(d.attempt_status)&&!d.handed_over_at&&<div className="inline-controls">
+ {d.attempt_status==="dispatched"&&<input aria-label="Payment exception reason" placeholder="Payment exception reason (if needed)" value={paymentExceptions[d.id]??""} onChange={e=>setPaymentExceptions(v=>({...v,[d.id]:e.target.value}))}/>}
+ <button className="primary-action compact" disabled={busy} onClick={()=>void confirmDelivery(d)}>{d.method==="courier"?"Confirm recipient received parcel":"Confirm collection"}</button>
+ <input aria-label="Failure reason" placeholder="Failure reason" value={failureReasons[d.id]??""} onChange={e=>setFailureReasons(v=>({...v,[d.id]:e.target.value}))}/>
+ <button className="secondary-action" disabled={busy} onClick={()=>void failDelivery(d)}>Mark failed</button></div>}</div></article>)}{!deliveries.length&&<p className="empty-records">No delivery attempts recorded yet.</p>}</div>
    </section>
   </>}
   {section==="Reports"&&<><div className="connected-metrics">
