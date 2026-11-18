@@ -79,8 +79,12 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
   if(!supabase)return;setBusy(true);setError("");setNotice("");
   const {error:deliveryError}=await supabase.rpc("owner_record_delivery",{p_order_id:order.id,p_method:v.method,p_carrier:v.carrier.trim()||null,p_tracking_reference:v.tracking.trim()||null,p_customer_paid_charge:Number(v.charge),p_recipient_name:v.recipient.trim(),p_request_id:rid()});
   if(deliveryError){setError(deliveryError.message);setBusy(false);return;}
+  if(v.method==="courier"){
+   setNotice("Courier dispatched. The parcel remains outstanding until receipt is confirmed in Deliveries.");
+   await load();onChanged();setBusy(false);return;
+  }
   const {error:handoverError}=await supabase.rpc("owner_handover_order",{p_order_id:order.id,p_method:v.method,p_recipient_name:v.recipient.trim(),p_tracking_reference:v.tracking.trim()||null,p_payment_exception_reason:v.exception.trim()||null,p_request_id:rid()});
-  if(handoverError)setError(handoverError.message);else setNotice("Delivery charge and handover recorded. Any payment exception was approved and audited.");
+  if(handoverError)setError(handoverError.message);else setNotice("Customer collection confirmed. Any payment exception was approved and audited.");
   await load();onChanged();setBusy(false);
  };
  return <section className="connected-panel order-production">

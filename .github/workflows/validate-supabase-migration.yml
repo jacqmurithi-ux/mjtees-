@@ -2,7 +2,7 @@ name: Validate Supabase migration locally
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/owner-first-production-workflow]
     paths:
       - "supabase/migrations/**"
       - "supabase/functions/**"

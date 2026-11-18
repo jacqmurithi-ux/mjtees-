@@ -72,3 +72,22 @@
  .responsive-workspace .record-row,.responsive-workspace .enquiry-card{border-color:#35444b}.responsive-workspace .notice.error{background:#492b29;color:#ffd1cb}.responsive-workspace .notice.success{background:#1d3b2a;color:#bce9ca}
  .more-module{background:#1b282f;color:#edf3f5;border-color:#35444b}.more-module.active{background:#49301f;color:#ffbd86;border-color:#8a5837}
 }
+
+/* Customer relationships workspace */
+.customer-management{display:grid;gap:1rem;min-width:0}
+.customer-layout{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);gap:1rem;align-items:start}
+.customer-directory,.customer-detail{min-width:0;border:1px solid var(--border,#d8e0e3);border-radius:14px;padding:1rem;background:var(--panel,#fff)}
+.customer-directory{display:grid;gap:.55rem;max-height:76vh;overflow:auto}
+.customer-choice{display:grid;gap:.2rem;text-align:left;width:100%;padding:.75rem;border:1px solid transparent;border-radius:10px;background:transparent;color:inherit;cursor:pointer}
+.customer-choice:hover,.customer-choice.active{border-color:#d78a42;background:rgba(215,138,66,.09)}
+.customer-choice small{opacity:.75;overflow-wrap:anywhere}
+.customer-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem 1rem;padding:.5rem 0}
+.customer-facts p{margin:.25rem 0;overflow-wrap:anywhere}
+.connected-tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin:1rem 0;border-bottom:1px solid var(--border,#d8e0e3);padding-bottom:.5rem}
+.connected-tabs button{border:1px solid var(--border,#d8e0e3);border-radius:999px;background:transparent;color:inherit;padding:.5rem .8rem;cursor:pointer}
+.connected-tabs button.active{background:#173c2a;color:#fff;border-color:#173c2a}
+.customer-detail>.record-form{margin:1rem 0}
+.customer-management .customer-directory .workspace-search{position:sticky;top:0;background:var(--panel,#fff);z-index:1}
+.customer-management .record-row{min-width:0}
+.customer-management .record-row small,.customer-management .record-row p{overflow-wrap:anywhere}
+@media(max-width:760px){.customer-layout{grid-template-columns:minmax(0,1fr)}.customer-directory{max-height:34vh}.customer-facts{grid-template-columns:minmax(0,1fr)}.customer-management .panel-toolbar{align-items:flex-start;flex-wrap:wrap}.customer-management .panel-toolbar .form-actions{flex-wrap:wrap}.customer-detail{padding:.75rem}}
