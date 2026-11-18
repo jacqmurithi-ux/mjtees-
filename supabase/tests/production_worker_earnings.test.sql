@@ -60,7 +60,7 @@ where q.business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   and q.quote_number=(select max(quote_number) from public.quotations where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
 
 insert into public.order_items(
-  id,business_id,order_id,line_sequence,description,quantity,unit,unit_price,
+  id,business_id,order_id,quotation_item_id,line_sequence,description,quantity,unit,unit_price,
   line_discount,order_discount_allocated,line_total,customer_supplies_item,
   sale_mode,production_method_id,production_specification
 )
@@ -68,6 +68,9 @@ values(
   'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  (select qi.id from public.quotation_items qi
+   join public.orders o on o.business_id=qi.business_id and o.quotation_id=qi.quotation_id
+   where o.id='cccccccc-cccc-4ccc-8ccc-cccccccccccc' and qi.line_sequence=1),
   1,'Printed uniform test line',10,'piece',1000,
   100,100,9800,false,'value_added',
   (select id from public.production_methods where code='vinyl_cut'),'{}'::jsonb
