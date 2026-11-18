@@ -31,14 +31,14 @@ create index if not exists daily_payment_reconciliation_adjustments_idx on publi
 
 alter table public.daily_closing_adjustments enable row level security;
 alter table public.daily_payment_reconciliation_adjustments enable row level security;
-do $ begin
+do $policy$ begin
  if not exists(select 1 from pg_policies where schemaname='public' and tablename='daily_closing_adjustments' and policyname='daily_closing_adjustments_owner_read') then
   create policy daily_closing_adjustments_owner_read on public.daily_closing_adjustments for select to authenticated using (private.is_active_owner(business_id));
  end if;
  if not exists(select 1 from pg_policies where schemaname='public' and tablename='daily_payment_reconciliation_adjustments' and policyname='daily_reconciliation_adjustments_owner_read') then
   create policy daily_reconciliation_adjustments_owner_read on public.daily_payment_reconciliation_adjustments for select to authenticated using (private.is_active_owner(business_id));
  end if;
-end $;
+end $policy$;
 revoke insert,update,delete on public.daily_closing_adjustments,public.daily_payment_reconciliation_adjustments from anon,authenticated;
 grant select on public.daily_closing_adjustments,public.daily_payment_reconciliation_adjustments to authenticated;
 
