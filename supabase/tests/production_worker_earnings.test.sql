@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(22);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('11111111-1111-4111-8111-111111111111','authenticated','authenticated',
@@ -202,6 +202,60 @@ select is(
      select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'))),
   1::bigint,
   'Allocation history is append-only and retains the adjustment'
+);
+
+select is(
+  public.owner_record_quality_check(
+    (select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+    'pass','self','11111111-1111-4111-8111-111111111111','Batch output passed QC',
+    '70000000-0000-4000-8000-000000000001')->>'result',
+  'pass','Latest passing QC permits accepted quantity movements'
+);
+
+select is(
+  public.owner_create_production_batch(
+    (select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+    current_date,'Worker and quantity integration batch',
+    '70000000-0000-4000-8000-000000000002')->>'status',
+  'open','Owner creates a daily production batch'
+);
+
+select is(
+  public.owner_record_production_quantity_movement(
+    (select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+    (select id from public.production_batches where job_id=(select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+    'received',10,null,'70000000-0000-4000-8000-000000000003')->>'to_state',
+  'pending','Received quantity enters pending state'
+);
+
+select is(
+  public.owner_record_production_quantity_movement(
+    (select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+    (select id from public.production_batches where job_id=(select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+    'started',10,null,'70000000-0000-4000-8000-000000000004')->>'to_state',
+  'in_production','Quantity moves into production'
+);
+
+select is(
+  public.owner_record_production_quantity_movement(
+    (select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+    (select id from public.production_batches where job_id=(select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+    'accepted',10,null,'70000000-0000-4000-8000-000000000005')->>'to_state',
+  'accepted','QC-passed quantity moves to accepted'
+);
+
+select is(
+  public.owner_close_production_batch(
+    (select id from public.production_batches where job_id=(select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+    'Daily quantity reconciled','70000000-0000-4000-8000-000000000006')->>'status',
+  'closed','Owner closes the reconciled production batch'
+);
+
+select is(
+  (public.owner_complete_production_job(
+    (select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+    '70000000-0000-4000-8000-000000000007')->>'actual_cost_total')::bigint,
+  1600::bigint,'Job completion includes confirmed worker earnings exactly once after quantity reconciliation'
 );
 
 reset role;
