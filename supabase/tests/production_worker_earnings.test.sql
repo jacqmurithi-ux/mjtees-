@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(22);
+select plan(25);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('11111111-1111-4111-8111-111111111111','authenticated','authenticated',
@@ -108,6 +108,39 @@ select is(
    from public.order_items where id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
   5880::bigint,
   'Garment supply net amount reconciles independently'
+);
+
+select is(
+  public.owner_create_quotation_with_discount_and_price_components(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    null,
+    jsonb_build_array(jsonb_build_object(
+      'description','Printed uniform with order discount',
+      'quantity',10,'unit','piece','unit_price',1000,'line_discount',100,
+      'catalogue_item_id','eeeeeeee-aaaa-4eee-8eee-eeeeeeeeeeee',
+      'category_id','dddddddd-aaaa-4ddd-8ddd-dddddddddddd',
+      'sale_mode','value_added','customer_supplies_item',false,
+      'production_method_id',(select id from public.production_methods where code='vinyl_cut'),
+      'production_specification','{}'::jsonb,'garment_supply_unit_price',600
+    )),
+    100,null,null,null,'10000000-0000-4000-8000-000000000003'
+  )->>'order_discount',
+  '100','Order-level discount is preserved through the component-aware quotation path'
+);
+
+select is(
+  (select order_discount_allocated from public.quotation_items
+   where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+     order by created_at desc,id desc limit 1)),
+  100::bigint,'Largest-remainder order discount allocation is retained on the quotation line'
+);
+
+select is(
+  (select (price_components->>'printing_unit_price')::bigint from public.quotation_items
+   where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+     order by created_at desc,id desc limit 1)),
+  400::bigint,'Order discount does not erase the printing component unit-price snapshot'
 );
 
 select is(
