@@ -20,7 +20,14 @@ grant execute on function private.accept_quotation_token(text,uuid) to anon,auth
 revoke all on function public.accept_quotation(text,uuid) from public;
 grant execute on function public.accept_quotation(text,uuid) to anon,authenticated;
 
--- Event-trigger handlers are invoked by PostgreSQL, not through the Data API.
-revoke all on function public.rls_auto_enable() from public,anon,authenticated;
+-- Some hosted projects have the Supabase Dashboard event-trigger helper; the
+-- disposable local stack does not. Revoke its Data API privileges when present.
+do $block$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke all on function public.rls_auto_enable() from public, anon, authenticated';
+  end if;
+end
+$block$;
 
 commit;
