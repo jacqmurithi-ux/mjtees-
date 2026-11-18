@@ -1,0 +1,21 @@
+.vinyl-calculator{display:grid;gap:18px;padding:20px;border:1px solid var(--mj-border,#e4eaed);border-radius:16px;background:#fff;color:var(--mj-ink,#17242c)}
+.vinyl-calculator-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.vinyl-calculator-heading h3{margin:4px 0 6px;font-size:22px;letter-spacing:-.03em}
+.vinyl-calculator-heading p:last-child{margin:0;color:var(--mj-muted,#667780);font-size:13px;line-height:1.5}
+.vinyl-tag{padding:7px 10px;border-radius:9px;background:#eaf6ee;color:#176b39;font-size:11px;font-weight:800}
+.vinyl-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.vinyl-grid label,.vinyl-final-row label{display:grid;gap:6px;min-width:0;font-size:12px;font-weight:700;color:#53636c}
+.vinyl-grid input,.vinyl-grid select,.vinyl-final-row input{width:100%;min-width:0;min-height:42px;padding:9px 11px;border:1px solid var(--mj-border,#e4eaed);border-radius:9px;background:#fff;color:var(--mj-ink,#17242c);font:inherit;font-weight:500}
+.vinyl-grid .vinyl-check{display:flex;align-items:center;gap:9px;min-height:42px}
+.vinyl-grid .vinyl-check input{width:17px;min-height:17px;accent-color:var(--mj-green,#239653)}
+.vinyl-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.vinyl-summary>div,.vinyl-final-row>div{display:grid;gap:5px;padding:13px;border:1px solid var(--mj-border,#e4eaed);border-radius:11px;background:#f8fafb}
+.vinyl-summary span,.vinyl-final-row span{font-size:11px;color:var(--mj-muted,#667780);font-weight:700}
+.vinyl-summary b,.vinyl-final-row b{font-size:18px;color:var(--mj-ink,#17242c)}
+.vinyl-summary small,.vinyl-final-row small{font-size:11px;line-height:1.45;color:var(--mj-muted,#667780)}
+.vinyl-final-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end}
+.vinyl-final-row>div{min-height:74px}
+.vinyl-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px}
+.vinyl-calculator .notice{margin:0}
+@media(max-width:760px){.vinyl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.vinyl-summary{grid-template-columns:1fr}.vinyl-final-row{grid-template-columns:1fr}}
+@media(max-width:430px){.vinyl-calculator{padding:14px}.vinyl-grid{grid-template-columns:1fr}.vinyl-actions{display:grid;grid-template-columns:1fr}.vinyl-actions button{width:100%}}
