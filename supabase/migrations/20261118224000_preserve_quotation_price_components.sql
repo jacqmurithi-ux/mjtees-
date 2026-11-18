@@ -384,4 +384,118 @@ revoke all on function public.owner_create_quotation_revision_with_price_compone
 grant execute on function public.owner_create_quotation_with_price_components(uuid,uuid,uuid,jsonb,timestamptz,text,text,uuid) to authenticated;
 grant execute on function public.owner_create_quotation_revision_with_price_components(uuid,jsonb,timestamptz,text,text,uuid) to authenticated;
 
+
+create or replace function private.owner_classify_order_item_price_components(
+  p_order_item_id uuid,
+  p_garment_supply_unit_price bigint,
+  p_reason text,
+  p_request_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_item public.order_items%rowtype;
+  v_actor uuid;
+  v_cached jsonb;
+  v_payload jsonb;
+  v_garment_unit bigint;
+  v_gross_total bigint;
+  v_garment_gross bigint;
+  v_printing_gross bigint;
+  v_line_discount bigint[];
+  v_order_discount bigint[];
+  v_result jsonb;
+begin
+  select * into v_item from public.order_items where id=p_order_item_id;
+  if not found then raise exception using errcode='P0002',message='Order item not found'; end if;
+  v_actor:=private.assert_active_owner(v_item.business_id);
+  if p_request_id is null or length(btrim(coalesce(p_reason,''))) not between 1 and 500 then
+    raise exception using errcode='22023',message='Classification reason and request ID are required';
+  end if;
+
+  v_payload:=jsonb_build_object('order_item_id',p_order_item_id,
+    'garment_supply_unit_price',p_garment_supply_unit_price,'reason',btrim(p_reason));
+  v_cached:=private.begin_idempotent_request(v_item.business_id,'classify_order_item_price_components',p_request_id,v_payload);
+  if v_cached is not null then return v_cached; end if;
+
+  select * into v_item from public.order_items
+  where business_id=v_item.business_id and id=p_order_item_id for update;
+  if v_item.price_components_snapshot is not null then
+    raise exception using errcode='22023',message='Order item already has an immutable price-component snapshot';
+  end if;
+
+  if v_item.customer_supplies_item then
+    v_garment_unit:=0;
+  elsif v_item.sale_mode='blank' then
+    v_garment_unit:=v_item.unit_price;
+  else
+    v_garment_unit:=p_garment_supply_unit_price;
+  end if;
+
+  if v_garment_unit is null or v_garment_unit<0 or v_garment_unit>v_item.unit_price then
+    raise exception using errcode='22023',message='Garment-supply unit price must be between zero and the total unit price';
+  end if;
+
+  v_gross_total:=round(v_item.quantity*v_item.unit_price)::bigint;
+  v_garment_gross:=round(v_item.quantity*v_garment_unit)::bigint;
+  v_printing_gross:=v_gross_total-v_garment_gross;
+  v_line_discount:=private.allocate_two_component_discount(
+    v_item.line_discount,v_garment_gross,v_printing_gross
+  );
+  v_order_discount:=private.allocate_two_component_discount(
+    v_item.order_discount_allocated,v_garment_gross-v_line_discount[1],
+    v_printing_gross-v_line_discount[2]
+  );
+
+  update public.order_items
+  set price_components_snapshot=jsonb_build_object(
+    'version',1,
+    'currency_code','KES',
+    'garment_supply_unit_price',v_garment_unit,
+    'printing_unit_price',v_item.unit_price-v_garment_unit,
+    'garment_supply_gross_amount',v_garment_gross,
+    'printing_gross_amount',v_printing_gross,
+    'line_discount_garment_supply',v_line_discount[1],
+    'line_discount_printing',v_line_discount[2],
+    'order_discount_garment_supply',v_order_discount[1],
+    'order_discount_printing',v_order_discount[2],
+    'garment_supply_net_amount',v_garment_gross-v_line_discount[1]-v_order_discount[1],
+    'printing_net_amount',v_printing_gross-v_line_discount[2]-v_order_discount[2],
+    'eligible_printing_revenue',v_printing_gross-v_line_discount[2]-v_order_discount[2],
+    'classification','owner_manual',
+    'classification_reason',btrim(p_reason)
+  )
+  where business_id=v_item.business_id and id=p_order_item_id;
+
+  v_result:=jsonb_build_object('order_item_id',p_order_item_id,
+    'garment_supply_unit_price',v_garment_unit,
+    'printing_unit_price',v_item.unit_price-v_garment_unit,
+    'eligible_printing_revenue',v_printing_gross-v_line_discount[2]-v_order_discount[2],
+    'classification','owner_manual');
+  perform private.finish_idempotent_request(v_item.business_id,'classify_order_item_price_components',p_request_id,v_result);
+  perform private.write_audit(v_item.business_id,v_actor,'order_item.price_components_classified',
+    'order_item',p_order_item_id,p_request_id,
+    jsonb_build_object('garment_supply_unit_price',v_garment_unit,
+      'printing_unit_price',v_item.unit_price-v_garment_unit,'reason',btrim(p_reason)));
+  return v_result;
+end;
+$function$;
+
+create or replace function public.owner_classify_order_item_price_components(
+  p_order_item_id uuid,p_garment_supply_unit_price bigint,p_reason text,p_request_id uuid
+)
+returns jsonb language sql security invoker set search_path=''
+as $function$
+  select private.owner_classify_order_item_price_components($1,$2,$3,$4);
+$function$;
+
+revoke all on function private.owner_classify_order_item_price_components(uuid,bigint,text,uuid) from public,anon,authenticated;
+grant usage on schema private to authenticated;
+grant execute on function private.owner_classify_order_item_price_components(uuid,bigint,text,uuid) to authenticated;
+revoke all on function public.owner_classify_order_item_price_components(uuid,bigint,text,uuid) from public,anon;
+grant execute on function public.owner_classify_order_item_price_components(uuid,bigint,text,uuid) to authenticated;
+
 commit;
