@@ -20,6 +20,18 @@ values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaa
 set local role authenticated;
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
 
+-- The quotation workflow requires an active versioned costing profile.
+select public.owner_create_costing_profile(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  null,null,'value_added',
+  (select id from public.production_methods where code='vinyl_cut'),
+  jsonb_build_array(jsonb_build_object(
+    'component_type','machine_time','unit','piece','driver_type','per_piece',
+    'factor',0,'expected_waste_percent',0,'fixed_cost',0
+  )),
+  '10000000-0000-4000-8000-000000000002'
+);
+
 -- Create a quote with an explicit KSh 600 garment component and KSh 400 printing component.
 select is(
   public.owner_create_quotation_with_price_components(
