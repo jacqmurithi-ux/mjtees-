@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(32);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('11111111-1111-4111-8111-111111111111','authenticated','authenticated',
@@ -217,8 +217,25 @@ select is(
 
 select is(
   (public.owner_confirm_worker_earnings(
-    (select id from public.production_worker_assignments where job_id=(
-      select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+    (select id from public.production_worker_assignments where worker_id=(
+      select id from public.production_workers where full_name='Second Temporary Worker')),
+    1,'One completed piece','40000000-0000-4000-8000-000000000002'
+  )->>'amount')::bigint,
+  100::bigint,'Second worker earnings use the agreed quantity rate'
+);
+
+select is(
+  public.owner_close_worker_assignment(
+    (select id from public.production_worker_assignments where worker_id=(
+      select id from public.production_workers where full_name='Second Temporary Worker')),
+    'completed','One piece completed and earnings confirmed',
+    '40000000-0000-4000-8000-000000000003')->>'status',
+  'completed','Owner closes the second worker assignment after confirming earnings'
+);
+
+select is(
+  (public.owner_confirm_worker_earnings(
+    (select id from public.production_worker_assignments where worker_id=(select id from public.production_workers where full_name='Temporary Worker')),
     2,'Two approved work days','40000000-0000-4000-8000-000000000001'
   )->>'amount')::bigint,
   1600::bigint,
@@ -251,8 +268,7 @@ select is(
     (select id from public.production_workers where full_name='Temporary Worker'),
     1000,'mpesa','QWERTY123456','Part payment',now(),
     jsonb_build_array(jsonb_build_object(
-      'earning_id',(select id from public.production_worker_earnings where job_id=(
-        select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+      'earning_id',(select id from public.production_worker_earnings where worker_id=(select id from public.production_workers where full_name='Temporary Worker')),
       'amount',1000
     )),
     '50000000-0000-4000-8000-000000000001'
@@ -267,8 +283,7 @@ select throws_ok(
     (select id from public.production_workers where full_name='Temporary Worker'),
     601,'mpesa','OVERPAY','Overpayment attempt',now(),
     jsonb_build_array(jsonb_build_object(
-      'earning_id',(select id from public.production_worker_earnings where job_id=(
-        select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
+      'earning_id',(select id from public.production_worker_earnings where worker_id=(select id from public.production_workers where full_name='Temporary Worker')),
       'amount',601
     )),
     '50000000-0000-4000-8000-000000000002'
@@ -283,6 +298,7 @@ select is(
    left join public.production_worker_payment_allocations a
      on a.business_id=e.business_id and a.earning_id=e.id
    where e.job_id=(select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')
+     and e.worker_id=(select id from public.production_workers where full_name='Temporary Worker')
    group by e.id,e.amount),
   600::bigint,
   'Outstanding worker balance remains after partial payment'
@@ -291,7 +307,7 @@ select is(
 select is(
   (select sum(amount) from public.production_cost_entries
    where job_id=(select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd')),
-  1600::bigint,
+  1700::bigint,
   'Worker settlement does not create a second production cost'
 );
 
@@ -312,6 +328,15 @@ select is(
      select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'))),
   1::bigint,
   'Allocation history is append-only and retains the adjustment'
+);
+
+select is(
+  public.owner_close_worker_assignment(
+    (select id from public.production_worker_assignments where worker_id=(
+      select id from public.production_workers where full_name='Temporary Worker')),
+    'completed','All work and earnings confirmed',
+    '40000000-0000-4000-8000-000000000004')->>'status',
+  'completed','Owner closes the first worker assignment after confirming all earnings'
 );
 
 select is(
@@ -365,7 +390,7 @@ select is(
   (public.owner_complete_production_job(
     (select id from public.production_jobs where order_item_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
     '70000000-0000-4000-8000-000000000007')->>'actual_cost_total')::bigint,
-  1600::bigint,'Job completion includes confirmed worker earnings exactly once after quantity reconciliation'
+  1700::bigint,'Job completion includes all confirmed worker earnings exactly once after quantity reconciliation'
 );
 
 reset role;
