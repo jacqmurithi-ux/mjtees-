@@ -9,11 +9,11 @@ create table public.website_content (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null unique references public.businesses(id) on delete cascade,
   content jsonb not null default '{}'::jsonb
-    check (jsonb_typeof(content) = 'object'),
+    constraint website_content_object check (jsonb_typeof(content) = 'object'),
   is_published boolean not null default false,
   published_at timestamptz,
   updated_at timestamptz not null default now(),
-  updated_by uuid references auth.users(id) on delete set null
+  updated_by uuid references auth.users(id)
 );
 
 create or replace function public.set_website_content_updated_at()
