@@ -16,6 +16,11 @@ values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111
 insert into public.customers(id,business_id,display_name,created_by)
 values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'Worker Test Customer','11111111-1111-4111-8111-111111111111');
+insert into public.service_categories(id,business_id,name,slug)
+values('dddddddd-aaaa-4ddd-8ddd-dddddddddddd','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Apparel','apparel');
+insert into public.catalogue_items(id,business_id,category_id,name,slug,item_type,is_published)
+values('eeeeeeee-aaaa-4eee-8eee-eeeeeeeeeeee','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'dddddddd-aaaa-4ddd-8ddd-dddddddddddd','Printed Uniform','printed-uniform','product',true);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
@@ -23,7 +28,8 @@ select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111'
 -- The quotation workflow requires an active versioned costing profile.
 select public.owner_create_costing_profile(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  null,null,'value_added',
+  'eeeeeeee-aaaa-4eee-8eee-eeeeeeeeeeee',
+  'dddddddd-aaaa-4ddd-8ddd-dddddddddddd','value_added',
   (select id from public.production_methods where code='vinyl_cut'),
   jsonb_build_array(jsonb_build_object(
     'component_type','machine_time','unit','piece','driver_type','per_piece',
@@ -44,6 +50,8 @@ select is(
       'unit','piece',
       'unit_price',1000,
       'line_discount',100,
+      'catalogue_item_id','eeeeeeee-aaaa-4eee-8eee-eeeeeeeeeeee',
+      'category_id','dddddddd-aaaa-4ddd-8ddd-dddddddddddd',
       'sale_mode','value_added',
       'customer_supplies_item',false,
       'production_method_id',(select id from public.production_methods where code='vinyl_cut'),
