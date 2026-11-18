@@ -124,7 +124,8 @@ create table public.temporary_labour_allocations (
   foreign key (business_id,order_item_id) references public.order_items(business_id,id) on delete restrict,
   foreign key (business_id,triggered_by_assignment_id) references public.production_worker_assignments(business_id,id) on delete restrict,
   unique (business_id,id),
-  unique (business_id,job_id)
+  unique (business_id,job_id),
+  unique (business_id,order_item_id)
 );
 
 create table public.temporary_labour_adjustments (
@@ -331,12 +332,12 @@ begin
       v_assignment.business_id,v_job.id,v_job.order_item_id,v_revenue,20.00,
       round(v_revenue::numeric*0.20,2),p_assignment_id,now(),v_actor
     )
-    on conflict (business_id,job_id) do nothing
+    on conflict (business_id,order_item_id) do nothing
     returning id into v_allocation_id;
 
     if v_allocation_id is null then
       select id into v_allocation_id from public.temporary_labour_allocations
-      where business_id=v_assignment.business_id and job_id=v_job.id;
+      where business_id=v_assignment.business_id and order_item_id=v_job.order_item_id;
     end if;
   end if;
 
