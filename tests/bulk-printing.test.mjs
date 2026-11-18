@@ -22,7 +22,7 @@ test("customer supplied garments are not written to inventory by the output ledg
   assert.match(sql, /production_output_entries/);
   assert.match(sql, /insert into public\.production_cost_entries/);
   assert.match(sql, /owner_list_production_output/);
-  assert.doesNotMatch(sql, /as \\$(?:\\n| )/);
+  assert.doesNotMatch(sql, /as \$(?:\n| )/);
   assert.match(sql, /private\.assert_active_owner\(p_business_id\)/);
 });
 
