@@ -83,8 +83,8 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   if(e)setError(e.message);else{setMovement({type:"till_top_up",amount:"",source:"",destination:"",reference:"",notes:""});setNotice("Cash movement recorded.");await load();onChanged();}
   setBusy(false);
  }
- async function saveReconciliation(e:FormEvent,confirm:boolean){
-  e.preventDefault();if(!supabase)return;
+ async function saveReconciliation(confirm:boolean){
+  if(!supabase)return;
   const receipts=Number(statement.receipts),refunds=Number(statement.refunds);
   if(!Number.isSafeInteger(receipts)||receipts<0||!Number.isSafeInteger(refunds)||refunds<0){setError("Enter valid whole-KES statement totals.");return;}
   setBusy(true);setError("");setNotice("");
@@ -145,13 +145,13 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   </>}
   {section==="Reconciliation"&&<section className="connected-panel"><div className="panel-toolbar"><div><h2>M-Pesa reconciliation</h2><p>Compare posted, verified M-Pesa receipts and refunds with the statement. Pending evidence must be verified or rejected first.</p></div>{reconciliation?.status==="confirmed"&&<span className="status-chip completed">Confirmed</span>}</div>
    {reconciliation&&<div className="connected-metrics">{card("System receipts",money(reconciliation.system_receipts))}{card("System refunds",money(reconciliation.system_refunds))}{card("Net statement",money(reconciliation.net_statement))}{card("Difference",money(reconciliation.difference))}</div>}
-   <form className="record-form" onSubmit={e=>void saveReconciliation(e,false)}>
+   <form className="record-form" onSubmit={e=>{e.preventDefault();void saveReconciliation(false);}}>
     <label>Statement receipts (KES)<input type="number" min="0" step="1" required disabled={reconciliation?.status==="confirmed"} value={statement.receipts} onChange={e=>setStatement(v=>({...v,receipts:e.target.value}))}/></label>
     <label>Statement refunds (KES)<input type="number" min="0" step="1" required disabled={reconciliation?.status==="confirmed"} value={statement.refunds} onChange={e=>setStatement(v=>({...v,refunds:e.target.value}))}/></label>
     <label>Statement reference<input disabled={reconciliation?.status==="confirmed"} value={statement.reference} onChange={e=>setStatement(v=>({...v,reference:e.target.value}))}/></label>
     <label className="wide-field">Notes<textarea disabled={reconciliation?.status==="confirmed"} value={statement.notes} onChange={e=>setStatement(v=>({...v,notes:e.target.value}))}/></label>
     <label className="wide-field">Variance explanation<textarea disabled={reconciliation?.status==="confirmed"} value={statement.varianceReason} onChange={e=>setStatement(v=>({...v,varianceReason:e.target.value}))} placeholder="Required if statement and system totals differ"/></label>
-    {reconciliation?.status!=="confirmed"&&<div className="form-actions"><button className="secondary-action" type="submit" disabled={busy}>Save draft</button><button className="primary-action" type="button" disabled={busy||!statement.receipts} onClick={e=>{const form=e.currentTarget.form;if(form)void saveReconciliation({preventDefault:()=>{},currentTarget:form} as unknown as FormEvent,true);}}>Confirm reconciliation</button></div>}
+    {reconciliation?.status!=="confirmed"&&<div className="form-actions"><button className="secondary-action" type="submit" disabled={busy}>Save draft</button><button className="primary-action" type="button" disabled={busy||!statement.receipts} onClick={()=>void saveReconciliation(true)}>Confirm reconciliation</button></div>}
    </form>
    <p className="small-note">Bank and card reconciliation are not enabled until those receipt methods are added to the payment ledger. Transfers from M-Pesa to bank are not new receipts.</p>
   </section>}
