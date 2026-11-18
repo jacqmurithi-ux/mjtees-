@@ -292,6 +292,12 @@ begin
     ) then
       raise exception using errcode='23514',message='Close every production batch before completing the job';
     end if;
+    if exists(
+      select 1 from public.production_worker_assignments a
+      where a.business_id=new.business_id and a.job_id=new.id and a.status in ('assigned','working')
+    ) then
+      raise exception using errcode='23514',message='Complete or cancel every worker assignment before completing the production job';
+    end if;
 
     select
       coalesce(sum(case when from_state is null and to_state='pending' then quantity else 0 end),0),
