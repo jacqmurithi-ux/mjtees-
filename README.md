@@ -79,6 +79,8 @@ Owner access is by email/password with public registration disabled. The signed-
 - Full payment is required before handover unless the owner records an explicit, audited exception.
 - Courier delivery is recorded at actual carrier cost as a pass-through.
 - Artwork files stay in Google Drive; only references and version/approval details belong in the system.
+- Production is owner-first: daily batches, garment quantity movements, optional worker assignments, confirmed earnings linked once to production costs, and separate worker payment settlements. Worker logins are not required.
+- Quotation and accepted-order records preserve supplied-item and printing price components. The 20% temporary-labour allocation uses eligible net printing revenue and is triggered only when temporary work actually commences.
 - Staff accounts, automatic Daraja confirmation, tax and messaging integrations are deferred.
 
 ## Change control
