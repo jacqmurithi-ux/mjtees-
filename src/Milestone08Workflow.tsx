@@ -5,10 +5,12 @@ import { supabase } from "./lib/supabase";
 type Section = "Daily Closing" | "Reconciliation" | "Deliveries" | "Reports";
 type Closing = { id:string; business_date:string; status:string; opening_float:number; posted_cash_receipts:number; posted_cash_refunds:number; cash_expenses:number; cash_top_ups:number; cash_bank_deposits:number; cash_owner_withdrawals:number; other_cash_in:number; other_cash_out:number; expected_cash:number; actual_cash:number|null; difference:number|null; notes:string|null; variance_reason:string|null };
 type Movement = { id:string; movement_type:string; direction:string; amount:number; notes:string; reference:string|null; created_at:string };
+type ClosingAdjustment = { id:string; adjustment_type:string; amount:number; reason:string; created_at:string };
+type ReconciliationAdjustment = { id:string; bucket:string; direction:string; amount:number; reason:string; created_at:string };
 type Reconciliation = { id:string; method:string; status:string; system_receipts:number; system_refunds:number; statement_receipts:number; statement_refunds:number; net_system:number; net_statement:number; difference:number; statement_reference:string|null; notes:string|null; variance_reason:string|null };
 type Delivery = { id:string; order_id:string; method:string; carrier:string|null; tracking_reference:string|null; customer_paid_charge:number; recipient_name:string|null; dispatched_at:string|null; handed_over_at:string|null; created_at:string; attempt_status:string; failed_at:string|null; failure_reason:string|null; orders:{order_number:string;status:string}|null };
 type ReadyOrder = { id:string; order_number:string; status:string };
-type Summary = { orders_in_progress:number; ready_awaiting_collection:number; courier_outstanding:number; failed_delivery_attempts:number; overdue_orders:number; pending_mpesa:number; order_value:number; posted_receipts:number; posted_refunds:number; expenses:number; cash_expenses:number; production_costs:number; daily_closing:Closing|null; mpesa_reconciliation:Reconciliation|null };
+type Summary = { outstanding_balances:number; orders_in_progress:number; ready_awaiting_collection:number; courier_outstanding:number; failed_delivery_attempts:number; overdue_orders:number; pending_mpesa:number; order_value:number; posted_receipts:number; posted_refunds:number; expenses:number; cash_expenses:number; production_costs:number; daily_closing:Closing|null; mpesa_reconciliation:Reconciliation|null };
 const rid=()=>crypto.randomUUID();
 const money=(n:number|null|undefined)=>new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:0}).format(Number(n??0));
 const todayNairobi=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Nairobi",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
@@ -18,6 +20,10 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
  const [closing,setClosing]=useState<Closing|null>(null);
  const [movements,setMovements]=useState<Movement[]>([]);
  const [reconciliation,setReconciliation]=useState<Reconciliation|null>(null);
+ const [closingAdjustments,setClosingAdjustments]=useState<ClosingAdjustment[]>([]);
+ const [reconciliationAdjustments,setReconciliationAdjustments]=useState<ReconciliationAdjustment[]>([]);
+ const [closingAdjustmentForm,setClosingAdjustmentForm]=useState({type:"cash_in",amount:"",reason:""});
+ const [reconciliationAdjustmentForm,setReconciliationAdjustmentForm]=useState({bucket:"system_receipt",direction:"add",amount:"",reason:""});
  const [deliveries,setDeliveries]=useState<Delivery[]>([]);
  const [readyOrders,setReadyOrders]=useState<ReadyOrder[]>([]);
  const [summary,setSummary]=useState<Summary|null>(null);
@@ -49,8 +55,15 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   const failure=sum.error||close.error||movs.error||recon.error||delivery.error||ready.error;
   if(failure)throw failure;
   const nextClose=(close.data??null) as Closing|null;
+  const nextRecon=(recon.data??null) as Reconciliation|null;
+  const [closeAdj,reconAdj]=await Promise.all([
+   nextClose?client.from("daily_closing_adjustments").select("id,adjustment_type,amount,reason,created_at").eq("business_id",businessId).eq("daily_closing_id",nextClose.id).order("created_at",{ascending:false}):Promise.resolve({data:[],error:null}),
+   nextRecon?client.from("daily_payment_reconciliation_adjustments").select("id,bucket,direction,amount,reason,created_at").eq("business_id",businessId).eq("reconciliation_id",nextRecon.id).order("created_at",{ascending:false}):Promise.resolve({data:[],error:null})
+  ]);
+  if(closeAdj.error||reconAdj.error)throw closeAdj.error||reconAdj.error;
   setSummary(sum.data as Summary);setClosing(nextClose);setMovements((movs.data??[]) as Movement[]);
-  const nextRecon=(recon.data??null) as Reconciliation|null;setReconciliation(nextRecon);
+  setClosingAdjustments((closeAdj.data??[]) as ClosingAdjustment[]);setReconciliationAdjustments((reconAdj.data??[]) as ReconciliationAdjustment[]);
+  setReconciliation(nextRecon);
   setDeliveries((delivery.data??[]) as unknown as Delivery[]);setReadyOrders((ready.data??[]) as ReadyOrder[]);
   if(nextClose){setOpeningFloat(String(nextClose.opening_float));setActualCash(nextClose.actual_cash===null?"":String(nextClose.actual_cash));setClosingNotes(nextClose.notes??"");setVarianceReason(nextClose.variance_reason??"");}
   else {setOpeningFloat("");setActualCash("");setClosingNotes("");setVarianceReason("");}
@@ -93,6 +106,24 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
    p_method:"mpesa",p_statement_receipts:receipts,p_statement_refunds:refunds,p_statement_reference:statement.reference.trim()||null,
    p_notes:statement.notes.trim()||null,p_variance_reason:statement.varianceReason.trim()||null,p_confirm:confirm,p_request_id:rid()});
   if(e2)setError(e2.message);else{setNotice(confirm?"M-Pesa reconciliation confirmed and locked.":"M-Pesa reconciliation draft saved.");await load();onChanged();}
+  setBusy(false);
+ }
+ async function recordClosingAdjustment(e:FormEvent){
+  e.preventDefault();if(!supabase||!closing)return;
+  const amount=Number(closingAdjustmentForm.amount);
+  if(!Number.isSafeInteger(amount)||amount<=0||!closingAdjustmentForm.reason.trim()){setError("Enter a positive whole-KES adjustment and reason.");return;}
+  setBusy(true);setError("");setNotice("");
+  const {error:e2}=await supabase.rpc("owner_record_daily_closing_adjustment",{p_daily_closing_id:closing.id,p_adjustment_type:closingAdjustmentForm.type,p_amount:amount,p_reason:closingAdjustmentForm.reason.trim(),p_request_id:rid()});
+  if(e2)setError(e2.message);else{setClosingAdjustmentForm({type:"cash_in",amount:"",reason:""});setNotice("Daily closing adjustment recorded without changing the original snapshot.");await load();onChanged();}
+  setBusy(false);
+ }
+ async function recordReconciliationAdjustment(e:FormEvent){
+  e.preventDefault();if(!supabase||!reconciliation)return;
+  const amount=Number(reconciliationAdjustmentForm.amount);
+  if(!Number.isSafeInteger(amount)||amount<=0||!reconciliationAdjustmentForm.reason.trim()){setError("Enter a positive whole-KES adjustment and reason.");return;}
+  setBusy(true);setError("");setNotice("");
+  const {error:e2}=await supabase.rpc("owner_record_reconciliation_adjustment",{p_reconciliation_id:reconciliation.id,p_bucket:reconciliationAdjustmentForm.bucket,p_direction:reconciliationAdjustmentForm.direction,p_amount:amount,p_reason:reconciliationAdjustmentForm.reason.trim(),p_request_id:rid()});
+  if(e2)setError(e2.message);else{setReconciliationAdjustmentForm({bucket:"system_receipt",direction:"add",amount:"",reason:""});setNotice("Reconciliation adjustment recorded without changing the confirmed statement snapshot.");await load();onChanged();}
   setBusy(false);
  }
  async function recordDelivery(e:FormEvent){
@@ -152,6 +183,10 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
     </form>
     <div className="record-list">{movements.map(m=><article className="record-row" key={m.id}><div><b>{m.movement_type.replaceAll("_"," ")}</b><small>{m.notes}{m.reference?" · "+m.reference:""}</small></div><strong>{m.direction==="in"?"+":"−"}{money(m.amount)}</strong></article>)}{!movements.length&&<p className="empty-records">No cash movements recorded for this date.</p>}</div>
    </section>}
+   {closed&&<section className="connected-panel"><div className="panel-toolbar"><div><h2>Post-close adjustments</h2><p>These entries preserve the original confirmed cash snapshot.</p></div></div>
+    <form className="record-form" onSubmit={recordClosingAdjustment}><label>Adjustment type<select value={closingAdjustmentForm.type} onChange={e=>setClosingAdjustmentForm(v=>({...v,type:e.target.value}))}><option value="cash_in">Cash received / added</option><option value="cash_out">Cash paid / removed</option></select></label><label>Amount (KES)<input type="number" min="1" step="1" required value={closingAdjustmentForm.amount} onChange={e=>setClosingAdjustmentForm(v=>({...v,amount:e.target.value}))}/></label><label className="wide-field">Reason<textarea required value={closingAdjustmentForm.reason} onChange={e=>setClosingAdjustmentForm(v=>({...v,reason:e.target.value}))}/></label><div className="form-actions"><button className="primary-action" disabled={busy}>Record adjustment</button></div></form>
+    <div className="record-list">{closingAdjustments.map(a=><article className="record-row" key={a.id}><div><b>{a.adjustment_type.replaceAll("_"," ")}</b><small>{a.reason} · {new Date(a.created_at).toLocaleString("en-KE")}</small></div><strong>{money(a.amount)}</strong></article>)}</div>
+   </section>}
   </>}
   {section==="Reconciliation"&&<section className="connected-panel"><div className="panel-toolbar"><div><h2>M-Pesa reconciliation</h2><p>Compare posted, verified M-Pesa receipts and refunds with the statement. Pending evidence must be verified or rejected first.</p></div>{reconciliation?.status==="confirmed"&&<span className="status-chip completed">Confirmed</span>}</div>
    {reconciliation&&<div className="connected-metrics">{card("System receipts",money(reconciliation.system_receipts))}{card("System refunds",money(reconciliation.system_refunds))}{card("Net statement",money(reconciliation.net_statement))}{card("Difference",money(reconciliation.difference))}</div>}
@@ -163,6 +198,16 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
     <label className="wide-field">Variance explanation<textarea disabled={reconciliation?.status==="confirmed"} value={statement.varianceReason} onChange={e=>setStatement(v=>({...v,varianceReason:e.target.value}))} placeholder="Required if statement and system totals differ"/></label>
     {reconciliation?.status!=="confirmed"&&<div className="form-actions"><button className="secondary-action" type="submit" disabled={busy}>Save draft</button><button className="primary-action" type="button" disabled={busy||!statement.receipts} onClick={()=>void saveReconciliation(true)}>Confirm reconciliation</button></div>}
    </form>
+   {reconciliation?.status==="confirmed"&&<section className="connected-panel"><div className="panel-toolbar"><div><h2>Confirmed reconciliation adjustments</h2><p>Corrections are appended separately; the original statement snapshot remains unchanged.</p></div></div>
+    <form className="record-form" onSubmit={recordReconciliationAdjustment}>
+     <label>Adjust which total<select value={reconciliationAdjustmentForm.bucket} onChange={e=>setReconciliationAdjustmentForm(v=>({...v,bucket:e.target.value}))}><option value="system_receipt">System receipts</option><option value="system_refund">System refunds</option><option value="statement_receipt">Statement receipts</option><option value="statement_refund">Statement refunds</option></select></label>
+     <label>Adjustment direction<select value={reconciliationAdjustmentForm.direction} onChange={e=>setReconciliationAdjustmentForm(v=>({...v,direction:e.target.value}))}><option value="add">Add</option><option value="subtract">Subtract</option></select></label>
+     <label>Amount (KES)<input type="number" min="1" step="1" required value={reconciliationAdjustmentForm.amount} onChange={e=>setReconciliationAdjustmentForm(v=>({...v,amount:e.target.value}))}/></label>
+     <label className="wide-field">Reason<textarea required value={reconciliationAdjustmentForm.reason} onChange={e=>setReconciliationAdjustmentForm(v=>({...v,reason:e.target.value}))}/></label>
+     <div className="form-actions"><button className="primary-action" disabled={busy}>Record adjustment</button></div>
+    </form>
+    <div className="record-list">{reconciliationAdjustments.map(a=><article className="record-row" key={a.id}><div><b>{a.bucket.replaceAll("_"," ")} · {a.direction}</b><small>{a.reason} · {new Date(a.created_at).toLocaleString("en-KE")}</small></div><strong>{money(a.amount)}</strong></article>)}</div>
+   </section>}
    <p className="small-note">Bank and card reconciliation are not enabled until those receipt methods are added to the payment ledger. Transfers from M-Pesa to bank are not new receipts.</p>
   </section>}
   {section==="Deliveries"&&<>
@@ -186,7 +231,7 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
    </section>
   </>}
   {section==="Reports"&&<><div className="connected-metrics">
-   {card("Orders in progress",String(summary?.orders_in_progress??0))}{card("Ready awaiting collection",String(summary?.ready_awaiting_collection??0))}{card("Courier parcels outstanding",String(summary?.courier_outstanding??0))}{card("Failed delivery attempts",String(summary?.failed_delivery_attempts??0))}{card("Overdue orders",String(summary?.overdue_orders??0))}{card("Pending M-Pesa",String(summary?.pending_mpesa??0))}
+   {card("Outstanding balances",money(summary?.outstanding_balances))}{card("Orders in progress",String(summary?.orders_in_progress??0))}{card("Ready awaiting collection",String(summary?.ready_awaiting_collection??0))}{card("Courier parcels outstanding",String(summary?.courier_outstanding??0))}{card("Failed delivery attempts",String(summary?.failed_delivery_attempts??0))}{card("Overdue orders",String(summary?.overdue_orders??0))}{card("Pending M-Pesa",String(summary?.pending_mpesa??0))}
   </div><div className="connected-metrics">
    {card("Order value",money(summary?.order_value))}{card("Posted receipts",money(summary?.posted_receipts))}{card("Posted refunds",money(summary?.posted_refunds))}{card("Expenses",money(summary?.expenses))}{card("Cash expenses",money(summary?.cash_expenses))}{card("Production costs",money(summary?.production_costs))}
   </div><section className="connected-panel"><div className="panel-toolbar"><div><h2>Daily control status</h2><p>Operational and financial measures are deliberately kept separate.</p></div><input type="date" aria-label="Report date" value={businessDate} max={todayNairobi()} onChange={e=>setBusinessDate(e.target.value)}/></div><div className="record-list"><article className="record-row"><div><b>Daily cash close</b><small>{summary?.daily_closing?.status??"Not started"}</small></div><strong>{summary?.daily_closing?money(summary.daily_closing.difference):"—"}</strong></article><article className="record-row"><div><b>M-Pesa reconciliation</b><small>{summary?.mpesa_reconciliation?.status??"Not started"}</small></div><strong>{summary?.mpesa_reconciliation?money(summary.mpesa_reconciliation.difference):"—"}</strong></article></div><p className="small-note">Order value is not receipts. Receipts are not profit. Profit reporting requires fully reconciled production costs and expenses.</p></section></>}
