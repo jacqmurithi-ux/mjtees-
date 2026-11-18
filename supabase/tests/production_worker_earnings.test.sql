@@ -115,8 +115,8 @@ select is(
     'dddddddd-dddd-4ddd-8ddd-dddddddddddd','vinyl_cut','{}'::jsonb,
     '20000000-0000-4000-8000-000000000001'
   )->>'status',
-  'in_progress',
-  'Owner starts production job for the accepted order line'
+  'planned',
+  'Owner creates the planned production job for the accepted order line'
 );
 
 select is(
