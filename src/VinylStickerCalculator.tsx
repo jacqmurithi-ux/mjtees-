@@ -57,8 +57,7 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
   const is24InchRoll = Boolean(vinyl && /24\s*(?:-|\s)?inch|24["”]|\b24in\b/i.test(vinyl.name + " " + vinyl.sku));
   const savedRollWidthCm = vinyl?.roll_width_mm ? vinyl.roll_width_mm / 10 : 0;
   const effectiveRollWidth = Number(rollWidth || savedRollWidthCm || (is24InchRoll ? STANDARD_ROLL_WIDTH_CM : 0));
-  const savedUsableWidthCm = vinyl?.usable_width_mm ? vinyl.usable_width_mm / 10 : 0;
-  const effectiveUsableWidth = Number(usableWidth || savedUsableWidthCm || Math.max(0, effectiveRollWidth - EDGE_TRIM_CM_PER_SIDE * 2));
+  const effectiveUsableWidth = Number(usableWidth || Math.max(0, effectiveRollWidth - EDGE_TRIM_CM_PER_SIDE * 2));
   const w = cm(Number(width), unit), h = cm(Number(height), unit), q = Number(quantity);
   const spacing = Number(gap), wastePct = Number(waste);
   const layout = useMemo(() => {
@@ -73,7 +72,9 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
     if (!a && !b) return null;
     return !b || (a && a.lengthCm <= b.lengthCm) ? { ...a!, rotated: false } : { ...b, rotated: true };
   }, [effectiveUsableWidth, w, h, q, spacing]);
-  // Every 100 cm of physical roll length provides 96 cm of usable cutting length (2 cm trimmed from each end).\n  const usableLengthPerMetreCm = 100 - LENGTH_CUTTING_ALLOWANCE_CM;\n  const linearMetres = layout ? layout.lengthCm / usableLengthPerMetreCm * (1 + wastePct / 100) : 0;
+  // Every 100 cm of physical roll length provides 96 cm of usable cutting length (2 cm trimmed from each end).
+  const usableLengthPerMetreCm = 100 - LENGTH_CUTTING_ALLOWANCE_CM;
+  const linearMetres = layout ? layout.lengthCm / usableLengthPerMetreCm * (1 + wastePct / 100) : 0;
   const materialCost = vinyl ? linearMetres * Number(vinyl.current_average_unit_cost) : 0;
   const machineCost = Math.max(0, Number(machineMinutes) || 0) * Math.max(0, Number(machineRate) || 0);
   const labourHours = ((Math.max(0, Number(designMinutes) || 0) + Math.max(0, Number(weedingMinutes) || 0) + (includeApplication ? Math.max(0, Number(applicationMinutes) || 0) : 0)) / 60);
@@ -133,7 +134,10 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
       labourHours: String(round(labourHours, 3)),
       specification: {
         type: "vinyl_sticker", width: w, height: h, dimension_unit: "cm", quantity: q,
-        roll_width_cm: effectiveRollWidth, usable_width_cm: effectiveUsableWidth,\n        edge_trim_width_cm_per_side: EDGE_TRIM_CM_PER_SIDE,\n        edge_trim_length_cm_per_end_per_metre: EDGE_TRIM_CM_PER_SIDE,\n        usable_length_cm_per_linear_metre: usableLengthPerMetreCm,
+        roll_width_cm: effectiveRollWidth, usable_width_cm: effectiveUsableWidth,
+        edge_trim_width_cm_per_side: EDGE_TRIM_CM_PER_SIDE,
+        edge_trim_length_cm_per_end_per_metre: EDGE_TRIM_CM_PER_SIDE,
+        usable_length_cm_per_linear_metre: usableLengthPerMetreCm,
         layout_across: layout?.across, layout_rows: layout?.rows, rotated: layout?.rotated,
         linear_metres_estimated: round(linearMetres), vinyl_stock_item_id: vinyl.id,
         transfer_tape_stock_item_id: includeTape ? tapeStockId || null : null,
@@ -156,9 +160,10 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
       <label>Sticker height<input type="number" min="0.1" step="0.1" value={height} onChange={e => { setHeight(e.target.value); setFinalPrice(""); }}/></label>
       <label>Dimensions<select value={unit} onChange={e => setUnit(e.target.value)}><option value="in">Inches</option><option value="cm">Centimetres</option></select></label>
       <label>Roll width (cm)<input type="number" min="1" step="0.1" value={rollWidth || (savedRollWidthCm ? String(savedRollWidthCm) : is24InchRoll ? String(STANDARD_ROLL_WIDTH_CM) : "")} onChange={e => { setRollWidth(e.target.value); setUsableWidth(""); }} placeholder="Set from stock specification"/></label>
-      <label>Usable width after 2 cm edge trim on each side (cm)<input type="number" min="1" step="0.1" value={usableWidth || (savedUsableWidthCm ? String(savedUsableWidthCm) : effectiveRollWidth > 0 ? String(round(effectiveRollWidth - EDGE_TRIM_CM_PER_SIDE * 2, 2)) : "")} onChange={e => setUsableWidth(e.target.value)} placeholder="Roll width minus 4 cm total"/></label>
+      <label>Usable width after 2 cm edge trim on each side (cm)<input type="number" min="1" step="0.1" value={usableWidth || (effectiveRollWidth > 0 ? String(round(effectiveRollWidth - EDGE_TRIM_CM_PER_SIDE * 2, 2)) : "")} onChange={e => setUsableWidth(e.target.value)} placeholder="Roll width minus 4 cm total"/></label>
       <label>Cut gap between designs (cm)<input type="number" min="0" step="0.1" value={gap} onChange={e => setGap(e.target.value)}/></label>
-      <label>Material wastage (%)<input type="number" min="0" max="100" step="0.1" value={waste} onChange={e => setWaste(e.target.value)}/></label>\n      <p className="form-help">Edge trim: 2 cm from each side of the roll width and 2 cm from each end of every 100 cm of roll length. One linear metre provides 96 cm of usable cutting length.</p>
+      <label>Material wastage (%)<input type="number" min="0" max="100" step="0.1" value={waste} onChange={e => setWaste(e.target.value)}/></label>
+      <p className="form-help">Edge trim: 2 cm from each side of the roll width and 2 cm from each end of every 100 cm of roll length. One linear metre provides 96 cm of usable cutting length.</p>
       <label>Design complexity<select value={complexity} onChange={e => setComplexityState(e.target.value)}><option value="simple">Simple</option><option value="medium">Medium</option><option value="complex">Complex</option></select></label>
       <label>Machine cutting time (minutes)<input type="number" min="0" step="0.1" value={machineMinutes} onChange={e => setMachineMinutes(e.target.value)}/></label>
       <label>Machine rate (KES/minute)<input type="number" min="0" step="0.1" value={machineRate} onChange={e => setMachineRate(e.target.value)}/></label>
