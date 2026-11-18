@@ -64,7 +64,7 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
       const businessRecord = Array.isArray(membership.businesses) ? membership.businesses[0] : membership.businesses;
       setBusiness(businessRecord as Business);
       const [customerResult, enquiryResult, orderResult, paymentResult, expenseResult, stockResult] = await Promise.all([
-        supabase.from("customers").select("id,display_name,business_name,phone,email,created_at").eq("business_id", membership.business_id).is("archived_at", null).order("created_at", { ascending: false }).limit(100),
+        supabase.from("customers").select("id,display_name,business_name,phone,email,created_at").eq("business_id", membership.business_id).is("archived_at", null).order("created_at", { ascending: false }).limit(1000),
         supabase.from("enquiries").select("id,public_reference,contact_name,phone,email,requested_service,description,quantity,desired_by,customer_supplies_item,artwork_drive_url,status,created_at").eq("business_id", membership.business_id).order("created_at", { ascending: false }).limit(100),
         supabase.from("orders").select("id,status,total_amount").eq("business_id", membership.business_id).limit(500),
         supabase.from("payments").select("amount,status").eq("business_id", membership.business_id).limit(1000),
