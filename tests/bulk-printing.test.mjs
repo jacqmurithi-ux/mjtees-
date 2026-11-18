@@ -24,3 +24,11 @@ test("customer supplied garments are not written to inventory by the output ledg
   assert.match(sql, /owner_list_production_output/);
   assert.match(sql, /private\.assert_active_owner\(p_business_id\)/);
 });
+
+test("daily and all-time totals are calculated from the full server-side ledger", () => {
+  assert.match(sql, /owner_get_bulk_printing_daily_summary/);
+  assert.match(sql, /all_time_printed/);
+  assert.match(sql, /daily_printed/);
+  assert.match(sql, /order_value/);
+  assert.match(sql, /Africa\/Nairobi/);
+});
