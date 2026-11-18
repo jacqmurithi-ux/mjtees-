@@ -79,12 +79,9 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
   const recommendedPrice = floorPrice + Math.max(0, ceilingPrice - floorPrice) * 0.65;
   const suggested = Math.ceil(recommendedPrice / 5) * 5;
   const final = Number(finalPrice || suggested);
-  const valid = Boolean(vinyl && categoryId && layout && directCost > 0 && ceilingPrice >= floorPrice && final >= floorPrice - 0.001 && final <= ceilingPrice + 0.001);
+  const valid = Boolean(vinyl && categoryId && methodId && layout && directCost > 0 && ceilingPrice >= floorPrice && final >= floorPrice - 0.001 && final <= ceilingPrice + 0.001);
   const selectedMethod = methods.find(x => x.id === methodId);
 
-  function setComplexity(value: string) {
-    setComplexityState(value);
-  }
   function setComplexityState(value: string) {
     setComplexity(value);
     if (value === "simple") { setDesignMinutes("0"); setWeedingMinutes("2"); }
@@ -97,7 +94,7 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
     }
     setSavingCeiling(true);
     const category = categories.find(x => x.id === categoryId);
-    const { error } = await supabase.rpc("owner_upsert_pricing_rule", {
+    if (vinyl && effectiveRollWidth > 0 && effectiveUsableWidth > 0) {\n      const { error: stockError } = await supabase.from("stock_items").update({ roll_width_mm: Math.round(effectiveRollWidth * 10), usable_width_mm: Math.round(effectiveUsableWidth * 10) }).eq("business_id", businessId).eq("id", vinyl.id);\n      if (stockError) { onMessage(stockError.message, true); setSavingCeiling(false); return; }\n    }\n    const { error } = await supabase.rpc("owner_upsert_pricing_rule", {
       p_business_id: businessId, p_rule_id: null, p_category_id: categoryId, p_catalogue_item_id: null,
       p_name: "Vinyl sticker price ceiling · " + (category?.name || "Stickers"),
       p_markup_method: "percentage_on_cost", p_markup_value: Number(ceilingMarkup),
@@ -171,6 +168,6 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
     {ceilingPrice < floorPrice && <p className="notice error">The owner ceiling is below the 30% minimum margin price. Increase the ceiling before applying this quotation.</p>}
     {!layout && <p className="notice error">The selected sticker cannot fit the usable vinyl width. Check dimensions and roll width.</p>}
     <div className="vinyl-actions"><button type="button" className="secondary-action" disabled={savingCeiling || !categoryId} onClick={() => void saveCeiling()}>{savingCeiling ? "Saving…" : "Save owner price ceiling"}</button><button type="button" className="primary-action" disabled={!valid} onClick={apply}>Apply price to quotation</button></div>
-    <p className="form-help">Market reference: a simple 5 × 5-inch word decal is commonly priced at KSh 100 in your stated market. It is a reference, not a forced system price. Actual material use is estimated by roll-width nesting; production issues record actual stock consumption.</p>
+    <p className="form-help">Saving the owner ceiling also saves the selected vinyl roll and usable widths to its inventory record. Market reference: a simple 5 × 5-inch word decal is commonly priced at KSh 100 in your stated market. It is a reference, not a forced system price. Actual material use is estimated by roll-width nesting; production issues record actual stock consumption.</p>
   </section>;
 }
