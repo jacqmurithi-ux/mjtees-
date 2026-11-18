@@ -63,11 +63,11 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
  const currentMovements=useMemo(()=>movements.reduce((n,m)=>n+(m.direction==="in"?Number(m.amount):-Number(m.amount)),0),[movements]);
  async function saveClosing(close:boolean){
   if(!supabase)return;
-  if(openingFloat===""||!Number.isSafeInteger(Number(openingFloat))||Number(openingFloat)<0){setError("Enter a valid opening float in whole KES.");return;}
+  if(openingFloat!==""&&(!Number.isSafeInteger(Number(openingFloat))||Number(openingFloat)<0)){setError("Enter a valid opening float in whole KES.");return;}
   if(close&&(actualCash===""||!Number.isSafeInteger(Number(actualCash))||Number(actualCash)<0)){setError("Enter the physical cash count in whole KES.");return;}
   setBusy(true);setError("");setNotice("");
   const {data,error:e}=await supabase.rpc("owner_save_daily_closing",{p_business_id:businessId,p_business_date:businessDate,
-   p_opening_float:Number(openingFloat),p_actual_cash:close?Number(actualCash):null,p_notes:closingNotes.trim()||null,
+   p_opening_float:openingFloat===""?null:Number(openingFloat),p_actual_cash:close?Number(actualCash):null,p_notes:closingNotes.trim()||null,
    p_variance_reason:varianceReason.trim()||null,p_close:close,p_request_id:rid()});
   if(e)setError(e.message);else{setNotice(close?"Daily closing confirmed and locked.":"Daily closing draft saved. You can resume it later.");await load();onChanged();}
   setBusy(false);
