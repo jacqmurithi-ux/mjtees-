@@ -1,0 +1,73 @@
+name: GitHub Pages preflight
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+
+      - name: Configure public application settings
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://rbbluwsniiwzixlvdnwz.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_EvZpMrnBo_UHObXFDyXUdA_wkxhNbJB' }}
+          VITE_BUSINESS_SLUG: ${{ vars.VITE_BUSINESS_SLUG || 'mj-tees' }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY || '' }}
+        run: |
+          test -n "$VITE_SUPABASE_URL"
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
+          test -n "$VITE_BUSINESS_SLUG"
+          {
+            echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL"
+            echo "VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY"
+            echo "VITE_BUSINESS_SLUG=$VITE_BUSINESS_SLUG"
+            echo "VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Bootstrap a deterministic lockfile once; it is uploaded for review
+      # and then committed before CI/deployment switch to npm ci.
+      - name: Generate dependency lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Resolve actual GitHub Pages base path
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build using Pages configuration
+        env:
+          VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          echo "GitHub Pages base path: $VITE_BASE_PATH"
+          npm run build
+          test -s dist/index.html
+          grep -F "$VITE_BASE_PATH" dist/index.html
+          test -s dist/assets/mj-printing-branding.svg
+
+      - name: Run pricing tests
+        run: npm run test:pricing
+
+      - name: Upload preflight outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mjtees-pages-preflight
+          path: |
+            package-lock.json
+            dist/
+          if-no-files-found: error
