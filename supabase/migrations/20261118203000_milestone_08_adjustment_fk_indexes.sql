@@ -1,0 +1,5 @@
+-- Cover remaining Milestone 08 foreign keys with leading-column indexes.
+create index if not exists daily_closing_adjustments_daily_closing_id_idx on public.daily_closing_adjustments(daily_closing_id);
+create index if not exists daily_closing_adjustments_created_by_idx on public.daily_closing_adjustments(created_by);
+create index if not exists daily_payment_reconciliation_adjustments_reconciliation_id_idx on public.daily_payment_reconciliation_adjustments(reconciliation_id);
+create index if not exists daily_payment_reconciliation_adjustments_created_by_idx on public.daily_payment_reconciliation_adjustments(created_by);
