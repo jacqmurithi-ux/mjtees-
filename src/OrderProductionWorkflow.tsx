@@ -4,7 +4,7 @@ import { supabase } from "./lib/supabase";
 type Order={id:string;order_number:string;customer_id:string;status:string;total_amount:number;received_at:string;required_by:string|null;promised_turnaround_hours:number|null};
 type Item={id:string;order_id:string;description:string;quantity:number;unit:string;sale_mode:string;customer_supplies_item:boolean;stock_item_id:string|null;production_method_id:string|null;production_specification:unknown};
 type Method={id:string;code:string;name:string};
-type Job={id:string;order_item_id:string;status:string;planned_quantity:number;due_at:string|null;notes:string|null};
+type Job={id:string;order_item_id:string;status:string;planned_quantity:number;quantity_tracking_required:boolean;due_at:string|null;notes:string|null};
 type Check={id:string;job_id:string;result:string;inspection_mode:string;checked_at:string;notes:string|null};
 type Stock={id:string;name:string;base_unit:string};
 type Location={id:string;name:string};
@@ -47,7 +47,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
    client.from("orders").select("id,order_number,customer_id,status,total_amount,received_at,required_by,promised_turnaround_hours").eq("business_id",businessId).order("received_at",{ascending:false}).limit(200),
    client.from("order_items").select("id,order_id,description,quantity,unit,sale_mode,customer_supplies_item,stock_item_id,production_method_id,production_specification").eq("business_id",businessId).limit(500),
    client.from("production_methods").select("id,code,name").eq("is_active",true).order("name"),
-   client.from("production_jobs").select("id,order_item_id,status,planned_quantity,due_at,notes").eq("business_id",businessId).order("created_at",{ascending:false}).limit(300),
+   client.from("production_jobs").select("id,order_item_id,status,planned_quantity,quantity_tracking_required,due_at,notes").eq("business_id",businessId).order("created_at",{ascending:false}).limit(300),
    client.from("quality_checks").select("id,job_id,result,inspection_mode,checked_at,notes").eq("business_id",businessId).order("checked_at",{ascending:false}).limit(500),
    client.from("rework_events").select("id,job_id,quality_check_id,reason,opened_at,closed_at,notes").eq("business_id",businessId).order("opened_at",{ascending:false}).limit(300),
    client.from("production_cost_entries").select("id,job_id,cost_type,description,quantity,unit,unit_rate,amount,occurred_at").eq("business_id",businessId).order("occurred_at",{ascending:false}).limit(500),
@@ -90,7 +90,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  const closeBatch=(batch:Batch)=>void call("owner_close_production_batch",{p_batch_id:batch.id,p_close_notes:batchForm[batch.job_id]?.notes?.trim()||null,p_request_id:rid()},"Production batch closed. Further corrections must be recorded as new movements in another open batch.");
  const quantityBalance=(jobId:string,state:string)=>quantityMovements.filter(m=>m.job_id===jobId).reduce((sum,m)=>sum+(m.to_state===state?m.quantity:0)-(m.from_state===state?m.quantity:0),0);
  const totalReceived=(jobId:string)=>quantityMovements.filter(m=>m.job_id===jobId&&m.from_state===null&&m.to_state==="pending").reduce((sum,m)=>sum+m.quantity,0);
- const quantityReconciled=(job:Job)=>{const received=totalReceived(job.id);return received>=job.planned_quantity&&["pending","in_production","rework"].every(s=>Math.abs(quantityBalance(job.id,s))<0.0005)&&Math.abs(quantityBalance(job.id,"accepted")+quantityBalance(job.id,"rejected")-received)<0.0005&&batches.filter(b=>b.job_id===job.id&&b.status==="open").length===0;};
+ const quantityReconciled=(job:Job)=>{if(!job.quantity_tracking_required)return true;const received=totalReceived(job.id);return received>=job.planned_quantity&&["pending","in_production","rework"].every(s=>Math.abs(quantityBalance(job.id,s))<0.0005)&&Math.abs(quantityBalance(job.id,"accepted")+quantityBalance(job.id,"rejected")-received)<0.0005&&batches.filter(b=>b.job_id===job.id&&b.status==="open").length===0;};
  const updateSchedule=(order:Order)=>void call("owner_update_order_schedule",{p_order_id:order.id,p_required_by:requiredBy[order.id]||null,p_promised_turnaround_hours:turnaround[order.id]?Number(turnaround[order.id]):null,p_request_id:rid()},"Order turnaround schedule saved.");
  const startJob=(item:Item)=>{
   const code=methodByItem[item.id]||methods.find(m=>m.id===item.production_method_id)?.code;
