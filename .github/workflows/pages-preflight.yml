@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: read
 
 jobs:
@@ -37,21 +37,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      # Bootstrap a deterministic lockfile once; it is uploaded for review
-      # and then committed before CI/deployment switch to npm ci.
-      - name: Generate dependency lockfile
-        run: npm install --package-lock-only --ignore-scripts
-
-      - name: Commit generated lockfile for reproducible installs
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Add npm lockfile for reproducible builds"
-            git push
-          fi
 
       - name: Install locked dependencies
         run: npm ci
