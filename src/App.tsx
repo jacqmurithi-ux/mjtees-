@@ -54,7 +54,7 @@ function Website({ onOwner }: { onOwner: () => void }) {
       </div>
       <div className="hero-art">
         <div className="hero-art-top"><span>MJ PRINTING & BRANDING</span><span>DESIGN / PRINT / BRAND</span></div>
-        <div className="hero-logo-wrap"><img src={logoSrc} onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = "/assets/mj-printing-branding.svg"; }} alt="MJ Printing & Branding logo" /></div>
+        <div className="hero-logo-wrap"><img src={logoSrc} onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = DEFAULT_LOGO; }} alt="MJ Printing & Branding logo" /></div>
         <div className="hero-colour-swatch"><i /><i /><i /><i /><i /></div>
         <div className="hero-art-bottom"><strong>YOUR BRAND,</strong><strong>IN EVERY DETAIL.</strong><span>MADE TO STAND OUT ↗</span></div>
         <span className="hero-stamp">MJ<br/>TEES</span>
