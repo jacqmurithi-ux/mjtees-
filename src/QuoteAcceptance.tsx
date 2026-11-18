@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+
+const HOME_URL = import.meta.env.BASE_URL;
 import { supabase, supabaseConfigured } from "./lib/supabase";
 
 export default function QuoteAcceptance({ token }: { token: string }) {
@@ -14,5 +16,5 @@ export default function QuoteAcceptance({ token }: { token: string }) {
       const url=new URL(window.location.href);url.searchParams.delete("accept_quote");window.history.replaceState({},"",url.toString());
     });
   },[token]);
-  return <main className="owner-auth"><section className="auth-card"><span className="brand-mark">MJ</span><p className="eyebrow">MJ PRINTING & BRANDING</p><h1>{state==="success"?"Quotation accepted":state==="error"?"Unable to accept quotation":"Confirming your order"}</h1><p>{message}</p>{state==="error"&&<p>Please contact the shop if you believe this link should still be valid.</p>}<a className="primary-action" href="/">Back to MJ Printing & Branding</a></section></main>;
+  return <main className="owner-auth"><section className="auth-card"><span className="brand-mark">MJ</span><p className="eyebrow">MJ PRINTING & BRANDING</p><h1>{state==="success"?"Quotation accepted":state==="error"?"Unable to accept quotation":"Confirming your order"}</h1><p>{message}</p>{state==="error"&&<p>Please contact the shop if you believe this link should still be valid.</p>}<a className="primary-action" href={HOME_URL}>Back to MJ Printing & Branding</a></section></main>;
 }
