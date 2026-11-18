@@ -61,9 +61,9 @@ begin
   if not found then raise exception using errcode='P0002',message='Production job not found'; end if;
   v_actor:=private.assert_active_owner(v_job.business_id);
 
-  if p_request_id is null or p_quantity_printed is null or p_quantity_printed<=0
-    or p_quantity_rejected is null or p_quantity_rejected<0 or p_quantity_rejected>p_quantity_printed
-    or p_quantity_reworked is null or p_quantity_reworked<0 or p_quantity_reworked>p_quantity_printed
+  if p_request_id is null or p_quantity_printed is null or p_quantity_printed<=0 or p_quantity_printed<>round(p_quantity_printed,3)
+    or p_quantity_rejected is null or p_quantity_rejected<0 or p_quantity_rejected<>round(p_quantity_rejected,3) or p_quantity_rejected>p_quantity_printed
+    or p_quantity_reworked is null or p_quantity_reworked<0 or p_quantity_reworked<>round(p_quantity_reworked,3) or p_quantity_reworked>p_quantity_printed
     or p_worker_type not in ('owner','staff','temporary')
     or (p_worker_type<>'owner' and length(btrim(coalesce(p_worker_name,''))) not between 1 and 180)
     or p_labour_cost is null or p_labour_cost<0
