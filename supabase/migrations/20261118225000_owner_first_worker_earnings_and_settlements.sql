@@ -440,7 +440,7 @@ begin
   select * into v_assignment from public.production_worker_assignments where id=p_assignment_id;
   if not found then raise exception using errcode='P0002',message='Worker assignment not found'; end if;
   v_actor:=private.assert_active_owner(v_assignment.business_id);
-  if p_request_id is null or p_close_status not in ('completed','cancelled')
+  if p_request_id is null or p_close_status is null or p_close_status not in ('completed','cancelled')
     or length(btrim(coalesce(p_reason,''))) not between 1 and 500 then
     raise exception using errcode='22023',message='Valid assignment outcome, reason and request ID are required';
   end if;
