@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(35);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('11111111-1111-4111-8111-111111111111','authenticated','authenticated',
@@ -21,6 +21,8 @@ values('dddddddd-aaaa-4ddd-8ddd-dddddddddddd','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaa
 insert into public.catalogue_items(id,business_id,category_id,name,slug,item_type,is_published)
 values('eeeeeeee-aaaa-4eee-8eee-eeeeeeeeeeee','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'dddddddd-aaaa-4ddd-8ddd-dddddddddddd','Printed Uniform','printed-uniform','product',true);
+
+create temporary table test_quote_acceptance (quote_id uuid primary key, token text not null);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
@@ -141,6 +143,45 @@ select is(
    where quotation_id=(select id from public.quotations where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
      order by created_at desc,id desc limit 1)),
   400::bigint,'Order discount does not erase the printing component unit-price snapshot'
+);
+
+insert into test_quote_acceptance(quote_id,token)
+select q.id,
+  (public.owner_send_quotation(q.id,now()+interval '7 days',
+    '10000000-0000-4000-8000-000000000004',null)->>'acceptance_token')
+from public.quotations q
+where q.business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+order by q.created_at desc,q.id desc
+limit 1;
+
+select public.accept_quotation(
+  (select token from test_quote_acceptance),
+  '10000000-0000-4000-8000-000000000005'
+);
+
+select is(
+  (select oi.quotation_item_id
+   from public.order_items oi join public.orders o
+     on o.business_id=oi.business_id and o.id=oi.order_id
+   where o.quotation_id=(select quote_id from test_quote_acceptance)),
+  (select qi.id from public.quotation_items qi
+   where qi.quotation_id=(select quote_id from test_quote_acceptance)),
+  'Accepted order item retains its exact source quotation-item reference'
+);
+
+select is(
+  (select (oi.price_components_snapshot->>'eligible_printing_revenue')::bigint
+   from public.order_items oi join public.orders o
+     on o.business_id=oi.business_id and o.id=oi.order_id
+   where o.quotation_id=(select quote_id from test_quote_acceptance)),
+  3920::bigint,'Quotation acceptance preserves printing-only revenue after both discounts'
+);
+
+select is(
+  (select count(*) from public.order_item_discount_allocations da
+   join public.orders o on o.business_id=da.business_id and o.id=da.order_id
+   where o.quotation_id=(select quote_id from test_quote_acceptance)),
+  2::bigint,'Quotation acceptance records both line and order discount allocations'
 );
 
 select is(
