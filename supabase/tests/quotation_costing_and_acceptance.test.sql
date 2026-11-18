@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(19);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('44444444-4444-4444-8444-444444444444','authenticated','authenticated','mj-quote-owner@example.invalid','',now(),
@@ -173,6 +173,68 @@ select is(
 select is(
   (select status from public.quotations where id=current_setting('mj.test.revision_source')::uuid),
   'draft','Creating a revision preserves the original quotation and its status');
+
+
+-- Exercise the database-enforced vinyl ceiling against the server-generated cost.
+insert into public.service_categories(id,business_id,name,slug)
+values('bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb','aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa','Vinyl Stickers','vinyl-stickers');
+
+select public.owner_create_costing_profile(
+  'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',null,
+  'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb','value_added',null,
+  jsonb_build_array(jsonb_build_object(
+    'component_type','meter_material',
+    'stock_item_id','eeeeeeee-1111-4111-8111-eeeeeeeeeeee',
+    'unit','m','driver_type','per_metre','factor',1,
+    'expected_waste_percent',0,'fixed_cost',0
+  )),
+  '90000000-0000-4000-8000-000000000011'
+);
+
+select public.owner_upsert_pricing_rule(
+  'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',null,
+  'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',null,
+  'Vinyl sticker price ceiling · Vinyl Stickers',
+  'percentage_on_cost',400,current_date,null,true,
+  '90000000-0000-4000-8000-000000000012'
+);
+
+select throws_ok(
+  $select public.owner_create_quotation(
+    'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+    'ffffffff-1111-4111-8111-ffffffffffff',null,
+    jsonb_build_array(jsonb_build_object(
+      'category_id','bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
+      'description','Vinyl sticker above ceiling','quantity',1,'unit','piece',
+      'unit_price',26,'sale_mode','value_added',
+      'production_specification',jsonb_build_object('linear_metres',1)
+    )),now()+interval '14 days',null,'Ceiling test',
+    '90000000-0000-4000-8000-000000000013'
+  )$,
+  '23514',null,
+  'Database rejects a vinyl sticker unit price above 400% markup on server cost'
+);
+
+select set_config('mj.test.vinyl_quote_id',
+  public.owner_create_quotation(
+    'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+    'ffffffff-1111-4111-8111-ffffffffffff',null,
+    jsonb_build_array(jsonb_build_object(
+      'category_id','bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
+      'description','Vinyl sticker within ceiling','quantity',1,'unit','piece',
+      'unit_price',25,'sale_mode','value_added',
+      'production_specification',jsonb_build_object('linear_metres',1)
+    )),now()+interval '14 days',null,'Ceiling test',
+    '90000000-0000-4000-8000-000000000014'
+  )->>'quotation_id',true);
+
+select is(
+  (select (cost_estimate_snapshot->>'estimated_total_cost')::bigint
+   from public.quotation_items
+   where quotation_id=current_setting('mj.test.vinyl_quote_id')::uuid),
+  5::bigint,
+  'Vinyl ceiling is based on the server-calculated material cost snapshot'
+);
 
 select * from finish();
 rollback;
