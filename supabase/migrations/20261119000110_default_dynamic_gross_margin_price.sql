@@ -141,5 +141,4 @@ begin
     jsonb_build_object('quote_number',v_number,'total_amount',v_total,'line_count',jsonb_array_length(p_lines)));
   return v_result;
 end;
-$function$
-
+$function$;
