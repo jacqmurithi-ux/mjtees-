@@ -23,6 +23,7 @@ values('eeeeeeee-aaaa-4eee-8eee-eeeeeeeeeeee','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaa
   'dddddddd-aaaa-4ddd-8ddd-dddddddddddd','Printed Uniform','printed-uniform','product',true);
 
 create temporary table test_quote_acceptance (quote_id uuid primary key, token text not null);
+grant select,insert on test_quote_acceptance to authenticated;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
