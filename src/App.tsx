@@ -5,7 +5,7 @@ import QuoteAcceptance from "./QuoteAcceptance";
 import PublicEnquiryForm from "./PublicEnquiryForm";
 import PublicCatalogue from "./PublicCatalogue";
 
-const ASSET_BASE = import.meta.env.BASE_URL;
+const ASSET_BASE = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
 const DEFAULT_LOGO = `${ASSET_BASE}assets/mj-printing-branding.svg`;
 
 const services = [
