@@ -43,7 +43,7 @@ jobs:
         with:
           version: 2.53.1
       - name: Start isolated local Supabase stack
-        run: supabase start
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,analytics
       - name: Replay every migration from an empty database
         run: supabase db reset --local
       - name: Run database pgTAP tests
