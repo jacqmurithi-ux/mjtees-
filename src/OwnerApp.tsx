@@ -9,6 +9,7 @@ import ShopOperationsWorkflow from "./ShopOperationsWorkflow";
 import CatalogueManagement from "./CatalogueManagement";
 import WebsiteContentManagement from "./WebsiteContentManagement";
 import Milestone08Workflow from "./Milestone08Workflow";
+import CustomerManagement from "./CustomerManagement";
 import "./responsive-owner.css";
 
 type Business = { id: string; name: string; trading_name: string | null };
@@ -36,8 +37,6 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
   const [notice, setNotice] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [customerForm, setCustomerForm] = useState({ display_name: "", business_name: "", phone: "", email: "", notes: "" });
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [search, setSearch] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -100,18 +99,6 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
     const { error: signOutError } = await supabase.auth.signOut();
     if (signOutError) setError(signOutError.message);
   }
-  async function saveCustomer(event: FormEvent) {
-    event.preventDefault(); if (!supabase || !business) return;
-    setLoading(true); setError(""); setNotice("");
-    const { error: saveError } = await supabase.rpc("owner_upsert_customer", {
-      p_business_id: business.id, p_customer_id: null, p_display_name: customerForm.display_name.trim(),
-      p_business_name: customerForm.business_name.trim() || null, p_phone: customerForm.phone.trim() || null,
-      p_email: customerForm.email.trim() || null, p_notes: customerForm.notes.trim() || null, p_request_id: requestId(),
-    });
-    if (saveError) setError(saveError.message);
-    else { setCustomerForm({ display_name: "", business_name: "", phone: "", email: "", notes: "" }); setShowCustomerForm(false); setNotice("Customer saved."); await loadWorkspace(); }
-    setLoading(false);
-  }
   async function updateEnquiry(enquiry: Enquiry, status: string) {
     if (!supabase) return;
     setLoading(true); setError(""); setNotice("");
@@ -128,7 +115,6 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
   if (!session) return <main className="owner-auth"><form className="auth-card" onSubmit={signIn}><span className="brand-mark">MJ</span><p className="eyebrow">OWNER ACCESS</p><h1>Sign in to MJ Tees</h1><p>Use the owner account created through the trusted setup process. Public registration is disabled.</p>{error && <div className="notice error">{error}</div>}<label>Email address<input type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} /></label><label>Password<input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></label><button className="primary-action" disabled={loading}>{loading ? "Signing in…" : "Sign in"}</button><button type="button" className="text-action" onClick={onExit}>Back to public website</button></form></main>;
 
   const activeEnquiries = enquiries.filter(item => item.status === "new" || item.status === "reviewing");
-  const filteredCustomers = customers.filter(c => [c.display_name,c.business_name,c.phone,c.email].filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase()));
   const filteredEnquiries = enquiries.filter(item => [item.contact_name,item.public_reference,item.phone,item.email,item.requested_service,item.description].filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase()));
   const navigate = (next: Section) => { setSection(next); setSearch(""); setMoreOpen(false); };
   const navButton = (item: Section, mobile = false) => <button key={item} type="button" className={(section === item ? "connected-nav active" : "connected-nav") + (mobile ? " mobile-nav-item" : "")} aria-current={section === item ? "page" : undefined} onClick={() => navigate(item)}><span className="nav-icon" aria-hidden="true">{navIcon[item]}</span><span>{item}</span></button>;
@@ -150,7 +136,7 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
         </div>
         <section className="connected-panel overview-actions"><div className="panel-toolbar"><div><h2>Quick actions</h2><p>Jump straight into common shop tasks.</p></div></div><div className="quick-action-grid"><button className="primary-action" onClick={() => navigate("Enquiries")}>＋ Review enquiries</button><button className="secondary-action" onClick={() => navigate("Quotations")}>＋ Create quotation</button><button className="secondary-action" onClick={() => navigate("Payments")}>＋ Record payment</button><button className="secondary-action" onClick={() => navigate("Production")}>▣ View production</button></div><p className="data-honesty-note">Weekly trends and due-date alerts will appear when existing records provide reliable dates and status data. No sample figures are displayed.</p></section>
       </>}
-      {section === "Customers" && <section className="connected-panel"><div className="panel-toolbar"><div><h2>Customers</h2><p>Customer records saved to the business database.</p></div><button className="primary-action compact" onClick={() => setShowCustomerForm(v => !v)}>＋ Add customer</button></div>{showCustomerForm && <form className="record-form" onSubmit={saveCustomer}><label>Customer name *<input required value={customerForm.display_name} onChange={e => setCustomerForm(v => ({...v,display_name:e.target.value}))}/></label><label>Business / organisation<input value={customerForm.business_name} onChange={e => setCustomerForm(v => ({...v,business_name:e.target.value}))}/></label><label>Phone<input value={customerForm.phone} onChange={e => setCustomerForm(v => ({...v,phone:e.target.value}))}/></label><label>Email<input type="email" value={customerForm.email} onChange={e => setCustomerForm(v => ({...v,email:e.target.value}))}/></label><label className="wide-field">Notes<textarea value={customerForm.notes} onChange={e => setCustomerForm(v => ({...v,notes:e.target.value}))}/></label><div className="form-actions"><button className="primary-action compact" disabled={loading}>Save customer</button><button type="button" className="secondary-action" onClick={() => setShowCustomerForm(false)}>Cancel</button></div></form>}<div className="record-list">{filteredCustomers.map(c => <article className="record-row" key={c.id}><div><b>{c.display_name}</b><small>{c.business_name || "Individual"} · {c.phone || c.email || "No contact details"}</small></div><span>{c.email || "—"}</span></article>)}{!filteredCustomers.length && <p className="empty-records">{search ? "No customers match your search." : "No customers yet. Add the first customer to begin."}</p>}</div></section>}
+      {section === "Customers" && business && <CustomerManagement businessId={business.id} onChanged={() => void loadWorkspace()} />}
       {section === "Enquiries" && <section className="connected-panel"><div className="panel-toolbar"><div><h2>Website enquiries</h2><p>Requests received through the public enquiry endpoint.</p></div><span className="count-chip">{activeEnquiries.length} open</span></div><div className="record-list">{filteredEnquiries.map(item => <article className="enquiry-card" key={item.id}><div className="enquiry-top"><div><b>{item.contact_name}</b><small>{item.public_reference} · {new Date(item.created_at).toLocaleString("en-KE")}</small></div><span className={"status-chip " + item.status}>{item.status}</span></div><p><b>{item.requested_service}</b> · {item.quantity ?? "Quantity not given"}</p><p>{item.description}</p><small>{[item.phone,item.email].filter(Boolean).join(" · ") || "No contact"}{item.desired_by ? " · Needed by " + item.desired_by : ""}{item.customer_supplies_item ? " · Customer supplies item" : ""}</small>{item.artwork_drive_url && <a href={item.artwork_drive_url} target="_blank" rel="noreferrer">Open artwork reference ↗</a>}<div className="enquiry-actions"><select aria-label="Update enquiry status" value={item.status} onChange={e => void updateEnquiry(item,e.target.value)}><option value="new">New</option><option value="reviewing">Reviewing</option><option value="quoted">Quoted</option><option value="closed">Closed</option><option value="spam">Spam</option></select></div></article>)}{!filteredEnquiries.length && <p className="empty-records">{search ? "No enquiries match your search." : "No enquiries have been received."}</p>}</div></section>}
       {section === "Catalogue" && business && <CatalogueManagement businessId={business.id} onChanged={() => void loadWorkspace()} />}
       {section === "Website Content" && business && <WebsiteContentManagement businessId={business.id} />}
