@@ -22,7 +22,7 @@ const round = (n: number, places = 4) => Number(n.toFixed(places));
 
 export default function VinylStickerCalculator({ businessId, stockItems, categories, methods, onApply, onMessage }: Props) {
   const vinylItems = stockItems.filter(x => x.is_active && x.stock_kind === "material" && /vinyl|sticker/i.test(x.name + " " + x.sku) && x.base_unit.toLowerCase().includes("met"));
-  const tapeItems = stockItems.filter(x => x.is_active && /tape/i.test(x.name + " " + x.sku));
+  const tapeItems = stockItems.filter(x => x.is_active && /tape/i.test(x.name + " " + x.sku) && x.base_unit.toLowerCase().includes("met"));
   const [stockId, setStockId] = useState(vinylItems[0]?.id ?? "");
   const [categoryId, setCategoryId] = useState(categories.find(x => /sticker|vinyl|vehicle/i.test(x.name))?.id ?? "");
   const [methodId, setMethodId] = useState(methods.find(x => /cut|plotter|vinyl/i.test(x.name + " " + x.code))?.id ?? "");
@@ -75,8 +75,9 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
   const tapeLength = includeTape ? linearMetres : 0;
   const tapeCost = tape && includeTape ? tapeLength * Number(tape.current_average_unit_cost) : 0;
   const directCost = materialCost + machineCost + labourCost + tapeCost + Math.max(0, Number(miscCost) || 0);
-  const floorPrice = directCost / 0.7;
-  const ceilingPrice = directCost * (1 + Math.max(0, Number(ceilingMarkup) || 0) / 100);
+  const unitDirectCost = q > 0 ? directCost / q : 0;
+  const floorPrice = unitDirectCost / 0.7;
+  const ceilingPrice = unitDirectCost * (1 + Math.max(0, Number(ceilingMarkup) || 0) / 100);
   const recommendedPrice = floorPrice + Math.max(0, ceilingPrice - floorPrice) * 0.65;
   const suggested = Math.ceil(recommendedPrice / 5) * 5;
   const final = Number(finalPrice || suggested);
@@ -125,7 +126,7 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
         linear_metres_estimated: round(linearMetres), vinyl_stock_item_id: vinyl.id,
         transfer_tape_stock_item_id: includeTape ? tapeStockId || null : null,
         transfer_tape_linear_metres: round(tapeLength), include_application: includeApplication,
-        complexity, direct_cost_estimate: round(directCost, 2), minimum_price: round(floorPrice, 2),
+        complexity, direct_cost_estimate: round(directCost, 2), direct_cost_per_unit: round(unitDirectCost, 2), minimum_price: round(floorPrice, 2),
         recommended_price: round(suggested, 2), ceiling_price: round(ceilingPrice, 2),
         operator_final_price: Math.round(final), owner_ceiling_markup_percent: Number(ceilingMarkup)
       }
@@ -161,14 +162,14 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
     </div>
     <div className="vinyl-summary">
       <div><span>Estimated vinyl usage</span><b>{layout ? `${round(linearMetres, 3)} linear metres` : "Check roll width / dimensions"}</b><small>{layout ? `${layout.across} across · ${layout.rows} rows · ${layout.rotated ? "rotated layout" : "normal layout"}` : "Sticker must fit the usable roll width."}</small></div>
-      <div><span>Direct production cost</span><b>{money(directCost)}</b><small>Vinyl {money(materialCost)} · Machine {money(machineCost)} · Labour {money(labourCost)} · Tape {money(tapeCost)}</small></div>
-      <div><span>Minimum selling price · 30% margin</span><b>{money(floorPrice)}</b><small>Hard floor on direct production cost</small></div>
-      <div><span>Recommended selling price</span><b>{money(suggested)}</b><small>Within owner-configured ceiling</small></div>
-      <div><span>Owner-configured ceiling</span><b>{money(ceilingPrice)}</b><small>{Number(ceilingMarkup)}% markup on direct cost</small></div>
+      <div><span>Direct production cost · whole job</span><b>{money(directCost)}</b><small>Vinyl {money(materialCost)} · Machine {money(machineCost)} · Labour {money(labourCost)} · Tape {money(tapeCost)} · {money(unitDirectCost)} per sticker</small></div>
+      <div><span>Minimum selling price · per sticker</span><b>{money(floorPrice)}</b><small>30% minimum gross margin on direct production cost</small></div>
+      <div><span>Recommended selling price · per sticker</span><b>{money(suggested)}</b><small>Within owner-configured ceiling</small></div>
+      <div><span>Owner-configured ceiling · per sticker</span><b>{money(ceilingPrice)}</b><small>{Number(ceilingMarkup)}% markup on direct cost</small></div>
     </div>
     <div className="vinyl-final-row">
-      <label>Operator final selling price (KES)<input type="number" min={Math.ceil(floorPrice)} max={Math.floor(ceilingPrice)} step="1" value={finalPrice || String(suggested)} onChange={e => setFinalPrice(e.target.value)}/></label>
-      <div><span>Expected gross profit</span><b>{money(final - directCost)}</b><small>{directCost > 0 ? `${((final - directCost) / final * 100).toFixed(1)}% gross margin` : "—"}</small></div>
+      <label>Operator final selling price per sticker (KES)<input type="number" min={Math.ceil(floorPrice)} max={Math.floor(ceilingPrice)} step="1" value={finalPrice || String(suggested)} onChange={e => setFinalPrice(e.target.value)}/></label>
+      <div><span>Expected gross profit · whole job</span><b>{money(final * q - directCost)}</b><small>{final * q > 0 ? `${((final * q - directCost) / (final * q) * 100).toFixed(1)}% gross margin` : "—"}</small></div>
     </div>
     {ceilingPrice < floorPrice && <p className="notice error">The owner ceiling is below the 30% minimum margin price. Increase the ceiling before applying this quotation.</p>}
     {!layout && <p className="notice error">The selected sticker cannot fit the usable vinyl width. Check dimensions and roll width.</p>}
