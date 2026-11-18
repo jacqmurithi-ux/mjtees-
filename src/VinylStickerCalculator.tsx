@@ -1,5 +1,5 @@
 import "./vinyl-calculator.css";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 
 type StockItem = {
@@ -14,13 +14,13 @@ type Props = {
   onApply: (line: { categoryId: string; description: string; quantity: string; unitPrice: string;
     stockItemId: string; productionMethodId: string; linearMetres: string; machineMinutes: string;
     labourHours: string; specification: Record<string, unknown> }) => void;
-  onMessage: (message: string, error?: boolean) => void;
+  onMessage: (message: string, error?: boolean) => void; onInventoryConfigSaved: () => void;
 };
 const money = (n: number) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 0 }).format(n);
 const cm = (value: number, unit: string) => unit === "in" ? value * 2.54 : value;
 const round = (n: number, places = 4) => Number(n.toFixed(places));
 
-export default function VinylStickerCalculator({ businessId, stockItems, categories, methods, onApply, onMessage }: Props) {
+export default function VinylStickerCalculator({ businessId, stockItems, categories, methods, onApply, onMessage, onInventoryConfigSaved }: Props) {
   const vinylItems = stockItems.filter(x => x.is_active && x.stock_kind === "material" && /vinyl|sticker/i.test(x.name + " " + x.sku) && x.base_unit.toLowerCase().includes("met"));
   const tapeItems = stockItems.filter(x => x.is_active && /tape/i.test(x.name + " " + x.sku) && x.base_unit.toLowerCase().includes("met"));
   const [stockId, setStockId] = useState(vinylItems[0]?.id ?? "");
@@ -84,6 +84,18 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
   const valid = Boolean(vinyl && categoryId && methodId && layout && directCost > 0 && ceilingPrice >= floorPrice && final >= floorPrice - 0.001 && final <= ceilingPrice + 0.001);
   const selectedMethod = methods.find(x => x.id === methodId);
 
+  useEffect(() => {
+    if (!supabase || !categoryId) return;
+    const category = categories.find(x => x.id === categoryId);
+    if (!category) return;
+    let active = true;
+    void supabase.from("pricing_rules").select("markup_value").eq("business_id", businessId).eq("category_id", categoryId)
+      .eq("name", "Vinyl sticker price ceiling · " + category.name).eq("is_active", true)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle()
+      .then(({ data, error }) => { if (active && !error && data?.markup_value != null) setCeilingMarkup(String(data.markup_value)); });
+    return () => { active = false; };
+  }, [businessId, categoryId, categories]);
+
   function setComplexityState(value: string) {
     setComplexity(value);
     if (value === "simple") { setDesignMinutes("0"); setWeedingMinutes("2"); }
@@ -108,7 +120,7 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
       p_is_active: true, p_request_id: crypto.randomUUID()
     });
     if (error) onMessage(error.message, true);
-    else onMessage("Owner ceiling rule saved for this category. The calculator uses it as the upper pricing boundary.");
+    else { onMessage("Owner ceiling rule saved for this category. The calculator uses it as the upper pricing boundary."); onInventoryConfigSaved(); }
     setSavingCeiling(false);
   }
   function apply() {
