@@ -149,7 +149,7 @@ begin
   select count(*)::integer into v_order_count
   from public.orders
   where business_id=new.business_id and customer_id=new.customer_id
-    and status='completed';
+    and status='completed' and id <> new.id;
 
   for v_rule in
     select * from public.customer_loyalty_rules
@@ -161,7 +161,10 @@ begin
     order by created_at,id
   loop
     v_eligible := new.total_amount >= v_rule.minimum_order_amount
-      and v_order_count >= greatest(v_rule.minimum_order_count,1);
+      and case when v_rule.reward_event='repeat_order'
+        then v_order_count >= greatest(v_rule.minimum_order_count,1)
+        else v_order_count+1 >= greatest(v_rule.minimum_order_count,1)
+      end;
 
     if v_eligible and v_rule.applies_to <> 'all' then
       select exists(
@@ -179,7 +182,10 @@ begin
       ) into v_eligible;
       v_eligible := v_eligible
         and new.total_amount >= v_rule.minimum_order_amount
-        and v_order_count >= greatest(v_rule.minimum_order_count,1);
+        and case when v_rule.reward_event='repeat_order'
+          then v_order_count >= greatest(v_rule.minimum_order_count,1)
+          else v_order_count+1 >= greatest(v_rule.minimum_order_count,1)
+        end;
     end if;
 
     if not v_eligible then continue; end if;
