@@ -11,9 +11,8 @@ select ok(
   'Anonymous quote acceptance reaches the private token-checked implementation'
 );
 select ok(
-  not has_function_privilege('anon','public.rls_auto_enable()','EXECUTE')
-  and not has_function_privilege('authenticated','public.rls_auto_enable()','EXECUTE'),
-  'RLS event trigger handler is not executable through API roles'
+  to_regprocedure('public.rls_auto_enable()') is null,
+  'Obsolete RLS event trigger handler is not installed in the public API schema'
 );
 
 select * from finish();
