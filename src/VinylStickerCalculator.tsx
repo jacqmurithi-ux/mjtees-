@@ -94,7 +94,11 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
     }
     setSavingCeiling(true);
     const category = categories.find(x => x.id === categoryId);
-    if (vinyl && effectiveRollWidth > 0 && effectiveUsableWidth > 0) {\n      const { error: stockError } = await supabase.from("stock_items").update({ roll_width_mm: Math.round(effectiveRollWidth * 10), usable_width_mm: Math.round(effectiveUsableWidth * 10) }).eq("business_id", businessId).eq("id", vinyl.id);\n      if (stockError) { onMessage(stockError.message, true); setSavingCeiling(false); return; }\n    }\n    const { error } = await supabase.rpc("owner_upsert_pricing_rule", {
+    if (vinyl && effectiveRollWidth > 0 && effectiveUsableWidth > 0) {
+      const { error: stockError } = await supabase.from("stock_items").update({ roll_width_mm: Math.round(effectiveRollWidth * 10), usable_width_mm: Math.round(effectiveUsableWidth * 10) }).eq("business_id", businessId).eq("id", vinyl.id);
+      if (stockError) { onMessage(stockError.message, true); setSavingCeiling(false); return; }
+    }
+    const { error } = await supabase.rpc("owner_upsert_pricing_rule", {
       p_business_id: businessId, p_rule_id: null, p_category_id: categoryId, p_catalogue_item_id: null,
       p_name: "Vinyl sticker price ceiling · " + (category?.name || "Stickers"),
       p_markup_method: "percentage_on_cost", p_markup_value: Number(ceilingMarkup),
