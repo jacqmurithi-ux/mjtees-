@@ -2,7 +2,7 @@ import { useCallback,useEffect,useMemo,useState } from "react";
 import type { FormEvent } from "react";
 import { supabase } from "./lib/supabase";
 type Customer={id:string;display_name:string;business_name:string|null;phone:string|null;email:string|null;customer_type:string;location:string|null;registration_number:string|null;preferred_contact_method:string;customer_status:string;notes:string|null;created_at:string;is_walk_in_profile:boolean};
-type Row={id:string;customer_id?:string;[key:string]:any};
+type Row={id?:string;customer_id?:string;[key:string]:any};
 const rid=()=>crypto.randomUUID(), money=(n:number)=>new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:0}).format(n);
 const types=["individual","school","uniform_shop","business","organisation","chama","shg","cbo","walk_in"], label=(s:string)=>(({individual:"Individual",school:"School",uniform_shop:"Uniform shop",business:"Business",organisation:"Organisation",chama:"Chama",shg:"SHG",cbo:"CBO",walk_in:"Walk-in"} as Record<string,string>)[s]||s);
 const blank={display_name:"",business_name:"",customer_type:"individual",phone:"",email:"",location:"",registration_number:"",preferred_contact_method:"phone",customer_status:"active",notes:""};
