@@ -316,6 +316,9 @@ begin
     if v_accepted+v_rejected<>v_received then
       raise exception using errcode='23514',message='Accepted plus rejected quantities must reconcile to total received quantity';
     end if;
+    if v_accepted<=0 then
+      raise exception using errcode='23514',message='At least one accepted garment is required before completing the production job';
+    end if;
   end if;
   return new;
 end;
