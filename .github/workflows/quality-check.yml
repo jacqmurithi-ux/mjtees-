@@ -25,3 +25,5 @@ jobs:
         run: npm run build
       - name: Test shared pricing calculations
         run: npm run test:pricing
+      - name: Test bulk printing safeguards
+        run: npm run test:bulk-printing
