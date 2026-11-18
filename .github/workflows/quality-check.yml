@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, feat/owner-first-production-workflow]
 
 permissions:
   contents: read

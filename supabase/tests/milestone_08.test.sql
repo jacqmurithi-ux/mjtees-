@@ -1,0 +1,33 @@
+create extension if not exists pgtap with schema extensions;
+set search_path = public, extensions;
+begin;
+select plan(25);
+
+select ok(to_regclass('public.cash_movements') is not null, 'cash movement ledger exists');
+select ok(to_regclass('public.daily_closings') is not null, 'daily closing snapshots exist');
+select ok(to_regclass('public.daily_payment_reconciliations') is not null, 'payment reconciliation snapshots exist');
+select ok(to_regclass('public.daily_closing_adjustments') is not null, 'post-close cash adjustments exist');
+select ok(to_regclass('public.daily_payment_reconciliation_adjustments') is not null, 'post-confirmation reconciliation adjustments exist');
+select ok((select relrowsecurity from pg_class where oid='public.cash_movements'::regclass), 'cash movements RLS enabled');
+select ok((select relrowsecurity from pg_class where oid='public.daily_closings'::regclass), 'daily closings RLS enabled');
+select ok((select relrowsecurity from pg_class where oid='public.daily_payment_reconciliations'::regclass), 'reconciliation RLS enabled');
+select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='cash_movements' and cmd='SELECT'), 'cash movement owner read policy exists');
+select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='daily_closings' and cmd='SELECT'), 'daily closing owner read policy exists');
+select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='daily_payment_reconciliations' and cmd='SELECT'), 'reconciliation owner read policy exists');
+select ok(not has_table_privilege('authenticated','public.cash_movements','INSERT'), 'authenticated clients cannot directly insert cash movements');
+select ok(not has_table_privilege('authenticated','public.daily_closings','UPDATE'), 'authenticated clients cannot directly edit daily closings');
+select ok(exists(select 1 from information_schema.columns where table_schema='public' and table_name='deliveries' and column_name='attempt_status'), 'delivery attempt status exists');
+select ok(exists(select 1 from information_schema.columns where table_schema='public' and table_name='deliveries' and column_name='failed_at'), 'delivery failure timestamp exists');
+select ok(to_regprocedure('public.owner_record_cash_movement(uuid,date,text,bigint,text,text,text,text,uuid)') is not null, 'cash movement RPC exists');
+select ok(to_regprocedure('public.owner_save_daily_closing(uuid,date,bigint,bigint,text,text,boolean,uuid)') is not null, 'daily closing RPC exists');
+select ok(to_regprocedure('public.owner_save_payment_reconciliation(uuid,date,text,bigint,bigint,text,text,text,boolean,uuid)') is not null, 'payment reconciliation RPC exists');
+select ok(to_regprocedure('public.owner_mark_delivery_failed(uuid,text,uuid)') is not null, 'delivery failure RPC exists');
+select ok(to_regprocedure('public.owner_record_daily_closing_adjustment(uuid,text,bigint,text,uuid)') is not null, 'daily closing adjustment RPC exists');
+select ok(to_regprocedure('public.owner_record_reconciliation_adjustment(uuid,text,text,bigint,text,uuid)') is not null, 'reconciliation adjustment RPC exists');
+select ok(not (select prosecdef from pg_proc where oid='public.owner_get_daily_operations_summary(uuid,date)'::regprocedure), 'dashboard aggregate RPC runs as invoker');
+select ok(exists(select 1 from pg_trigger where tgrelid='public.payment_refunds'::regclass and tgname='payment_refunds_guard_confirmed_period' and not tgisinternal), 'posted refunds cannot alter a confirmed financial period');
+select ok(exists(select 1 from pg_trigger where tgrelid='public.daily_closings'::regclass and tgname='daily_closings_guard_pending_cash_refunds' and not tgisinternal), 'pending cash refunds block daily close');
+select ok(exists(select 1 from pg_trigger where tgrelid='public.daily_payment_reconciliations'::regclass and tgname='daily_payment_reconciliations_guard_pending_refunds' and not tgisinternal), 'pending M-Pesa refunds block reconciliation confirmation');
+
+select * from finish();
+rollback;
