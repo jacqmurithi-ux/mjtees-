@@ -1,8 +1,9 @@
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
 begin;
-select plan(18);
+select plan(19);
 select has_table('public','customer_contacts','customer contacts table exists');
+select has_table('public','customers','customer profiles remain available after rewards removal');
 select has_table('public','customer_interactions','customer interaction history exists');
 select has_column('public','customers','customer_type','customer category is stored on customer');
 select has_column('public','customers','is_walk_in_profile','anonymous walk-in profile is supported');
