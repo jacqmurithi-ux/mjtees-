@@ -6,7 +6,7 @@
 
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(22);
+SELECT plan(23);
 
 -- Deterministic identities make failures reproducible. These rows are test fixtures only.
 INSERT INTO auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -14,6 +14,14 @@ INSERT INTO auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,
 VALUES(
   '33333333-3333-4333-8333-333333333333','authenticated','authenticated',
   'mj-vinyl-accounting@example.invalid','',now(),
+  '{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,now(),now()
+);
+
+INSERT INTO auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,
+  raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+VALUES(
+  '44444444-4444-4444-8444-444444444444','authenticated','authenticated',
+  'mj-vinyl-inspector@example.invalid','',now(),
   '{"provider":"email","providers":["email"]}'::jsonb,'{}'::jsonb,now(),now()
 );
 
@@ -175,6 +183,18 @@ SELECT is(
      AND job_id='99999999-9999-4999-8999-999999999999'),
   1,'Idempotent issue request does not create a duplicate material issue'
 );
+
+SELECT set_config('request.jwt.claim.sub','44444444-4444-4444-8444-444444444444',true);
+SELECT throws_ok(
+  $test$SELECT public.owner_return_job_offcut(
+    '99999999-9999-4999-8999-999999999999',
+    current_setting('mj.test.issue_id')::uuid,
+    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    0.001000000,'80000000-0000-4000-8000-000000000099')$test$,
+  '42501','Active owner access required',
+  'Authenticated non-owner cannot return production offcuts'
+);
+SELECT set_config('request.jwt.claim.sub','33333333-3333-4333-8333-333333333333',true);
 
 SELECT is(
   (public.owner_return_job_offcut(
