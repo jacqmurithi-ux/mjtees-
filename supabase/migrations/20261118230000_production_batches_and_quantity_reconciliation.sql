@@ -283,21 +283,21 @@ declare
   v_received numeric; v_pending numeric; v_in_production numeric;
   v_accepted numeric; v_rework numeric; v_rejected numeric;
 begin
-  if new.status='completed' and old.status is distinct from 'completed'
-    and new.quantity_tracking_required then
-
-    if exists(
-      select 1 from public.production_batches b
-      where b.business_id=new.business_id and b.job_id=new.id and b.status='open'
-    ) then
-      raise exception using errcode='23514',message='Close every production batch before completing the job';
-    end if;
+  if new.status='completed' and old.status is distinct from 'completed' then
     if exists(
       select 1 from public.production_worker_assignments a
       where a.business_id=new.business_id and a.job_id=new.id and a.status in ('assigned','working')
     ) then
       raise exception using errcode='23514',message='Complete or cancel every worker assignment before completing the production job';
     end if;
+
+    if new.quantity_tracking_required then
+      if exists(
+        select 1 from public.production_batches b
+        where b.business_id=new.business_id and b.job_id=new.id and b.status='open'
+      ) then
+        raise exception using errcode='23514',message='Close every production batch before completing the job';
+      end if;
 
     select
       coalesce(sum(case when from_state is null and to_state='pending' then quantity else 0 end),0),
@@ -326,6 +326,7 @@ begin
     end if;
     if v_accepted<=0 then
       raise exception using errcode='23514',message='At least one accepted garment is required before completing the production job';
+    end if;
     end if;
   end if;
   return new;
