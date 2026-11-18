@@ -79,10 +79,10 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   if(openingFloat!==""&&(!Number.isSafeInteger(Number(openingFloat))||Number(openingFloat)<0)){setError("Enter a valid opening float in whole KES.");return;}
   if(close&&(actualCash===""||!Number.isSafeInteger(Number(actualCash))||Number(actualCash)<0)){setError("Enter the physical cash count in whole KES.");return;}
   setBusy(true);setError("");setNotice("");
-  const {data,error:e}=await supabase.rpc("owner_save_daily_closing",{p_business_id:businessId,p_business_date:businessDate,
+  const {error:rpcError}=await supabase.rpc("owner_save_daily_closing",{p_business_id:businessId,p_business_date:businessDate,
    p_opening_float:openingFloat===""?null:Number(openingFloat),p_actual_cash:close?Number(actualCash):null,p_notes:closingNotes.trim()||null,
    p_variance_reason:varianceReason.trim()||null,p_close:close,p_request_id:rid()});
-  if(e)setError(e.message);else{setNotice(close?"Daily closing confirmed and locked.":"Daily closing draft saved. You can resume it later.");await load();onChanged();}
+  if(rpcError)setError(rpcError.message);else{setNotice(close?"Daily closing confirmed and locked.":"Daily closing draft saved. You can resume it later.");await load();onChanged();}
   setBusy(false);
  }
  async function recordMovement(e:FormEvent){
@@ -90,11 +90,11 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   const amount=Number(movement.amount);
   if(!Number.isSafeInteger(amount)||amount<=0||!movement.notes.trim()){setError("Enter a positive whole-KES amount and a reason.");return;}
   setBusy(true);setError("");setNotice("");
-  const {error:e}=await supabase.rpc("owner_record_cash_movement",{p_business_id:businessId,p_business_date:businessDate,
+  const {error:rpcError}=await supabase.rpc("owner_record_cash_movement",{p_business_id:businessId,p_business_date:businessDate,
    p_movement_type:movement.type,p_amount:amount,p_source_account:movement.source.trim()||null,
    p_destination_account:movement.destination.trim()||null,p_reference:movement.reference.trim()||null,
    p_notes:movement.notes.trim(),p_request_id:rid()});
-  if(e)setError(e.message);else{setMovement({type:"till_top_up",amount:"",source:"",destination:"",reference:"",notes:""});setNotice("Cash movement recorded.");await load();onChanged();}
+  if(rpcError)setError(rpcError.message);else{setMovement({type:"till_top_up",amount:"",source:"",destination:"",reference:"",notes:""});setNotice("Cash movement recorded.");await load();onChanged();}
   setBusy(false);
  }
  async function saveReconciliation(confirm:boolean){
@@ -102,10 +102,10 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   const receipts=Number(statement.receipts),refunds=Number(statement.refunds);
   if(!Number.isSafeInteger(receipts)||receipts<0||!Number.isSafeInteger(refunds)||refunds<0){setError("Enter valid whole-KES statement totals.");return;}
   setBusy(true);setError("");setNotice("");
-  const {data,error:e2}=await supabase.rpc("owner_save_payment_reconciliation",{p_business_id:businessId,p_business_date:businessDate,
+  const {error:rpcError}=await supabase.rpc("owner_save_payment_reconciliation",{p_business_id:businessId,p_business_date:businessDate,
    p_method:"mpesa",p_statement_receipts:receipts,p_statement_refunds:refunds,p_statement_reference:statement.reference.trim()||null,
    p_notes:statement.notes.trim()||null,p_variance_reason:statement.varianceReason.trim()||null,p_confirm:confirm,p_request_id:rid()});
-  if(e2)setError(e2.message);else{setNotice(confirm?"M-Pesa reconciliation confirmed and locked.":"M-Pesa reconciliation draft saved.");await load();onChanged();}
+  if(rpcError)setError(rpcError.message);else{setNotice(confirm?"M-Pesa reconciliation confirmed and locked.":"M-Pesa reconciliation draft saved.");await load();onChanged();}
   setBusy(false);
  }
  async function recordClosingAdjustment(e:FormEvent){
