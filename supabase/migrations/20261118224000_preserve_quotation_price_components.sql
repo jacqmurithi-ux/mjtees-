@@ -625,4 +625,114 @@ end;
 $function$;
 
 
+
+create or replace function private.owner_create_quotation_with_discount_and_price_components(
+  p_business_id uuid,
+  p_customer_id uuid,
+  p_enquiry_id uuid,
+  p_lines jsonb,
+  p_order_discount bigint,
+  p_expires_at timestamptz,
+  p_customer_notes text,
+  p_internal_notes text,
+  p_request_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_actor uuid;
+  v_cached jsonb;
+  v_payload jsonb;
+  v_result jsonb;
+  v_quote_id uuid;
+  v_line record;
+  v_garment_unit bigint;
+  v_count integer := 0;
+begin
+  v_actor:=private.assert_active_owner(p_business_id);
+  if p_request_id is null or p_lines is null or jsonb_typeof(p_lines) is distinct from 'array' then
+    raise exception using errcode='22023',message='Request ID and quotation lines are required';
+  end if;
+  v_payload:=jsonb_build_object('customer_id',p_customer_id,'enquiry_id',p_enquiry_id,'lines',p_lines,
+    'order_discount',coalesce(p_order_discount,0),'expires_at',p_expires_at,
+    'customer_notes',p_customer_notes,'internal_notes',p_internal_notes);
+  v_cached:=private.begin_idempotent_request(
+    p_business_id,'create_quotation_with_discount_and_price_components',p_request_id,v_payload
+  );
+  if v_cached is not null then return v_cached; end if;
+
+  v_result:=private.owner_create_quotation_with_discount(
+    p_business_id,p_customer_id,p_enquiry_id,p_lines,p_order_discount,p_expires_at,
+    p_customer_notes,p_internal_notes,private.derived_request_uuid(p_request_id,'base-discount-quotation')
+  );
+  v_quote_id:=(v_result->>'quotation_id')::uuid;
+
+  for v_line in
+    select qi.id,qi.unit_price,qi.sale_mode,qi.customer_supplies_item,x.value as payload
+    from jsonb_array_elements(p_lines) with ordinality x(value,ordinality)
+    join public.quotation_items qi
+      on qi.business_id=p_business_id and qi.quotation_id=v_quote_id and qi.line_sequence=x.ordinality
+    order by x.ordinality
+  loop
+    if v_line.customer_supplies_item then
+      v_garment_unit:=0;
+    elsif v_line.sale_mode='blank' then
+      v_garment_unit:=v_line.unit_price;
+    else
+      v_garment_unit:=nullif(v_line.payload->>'garment_supply_unit_price','')::bigint;
+    end if;
+    if v_garment_unit is null or v_garment_unit<0 or v_garment_unit>v_line.unit_price then
+      raise exception using errcode='22023',message='Enter a valid supplied-item unit price not exceeding the total unit price';
+    end if;
+    update public.quotation_items
+    set price_components=jsonb_build_object(
+      'version',1,'currency_code','KES',
+      'garment_supply_unit_price',v_garment_unit,
+      'printing_unit_price',v_line.unit_price-v_garment_unit,
+      'classification','explicit'
+    )
+    where business_id=p_business_id and id=v_line.id;
+    v_count:=v_count+1;
+  end loop;
+
+  if v_count<>jsonb_array_length(p_lines) then
+    raise exception using errcode='23514',message='Quotation discount price components could not be matched to every line';
+  end if;
+  v_result:=v_result||jsonb_build_object('price_components_version',1);
+  perform private.finish_idempotent_request(
+    p_business_id,'create_quotation_with_discount_and_price_components',p_request_id,v_result
+  );
+  perform private.write_audit(p_business_id,v_actor,'quotation.discount_price_components_saved',
+    'quotation',v_quote_id,p_request_id,
+    jsonb_build_object('line_count',v_count,'order_discount',coalesce(p_order_discount,0),'version',1));
+  return v_result;
+end;
+$function$;
+
+create or replace function public.owner_create_quotation_with_discount_and_price_components(
+  p_business_id uuid,p_customer_id uuid,p_enquiry_id uuid,p_lines jsonb,p_order_discount bigint,
+  p_expires_at timestamptz,p_customer_notes text,p_internal_notes text,p_request_id uuid
+)
+returns jsonb language sql security invoker set search_path=''
+as $function$
+  select private.owner_create_quotation_with_discount_and_price_components($1,$2,$3,$4,$5,$6,$7,$8,$9);
+$function$;
+
+revoke all on function private.owner_create_quotation_with_discount_and_price_components(
+  uuid,uuid,uuid,jsonb,bigint,timestamptz,text,text,uuid
+) from public,anon,authenticated;
+grant usage on schema private to authenticated;
+grant execute on function private.owner_create_quotation_with_discount_and_price_components(
+  uuid,uuid,uuid,jsonb,bigint,timestamptz,text,text,uuid
+) to authenticated;
+revoke all on function public.owner_create_quotation_with_discount_and_price_components(
+  uuid,uuid,uuid,jsonb,bigint,timestamptz,text,text,uuid
+) from public,anon;
+grant execute on function public.owner_create_quotation_with_discount_and_price_components(
+  uuid,uuid,uuid,jsonb,bigint,timestamptz,text,text,uuid
+) to authenticated;
+
 commit;
