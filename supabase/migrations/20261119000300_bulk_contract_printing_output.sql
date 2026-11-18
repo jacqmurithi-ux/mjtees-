@@ -179,6 +179,45 @@ as $$ select private.owner_record_production_output($1,$2,$3,$4,$5,$6,$7,$8,$9,$
 revoke all on function public.owner_record_production_output(uuid,numeric,numeric,numeric,text,text,bigint,timestamptz,text,uuid) from public,anon;
 grant execute on function public.owner_record_production_output(uuid,numeric,numeric,numeric,text,text,bigint,timestamptz,text,uuid) to authenticated;
 
+create or replace function private.owner_get_bulk_printing_daily_summary(p_business_id uuid,p_business_date date)
+returns jsonb language plpgsql security definer set search_path=''
+as $
+declare v_actor uuid; v_start timestamptz; v_end timestamptz; v_result jsonb;
+begin
+  v_actor:=private.assert_active_owner(p_business_id);
+  if p_business_date is null then raise exception using errcode='22023',message='Business date is required'; end if;
+  v_start:=p_business_date::timestamp at time zone 'Africa/Nairobi';
+  v_end:=(p_business_date+1)::timestamp at time zone 'Africa/Nairobi';
+  select jsonb_build_object(
+    'business_date',p_business_date,
+    'order_value',(select coalesce(sum(o.total_amount),0) from public.orders o
+      where o.business_id=p_business_id and o.received_at>=v_start and o.received_at<v_end and o.status<>'cancelled'),
+    'orders_received',(select count(*) from public.orders o
+      where o.business_id=p_business_id and o.received_at>=v_start and o.received_at<v_end and o.status<>'cancelled'),
+    'daily_printed',(select coalesce(sum(e.quantity_printed),0) from public.production_output_entries e
+      where e.business_id=p_business_id and e.occurred_at>=v_start and e.occurred_at<v_end),
+    'daily_accepted',(select coalesce(sum(e.quantity_accepted),0) from public.production_output_entries e
+      where e.business_id=p_business_id and e.occurred_at>=v_start and e.occurred_at<v_end),
+    'daily_rejected',(select coalesce(sum(e.quantity_rejected),0) from public.production_output_entries e
+      where e.business_id=p_business_id and e.occurred_at>=v_start and e.occurred_at<v_end),
+    'daily_reworked',(select coalesce(sum(e.quantity_reworked),0) from public.production_output_entries e
+      where e.business_id=p_business_id and e.occurred_at>=v_start and e.occurred_at<v_end),
+    'all_time_printed',(select coalesce(sum(e.quantity_printed),0) from public.production_output_entries e where e.business_id=p_business_id),
+    'all_time_accepted',(select coalesce(sum(e.quantity_accepted),0) from public.production_output_entries e where e.business_id=p_business_id),
+    'all_time_rejected',(select coalesce(sum(e.quantity_rejected),0) from public.production_output_entries e where e.business_id=p_business_id)
+  ) into v_result;
+  return v_result;
+end;
+$;
+revoke all on function private.owner_get_bulk_printing_daily_summary(uuid,date) from public,anon;
+grant execute on function private.owner_get_bulk_printing_daily_summary(uuid,date) to authenticated;
+
+create or replace function public.owner_get_bulk_printing_daily_summary(p_business_id uuid,p_business_date date)
+returns jsonb language sql set search_path=''
+as $ select private.owner_get_bulk_printing_daily_summary($1,$2); $;
+revoke all on function public.owner_get_bulk_printing_daily_summary(uuid,date) from public,anon;
+grant execute on function public.owner_get_bulk_printing_daily_summary(uuid,date) to authenticated;
+
 -- Output is append-only. Corrections are new entries, never edits to the original record.
 create or replace function private.guard_production_output_append_only()
 returns trigger language plpgsql set search_path=''
