@@ -303,8 +303,12 @@ begin
   where business_id=v_assignment.business_id and id=v_assignment.worker_id;
   select * into v_job from public.production_jobs
   where business_id=v_assignment.business_id and id=v_assignment.job_id for update;
-  if v_job.status not in ('in_progress','quality_check','rework') then
+  if v_job.status not in ('planned','in_progress','quality_check','rework') then
     raise exception using errcode='22023',message='Production job must be active before worker commencement';
+  end if;
+  if v_job.status='planned' then
+    update public.production_jobs set status='in_progress'
+    where business_id=v_assignment.business_id and id=v_job.id;
   end if;
 
   if v_worker.worker_type='temporary' then
