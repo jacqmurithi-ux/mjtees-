@@ -20,4 +20,6 @@ test("accepted production cannot exceed the contracted quantity", () => {
 test("customer supplied garments are not written to inventory by the output ledger", () => {
   assert.doesNotMatch(sql, /insert into public\.(stock_movements|inventory_movements)/i);
   assert.match(sql, /production_output_entries/);
+  assert.match(sql, /owner_list_production_output/);
+  assert.match(sql, /private\.assert_active_owner\(p_business_id\)/);
 });
