@@ -12,13 +12,14 @@ type Rework={id:string;job_id:string;quality_check_id:string;reason:string;opene
 type CostEntry={id:string;job_id:string;cost_type:string;description:string;quantity:number;unit:string;unit_rate:number;amount:number;occurred_at:string};
 type OutputEntry={id:string;job_id:string;quantity_printed:number;quantity_accepted:number;quantity_rejected:number;quantity_reworked:number;worker_type:string;worker_name:string|null;labour_cost:number;occurred_at:string;notes:string|null};
 type OutputForm={printed:string;rejected:string;reworked:string;workerType:"owner"|"staff"|"temporary";workerName:string;labourCost:string;occurredAt:string;notes:string};
+type OutputSummary={order_value:number;orders_received:number;daily_printed:number;daily_accepted:number;daily_rejected:number;daily_reworked:number;all_time_printed:number;all_time_accepted:number;all_time_rejected:number};
 const localDateTime=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
 const businessDate=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Africa/Nairobi"});
 const rid=()=>crypto.randomUUID();
 const money=(n:number)=>new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:0}).format(n);
 
 export default function OrderProductionWorkflow({businessId,customers,onChanged}:{businessId:string;customers:{id:string;display_name:string}[];onChanged:()=>void}){
- const [orders,setOrders]=useState<Order[]>([]);const [items,setItems]=useState<Item[]>([]);const [methods,setMethods]=useState<Method[]>([]);const [outputEntries,setOutputEntries]=useState<OutputEntry[]>([]);const [outputForms,setOutputForms]=useState<Record<string,OutputForm>>({});const [reportDate,setReportDate]=useState(businessDate);
+ const [orders,setOrders]=useState<Order[]>([]);const [items,setItems]=useState<Item[]>([]);const [methods,setMethods]=useState<Method[]>([]);const [outputEntries,setOutputEntries]=useState<OutputEntry[]>([]);const [outputForms,setOutputForms]=useState<Record<string,OutputForm>>({});const [reportDate,setReportDate]=useState(businessDate);const [outputSummary,setOutputSummary]=useState<OutputSummary>({order_value:0,orders_received:0,daily_printed:0,daily_accepted:0,daily_rejected:0,daily_reworked:0,all_time_printed:0,all_time_accepted:0,all_time_rejected:0});
  const [jobs,setJobs]=useState<Job[]>([]);const [checks,setChecks]=useState<Check[]>([]);const [reworks,setReworks]=useState<Rework[]>([]);const [costs,setCosts]=useState<CostEntry[]>([]);const [stock,setStock]=useState<Stock[]>([]);const [locations,setLocations]=useState<Location[]>([]);const [currentUserId,setCurrentUserId]=useState("");
  const [jobCost,setJobCost]=useState<Record<string,{type:string;description:string;quantity:string;unit:string;rate:string}>>({});
  const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
@@ -29,7 +30,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  const [handover,setHandover]=useState<Record<string,{method:"collection"|"courier";recipient:string;carrier:string;tracking:string;charge:string;exception:string}>>({});
  const load=useCallback(async()=>{
   const client=supabase;if(!client)return;
-  const [o,i,m,j,q,rw,ce,s,l,out]=await Promise.all([
+  const [o,i,m,j,q,rw,ce,s,l,out,summary]=await Promise.all([
    client.from("orders").select("id,order_number,customer_id,status,total_amount,received_at,required_by,promised_turnaround_hours").eq("business_id",businessId).order("received_at",{ascending:false}).limit(200),
    client.from("order_items").select("id,order_id,description,quantity,unit,sale_mode,customer_supplies_item,stock_item_id,production_method_id,production_specification").eq("business_id",businessId).limit(500),
    client.from("production_methods").select("id,code,name").eq("is_active",true).order("name"),
@@ -39,10 +40,11 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
    client.from("production_cost_entries").select("id,job_id,cost_type,description,quantity,unit,unit_rate,amount,occurred_at").eq("business_id",businessId).order("occurred_at",{ascending:false}).limit(500),
    client.from("stock_items").select("id,name,base_unit").eq("business_id",businessId).eq("is_active",true).order("name").limit(500),
    client.from("inventory_locations").select("id,name").eq("business_id",businessId).eq("is_active",true).order("name"),
-   client.rpc("owner_list_production_output",{p_business_id:businessId})
+   client.rpc("owner_list_production_output",{p_business_id:businessId}),
+   client.rpc("owner_get_bulk_printing_daily_summary",{p_business_id:businessId,p_business_date:reportDate})
   ]);
-  const failure=o.error||i.error||m.error||j.error||q.error||rw.error||ce.error||s.error||l.error||out.error;if(failure)throw failure;
-  setOrders((o.data??[]) as Order[]);setItems((i.data??[]) as Item[]);setMethods((m.data??[]) as Method[]);setJobs((j.data??[]) as Job[]);setChecks((q.data??[]) as Check[]);setReworks((rw.data??[]) as Rework[]);setCosts((ce.data??[]) as CostEntry[]);setStock((s.data??[]) as Stock[]);setLocations((l.data??[]) as Location[]);setOutputEntries((out.data??[]) as OutputEntry[]);const {data:userData}=await client.auth.getUser();setCurrentUserId(userData.user?.id||"");
+  const failure=o.error||i.error||m.error||j.error||q.error||rw.error||ce.error||s.error||l.error||out.error||summary.error;if(failure)throw failure;
+  setOrders((o.data??[]) as Order[]);setItems((i.data??[]) as Item[]);setMethods((m.data??[]) as Method[]);setJobs((j.data??[]) as Job[]);setChecks((q.data??[]) as Check[]);setReworks((rw.data??[]) as Rework[]);setCosts((ce.data??[]) as CostEntry[]);setStock((s.data??[]) as Stock[]);setLocations((l.data??[]) as Location[]);setOutputEntries((out.data??[]) as OutputEntry[]);setOutputSummary((summary.data??{}) as OutputSummary);const {data:userData}=await client.auth.getUser();setCurrentUserId(userData.user?.id||"");
  },[businessId]);
  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
  const call=async(name:string,args:Record<string,unknown>,success:string)=>{
@@ -114,12 +116,12 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
   <section className="connected-panel production-daily-summary">
    <div className="panel-toolbar"><div><h3>Daily sales and printed output</h3><p>Sales follow order received dates; printed units follow actual production entries.</p></div><label>Business date<input type="date" value={reportDate} onChange={e=>setReportDate(e.target.value)}/></label></div>
    <div className="connected-metrics">
-    <div className="overview-card orange-card"><span className="metric-label">Orders received</span><strong>{orders.filter(o=>new Date(o.received_at).toLocaleDateString("en-CA",{timeZone:"Africa/Nairobi"})===reportDate&&o.status!=="cancelled").length}</strong><small>On selected date</small></div>
-    <div className="overview-card green-card"><span className="metric-label">Daily sales value</span><strong>{money(orders.filter(o=>new Date(o.received_at).toLocaleDateString("en-CA",{timeZone:"Africa/Nairobi"})===reportDate&&o.status!=="cancelled").reduce((n,o)=>n+Number(o.total_amount),0))}</strong><small>Order value, not cash collected</small></div>
-    <div className="overview-card blue-card"><span className="metric-label">Pieces printed today</span><strong>{outputEntries.filter(e=>new Date(e.occurred_at).toLocaleDateString("en-CA",{timeZone:"Africa/Nairobi"})===reportDate).reduce((n,e)=>n+Number(e.quantity_printed),0)}</strong><small>Actual print attempts</small></div>
-    <div className="overview-card neutral-card"><span className="metric-label">Accepted pieces today</span><strong>{outputEntries.filter(e=>new Date(e.occurred_at).toLocaleDateString("en-CA",{timeZone:"Africa/Nairobi"})===reportDate).reduce((n,e)=>n+Number(e.quantity_accepted),0)}</strong><small>After rejected quantity</small></div>
+    <div className="overview-card orange-card"><span className="metric-label">Orders received</span><strong>{Number(outputSummary.orders_received||0)}</strong><small>On selected date</small></div>
+    <div className="overview-card green-card"><span className="metric-label">Daily sales value</span><strong>{money(Number(outputSummary.order_value||0))}</strong><small>Order value, not cash collected</small></div>
+    <div className="overview-card blue-card"><span className="metric-label">Pieces printed today</span><strong>{Number(outputSummary.daily_printed||0)}</strong><small>Actual print attempts</small></div>
+    <div className="overview-card neutral-card"><span className="metric-label">Accepted pieces today</span><strong>{Number(outputSummary.daily_accepted||0)}</strong><small>After rejected quantity</small></div>
    </div>
-   <p className="small-note">All-time printed units: <b>{outputEntries.reduce((n,e)=>n+Number(e.quantity_printed),0)}</b> · All-time accepted units: <b>{outputEntries.reduce((n,e)=>n+Number(e.quantity_accepted),0)}</b>. Posted payments remain in Payments and are not inferred from order sales.</p>
+   <p className="small-note">All-time printed units: <b>{Number(outputSummary.all_time_printed||0)}</b> · All-time accepted units: <b>{Number(outputSummary.all_time_accepted||0)}</b> · Rejected: <b>{Number(outputSummary.all_time_rejected||0)}</b>. Posted payments remain in Payments and are not inferred from order sales.</p>
   </section>
   <div className="record-list">{orders.map(order=>{
    const lines=orderItems(order.id);
