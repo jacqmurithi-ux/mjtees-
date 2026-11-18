@@ -68,8 +68,7 @@ begin
     or (p_worker_type<>'owner' and length(btrim(coalesce(p_worker_name,''))) not between 1 and 180)
     or p_labour_cost is null or p_labour_cost<0
     or p_occurred_at is null or p_occurred_at>now()+interval '5 minutes'
-    or length(coalesce(p_notes,''))>2000
-    or v_job.status not in ('planned','in_progress','quality_check','rework') then
+    or p_worker_type is null or length(coalesce(p_notes,''))>2000 then
     raise exception using errcode='22023',message='Invalid production output entry or job is not active';
   end if;
 
@@ -81,6 +80,9 @@ begin
   );
   v_cached:=private.begin_idempotent_request(v_job.business_id,'record_production_output',p_request_id,v_payload);
   if v_cached is not null then return v_cached; end if;
+  if v_job.status not in ('planned','in_progress','quality_check','rework') then
+    raise exception using errcode='55000',message='Production job is not active';
+  end if;
 
   select coalesce(sum(quantity_accepted),0) into v_accepted_before
     from public.production_output_entries where business_id=v_job.business_id and job_id=p_job_id;
@@ -97,6 +99,16 @@ begin
     p_worker_type,nullif(btrim(p_worker_name),''),p_labour_cost,p_occurred_at,
     nullif(btrim(p_notes),''),v_actor,p_request_id
   ) returning id into v_entry_id;
+
+  if p_labour_cost>0 then
+    insert into public.production_cost_entries(
+      business_id,job_id,cost_type,description,quantity,unit,unit_rate,amount,occurred_at,actor_user_id
+    ) values (
+      v_job.business_id,p_job_id,'labour',
+      case when p_worker_type='owner' then 'Production labour · owner' else 'Production labour · '||btrim(p_worker_name) end,
+      1,'batch',p_labour_cost,p_labour_cost,p_occurred_at,v_actor
+    );
+  end if;
 
   update public.production_jobs
     set status=case when v_accepted_after>=planned_quantity then 'quality_check' else 'in_progress' end,
