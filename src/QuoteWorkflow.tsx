@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { supabase } from "./lib/supabase";
+import VinylStickerCalculator from "./VinylStickerCalculator";
 
 type Category = { id: string; name: string };
 type ProductionMethod = { id: string; name: string; code: string };
-type StockItem = { id: string; sku: string; name: string; base_unit: string; stock_kind:string; is_active: boolean };
+type StockItem = { id: string; sku: string; name: string; base_unit: string; stock_kind:string; is_active: boolean; current_average_unit_cost:number; roll_width_mm:number|null; usable_width_mm:number|null };
 type CatalogueItem = {id:string;name:string;category_id:string|null;item_type:"product"|"service"};
 type CostComponentForm = { componentType:string; stockItemId:string; unit:string; driverType:string; factor:string; waste:string; fixedCost:string };
 type Customer = { id: string; display_name: string };
@@ -22,14 +23,14 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const [catalogueItems,setCatalogueItems]=useState<CatalogueItem[]>([]);
   const [quotes,setQuotes]=useState<Quote[]>([]);
   const [orders,setOrders]=useState<Order[]>([]);
-  const [tab,setTab]=useState<"quotes"|"costing"|"orders">("quotes");
+  const [tab,setTab]=useState<"quotes"|"costing"|"orders"|"vinyl">("quotes");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [customerId,setCustomerId]=useState("");
   const [revisionOf,setRevisionOf]=useState<string|null>(null);
   const [enquiryId,setEnquiryId]=useState("");
-  const [quoteLines,setQuoteLines]=useState([{catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:"",linearMetres:"",areaSquareMetres:"",machineMinutes:"",labourHours:""}]);
+  const [quoteLines,setQuoteLines]=useState([{catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:"",linearMetres:"",areaSquareMetres:"",machineMinutes:"",labourHours:"",stickerSpecification:{} as Record<string,unknown>}]);
   const [quoteExpiry,setQuoteExpiry]=useState("");
   const [customerNotes,setCustomerNotes]=useState("");
   const [internalNotes,setInternalNotes]=useState("");
@@ -50,7 +51,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
       supabase.from("service_categories").select("id,name").eq("business_id",businessId).eq("is_active",true).order("name"),
       supabase.from("quotations").select("id,quote_number,customer_id,status,revision_of,subtotal_amount,discount_amount,total_amount,created_at,expires_at").eq("business_id",businessId).order("created_at",{ascending:false}).limit(100),
       supabase.from("orders").select("id,order_number,customer_id,status,total_amount,received_at,required_by,promised_turnaround_hours").eq("business_id",businessId).order("received_at",{ascending:false}).limit(100),
-      supabase.from("stock_items").select("id,sku,name,base_unit,stock_kind,is_active").eq("business_id",businessId).eq("is_active",true).order("name").limit(500),
+      supabase.from("stock_items").select("id,sku,name,base_unit,stock_kind,is_active,current_average_unit_cost,roll_width_mm,usable_width_mm").eq("business_id",businessId).eq("is_active",true).order("name").limit(500),
       supabase.from("catalogue_items").select("id,name,category_id,item_type").eq("business_id",businessId).eq("is_active",true).order("name").limit(500),
       supabase.from("production_methods").select("id,name,code").eq("is_active",true).order("name")
     ]);
@@ -92,13 +93,13 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   }
   async function createQuote(e:FormEvent){
     e.preventDefault();if(!supabase)return;
-    if(!customerId||!quoteLines.length||quoteLines.some(line=>!line.categoryId||!line.description.trim()||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0||(line.unitPrice.trim()!==""&&(!Number.isSafeInteger(Number(line.unitPrice))||Number(line.unitPrice)<0))||!Number.isSafeInteger(Number(line.discount))||Number(line.discount)<0||(line.saleMode==="blank"&&!line.customerSupplies&&!line.stockItemId)||(line.saleMode==="value_added"&&catalogueItems.find(item=>item.id===line.catalogueItemId)?.item_type==="product"&&!line.productionMethodId))){
+    if(!customerId||!quoteLines.length||quoteLines.some(line=>!line.categoryId||!line.description.trim()||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0||(line.unitPrice.trim()!==""&&(!Number.isSafeInteger(Number(line.unitPrice))||Number(line.unitPrice)<0))||(line.stickerSpecification?.type==="vinyl_sticker"&&(Number(line.unitPrice)<Number(line.stickerSpecification.minimum_price)||Number(line.unitPrice)>Number(line.stickerSpecification.ceiling_price)))||!Number.isSafeInteger(Number(line.discount))||Number(line.discount)<0||(line.saleMode==="blank"&&!line.customerSupplies&&!line.stockItemId)||(line.saleMode==="value_added"&&catalogueItems.find(item=>item.id===line.catalogueItemId)?.item_type==="product"&&!line.productionMethodId))){
       setError("Complete the customer and every quotation line with a category, description, positive quantity and valid whole-KES price/discount.");return;
     }
     setBusy(true);setError("");setNotice("");
     const lines=quoteLines.map(line=>({catalogue_item_id:line.catalogueItemId||null,category_id:line.categoryId,stock_item_id:line.customerSupplies?null:(line.stockItemId||null),description:line.description.trim(),
       quantity:Number(line.quantity),unit:line.unit,unit_price:line.unitPrice.trim()?Number(line.unitPrice):null,line_discount:Number(line.discount),
-      sale_mode:line.saleMode,customer_supplies_item:line.customerSupplies,production_method_id:line.saleMode==="blank"?null:(line.productionMethodId||null),production_specification:{linear_metres:line.linearMetres.trim()?Number(line.linearMetres):null,area_square_metres:line.areaSquareMetres.trim()?Number(line.areaSquareMetres):null,machine_minutes:line.machineMinutes.trim()?Number(line.machineMinutes):null,labour_hours:line.labourHours.trim()?Number(line.labourHours):null}}));
+      sale_mode:line.saleMode,customer_supplies_item:line.customerSupplies,production_method_id:line.saleMode==="blank"?null:(line.productionMethodId||null),production_specification:{...line.stickerSpecification,linear_metres:line.linearMetres.trim()?Number(line.linearMetres):null,area_square_metres:line.areaSquareMetres.trim()?Number(line.areaSquareMetres):null,machine_minutes:line.machineMinutes.trim()?Number(line.machineMinutes):null,labour_hours:line.labourHours.trim()?Number(line.labourHours):null}}));
     const {data,error:rpcError}=revisionOf
       ? await supabase.rpc("owner_create_quotation_revision",{
           p_original_quotation_id:revisionOf,p_lines:lines,
@@ -111,7 +112,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
           p_customer_notes:customerNotes.trim()||null,p_internal_notes:internalNotes.trim()||null,p_request_id:rid()
         });
     if(rpcError)setError(rpcError.message);
-    else {setNotice((revisionOf?"Quotation revision ":"Quotation ")+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setRevisionOf(null);setQuoteLines([{catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:"",linearMetres:"",areaSquareMetres:"",machineMinutes:"",labourHours:""}]);setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
+    else {setNotice((revisionOf?"Quotation revision ":"Quotation ")+data.quote_number+" created as draft. Total "+kes(Number(data.total_amount))+".");setRevisionOf(null);setQuoteLines([{catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:"",linearMetres:"",areaSquareMetres:"",machineMinutes:"",labourHours:"",stickerSpecification:{}}]);setCustomerNotes("");setInternalNotes("");setEnquiryId("");await load();onChanged();}
     setBusy(false);
   }
   async function updateSchedule(orderId:string, form:FormData){
@@ -136,7 +137,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     if(readError||!data?.length){setError(readError?.message||"Could not load the quotation lines.");setBusy(false);return;}
     setCustomerId(q.customer_id);setEnquiryId("");setQuoteLines(data.map(line=>({catalogueItemId:line.catalogue_item_id||"",categoryId:line.category_id||"",description:line.description,
       quantity:String(line.quantity),unit:line.unit,unitPrice:line.unit_price==null?"":String(line.unit_price),discount:String(line.line_discount),
-      customerSupplies:Boolean(line.customer_supplies_item),stockItemId:line.stock_item_id||"",saleMode:line.sale_mode||"value_added",productionMethodId:line.production_method_id||"",linearMetres:line.production_specification?.linear_metres==null?"":String(line.production_specification.linear_metres),areaSquareMetres:line.production_specification?.area_square_metres==null?"":String(line.production_specification.area_square_metres),machineMinutes:line.production_specification?.machine_minutes==null?"":String(line.production_specification.machine_minutes),labourHours:line.production_specification?.labour_hours==null?"":String(line.production_specification.labour_hours)})));setQuoteExpiry(q.expires_at?q.expires_at.slice(0,10):"");
+      customerSupplies:Boolean(line.customer_supplies_item),stockItemId:line.stock_item_id||"",saleMode:line.sale_mode||"value_added",productionMethodId:line.production_method_id||"",linearMetres:line.production_specification?.linear_metres==null?"":String(line.production_specification.linear_metres),areaSquareMetres:line.production_specification?.area_square_metres==null?"":String(line.production_specification.area_square_metres),machineMinutes:line.production_specification?.machine_minutes==null?"":String(line.production_specification.machine_minutes),labourHours:line.production_specification?.labour_hours==null?"":String(line.production_specification.labour_hours),stickerSpecification:(line.production_specification&&typeof line.production_specification==="object"?line.production_specification:{}) as Record<string,unknown>})));setQuoteExpiry(q.expires_at?q.expires_at.slice(0,10):"");
     setRevisionOf(q.id);setTab("quotes");setNotice("Revision form loaded from "+q.quote_number+". Update the details and save the new version.");
     setBusy(false);
   }
@@ -151,8 +152,9 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const customerName=(id:string)=>customers.find(c=>c.id===id)?.display_name??"Customer";
   return <section className="connected-panel quote-workflow">
     <div className="panel-toolbar"><div><h2>Quotations and orders</h2><p>Live records and costing tools. Prices are in KES; tax is excluded.</p></div><button className="secondary-action" onClick={()=>void load()}>Refresh records</button></div>
-    <div className="workflow-tabs"><button className={tab==="quotes"?"active":""} onClick={()=>setTab("quotes")}>Quotations</button><button className={tab==="costing"?"active":""} onClick={()=>setTab("costing")}>Costing profiles</button><button className={tab==="orders"?"active":""} onClick={()=>setTab("orders")}>Orders</button></div>
+    <div className="workflow-tabs"><button className={tab==="quotes"?"active":""} onClick={()=>setTab("quotes")}>Quotations</button><button className={tab==="costing"?"active":""} onClick={()=>setTab("costing")}>Costing profiles</button><button className={tab==="orders"?"active":""} onClick={()=>setTab("orders")}>Orders</button><button className={tab==="vinyl"?"active":""} onClick={()=>setTab("vinyl")}>Vinyl calculator</button></div>
     {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}{acceptanceLink&&<div className="acceptance-link"><input readOnly value={acceptanceLink}/><button className="secondary-action" onClick={()=>void navigator.clipboard.writeText(acceptanceLink)}>Copy customer link</button></div>}
+    {tab==="vinyl"&&<VinylStickerCalculator businessId={businessId} stockItems={stockItems} categories={categories} methods={productionMethods} onMessage={(message,isError)=>{setNotice(isError?"":message);setError(isError?message:"");}} onApply={line=>{setQuoteLines(v=>{const blank=v.length===1&&!v[0].description.trim()&&!v[0].categoryId;const next={...v[0],catalogueItemId:"",categoryId:line.categoryId,description:line.description,quantity:line.quantity,unit:"piece",unitPrice:line.unitPrice,discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:line.productionMethodId,linearMetres:line.linearMetres,areaSquareMetres:"",machineMinutes:line.machineMinutes,labourHours:line.labourHours,stickerSpecification:line.specification};return blank?[next]:[...v,next];});setTab("quotes");setNotice("Vinyl sticker price and production specification added to the quotation. Inventory will be deducted when material is issued to its production job.");}}/>}
     {tab==="quotes"&&<><form className="record-form" onSubmit={createQuote}>
       <h3 className="wide-field">{revisionOf?"Create quotation revision":"Create quotation"}</h3>
       <label>Customer *<select required value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">Choose customer</option>{customers.map(c=><option key={c.id} value={c.id}>{c.display_name}</option>)}</select></label>
@@ -170,7 +172,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
         <label>Shop stock item<select disabled={line.customerSupplies} value={line.stockItemId} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,stockItemId:e.target.value}:x))}><option value="">No stock item linked</option>{stockItems.filter(item=>line.saleMode!=="blank"||item.stock_kind==="blank_product").map(item=><option key={item.id} value={item.id}>{item.name} · {item.sku} ({item.base_unit})</option>)}</select></label>
         <label className="check-field"><input type="checkbox" checked={line.customerSupplies} onChange={e=>setQuoteLines(v=>v.map((x,i)=>i===index?{...x,customerSupplies:e.target.checked,stockItemId:e.target.checked?"":x.stockItemId}:x))}/> Customer supplies the item</label>
         <button type="button" className="secondary-action" disabled={quoteLines.length===1} onClick={()=>setQuoteLines(v=>v.filter((_,i)=>i!==index))}>Remove item</button>
-      </div>)}<button type="button" className="secondary-action" onClick={()=>setQuoteLines(v=>[...v,{catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:"",linearMetres:"",areaSquareMetres:"",machineMinutes:"",labourHours:""}])}>Add another item</button></div>
+      </div>)}<button type="button" className="secondary-action" onClick={()=>setQuoteLines(v=>[...v,{catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:"",linearMetres:"",areaSquareMetres:"",machineMinutes:"",labourHours:"",stickerSpecification:{}}])}>Add another item</button></div>
       <label>Quote expiry<input type="date" value={quoteExpiry} onChange={e=>setQuoteExpiry(e.target.value)}/></label>
       <label className="wide-field">Customer notes<textarea value={customerNotes} onChange={e=>setCustomerNotes(e.target.value)}/></label>
       <label className="wide-field">Internal notes (not shown to customer)<textarea value={internalNotes} onChange={e=>setInternalNotes(e.target.value)}/></label>
