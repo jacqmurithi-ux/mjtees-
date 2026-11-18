@@ -1,7 +1,7 @@
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 begin;
-select plan(20);
+select plan(23);
 
 select ok(to_regclass('public.cash_movements') is not null, 'cash movement ledger exists');
 select ok(to_regclass('public.daily_closings') is not null, 'daily closing snapshots exist');
@@ -23,6 +23,9 @@ select ok(to_regprocedure('public.owner_mark_delivery_failed(uuid,text,uuid)') i
 select ok(to_regprocedure('public.owner_record_daily_closing_adjustment(uuid,text,bigint,text,uuid)') is not null, 'daily closing adjustment RPC exists');
 select ok(to_regprocedure('public.owner_record_reconciliation_adjustment(uuid,text,text,bigint,text,uuid)') is not null, 'reconciliation adjustment RPC exists');
 select ok(not (select prosecdef from pg_proc where oid='public.owner_get_daily_operations_summary(uuid,date)'::regprocedure), 'dashboard aggregate RPC runs as invoker');
+select ok(exists(select 1 from pg_trigger where tgrelid='public.payment_refunds'::regclass and tgname='payment_refunds_guard_confirmed_period' and not tgisinternal), 'posted refunds cannot alter a confirmed financial period');
+select ok(exists(select 1 from pg_trigger where tgrelid='public.daily_closings'::regclass and tgname='daily_closings_guard_pending_cash_refunds' and not tgisinternal), 'pending cash refunds block daily close');
+select ok(exists(select 1 from pg_trigger where tgrelid='public.daily_payment_reconciliations'::regclass and tgname='daily_payment_reconciliations_guard_pending_refunds' and not tgisinternal), 'pending M-Pesa refunds block reconciliation confirmation');
 
 select * from finish();
 rollback;
