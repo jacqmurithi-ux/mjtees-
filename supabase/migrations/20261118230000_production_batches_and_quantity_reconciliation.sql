@@ -38,7 +38,7 @@ create table public.production_quantity_movements (
   batch_id uuid not null,
   movement_type text not null check (movement_type in (
     'received','additional_received','replacement_received',
-    'started','accepted','rework','rework_passed','rejected','rework_rejected'
+    'started','accepted','rework','rework_from_accepted','rework_passed','rejected','rework_rejected'
   )),
   from_state text check (from_state is null or from_state in ('pending','in_production','accepted','rework','rejected')),
   to_state text not null check (to_state in ('pending','in_production','accepted','rework','rejected')),
@@ -56,7 +56,8 @@ create table public.production_quantity_movements (
       and from_state is null and to_state='pending')
     or (movement_type='started' and from_state='pending' and to_state='in_production')
     or (movement_type='accepted' and from_state='in_production' and to_state='accepted')
-    or (movement_type='rework' and from_state in ('in_production','accepted') and to_state='rework')
+    or (movement_type='rework' and from_state='in_production' and to_state='rework')
+    or (movement_type='rework_from_accepted' and from_state='accepted' and to_state='rework')
     or (movement_type='rework_passed' and from_state='rework' and to_state='accepted')
     or (movement_type='rejected' and from_state='in_production' and to_state='rejected')
     or (movement_type='rework_rejected' and from_state='rework' and to_state='rejected')
@@ -137,7 +138,7 @@ begin
   v_actor:=private.assert_active_owner(v_job.business_id);
   if p_request_id is null or p_quantity is null or p_quantity<=0
     or p_movement_type not in ('received','additional_received','replacement_received','started',
-      'accepted','rework','rework_passed','rejected','rework_rejected') then
+      'accepted','rework','rework_from_accepted','rework_passed','rejected','rework_rejected') then
     raise exception using errcode='22023',message='Valid movement type, positive quantity and request ID are required';
   end if;
   if p_movement_type in ('additional_received','replacement_received')
@@ -168,6 +169,7 @@ begin
     when 'started' then v_from:='pending'; v_to:='in_production';
     when 'accepted' then v_from:='in_production'; v_to:='accepted';
     when 'rework' then v_from:='in_production'; v_to:='rework';
+    when 'rework_from_accepted' then v_from:='accepted'; v_to:='rework';
     when 'rework_passed' then v_from:='rework'; v_to:='accepted';
     when 'rejected' then v_from:='in_production'; v_to:='rejected';
     when 'rework_rejected' then v_from:='rework'; v_to:='rejected';
@@ -182,7 +184,7 @@ begin
   ) then
     raise exception using errcode='23514',message='A latest passing quality check is required before accepting quantities';
   end if;
-  if p_movement_type in ('rework','rejected','rework_rejected') and not exists (
+  if p_movement_type in ('rework','rework_from_accepted','rejected','rework_rejected') and not exists (
     select 1 from public.quality_checks q
     where q.business_id=v_job.business_id and q.job_id=p_job_id and q.result='fail'
       and q.id=(select q2.id from public.quality_checks q2
