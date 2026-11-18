@@ -137,7 +137,7 @@ $$;
 
 create or replace function private.owner_list_production_output(p_business_id uuid)
 returns jsonb language plpgsql security definer set search_path=''
-as $
+as $$
 declare v_actor uuid; v_result jsonb;
 begin
   v_actor:=private.assert_active_owner(p_business_id);
@@ -157,13 +157,13 @@ begin
   ) e;
   return v_result;
 end;
-$;
+$$;
 revoke all on function private.owner_list_production_output(uuid) from public,anon;
 grant execute on function private.owner_list_production_output(uuid) to authenticated;
 
 create or replace function public.owner_list_production_output(p_business_id uuid)
 returns jsonb language sql set search_path=''
-as $ select private.owner_list_production_output($1); $;
+as $$ select private.owner_list_production_output($1); $$;
 revoke all on function public.owner_list_production_output(uuid) from public,anon;
 grant execute on function public.owner_list_production_output(uuid) to authenticated;
 
@@ -181,7 +181,7 @@ grant execute on function public.owner_record_production_output(uuid,numeric,num
 
 create or replace function private.owner_get_bulk_printing_daily_summary(p_business_id uuid,p_business_date date)
 returns jsonb language plpgsql security definer set search_path=''
-as $
+as $$
 declare v_actor uuid; v_start timestamptz; v_end timestamptz; v_result jsonb;
 begin
   v_actor:=private.assert_active_owner(p_business_id);
@@ -208,13 +208,13 @@ begin
   ) into v_result;
   return v_result;
 end;
-$;
+$$;
 revoke all on function private.owner_get_bulk_printing_daily_summary(uuid,date) from public,anon;
 grant execute on function private.owner_get_bulk_printing_daily_summary(uuid,date) to authenticated;
 
 create or replace function public.owner_get_bulk_printing_daily_summary(p_business_id uuid,p_business_date date)
 returns jsonb language sql set search_path=''
-as $ select private.owner_get_bulk_printing_daily_summary($1,$2); $;
+as $$ select private.owner_get_bulk_printing_daily_summary($1,$2); $$;
 revoke all on function public.owner_get_bulk_printing_daily_summary(uuid,date) from public,anon;
 grant execute on function public.owner_get_bulk_printing_daily_summary(uuid,date) to authenticated;
 
