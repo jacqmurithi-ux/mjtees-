@@ -276,7 +276,7 @@ select is(
 );
 
 select throws_ok(
-  $select public.owner_record_worker_payment(
+  $test$select public.owner_record_worker_payment(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     (select id from public.production_workers where full_name='Temporary Worker'),
     601,'mpesa','OVERPAY','Overpayment attempt',now(),
@@ -285,7 +285,7 @@ select throws_ok(
       'amount',601
     )),
     '50000000-0000-4000-8000-000000000002'
-  )$,
+  )$test$,
   '23514','Worker payment exceeds the outstanding earning balance',
   'Payment RPC rejects settlements above the remaining worker balance'
 );
