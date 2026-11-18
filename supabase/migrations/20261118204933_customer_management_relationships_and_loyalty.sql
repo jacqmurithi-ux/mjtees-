@@ -33,7 +33,7 @@ declare a uuid; i uuid; c jsonb; r jsonb;
 begin a:=private.assert_active_owner(p_business_id); c:=private.begin_idempotent_request(p_business_id,'get_walk_in_customer',p_request_id,'{}'::jsonb); if c is not null then return c; end if;
  select id into i from public.customers where business_id=p_business_id and is_walk_in_profile and archived_at is null;
  if i is null then insert into public.customers(business_id,display_name,customer_type,preferred_contact_method,customer_status,is_walk_in_profile,created_by) values(p_business_id,'Walk-in customer','walk_in','none','active',true,a) returning id into i; end if;
- r:=jsonb_build_object('customer_id',i); perform private.finish_idempotent_request(p_business_id,'get_walk_in_customer',p_request_id,r); return r; end $function$
+ r:=jsonb_build_object('customer_id',i); perform private.finish_idempotent_request(p_business_id,'get_walk_in_customer',p_request_id,r); return r; end $function$;
 
 
 CREATE OR REPLACE FUNCTION private.owner_record_customer_interaction(p_business_id uuid, p_customer_id uuid, p_interaction_type text, p_subject text, p_notes text, p_follow_up_at timestamp with time zone, p_outcome text, p_request_id uuid)
@@ -49,7 +49,7 @@ begin
  c:=private.begin_idempotent_request(p_business_id,'record_customer_interaction',p_request_id,jsonb_build_object('customer',p_customer_id,'type',p_interaction_type,'subject',p_subject,'notes',p_notes,'followup',p_follow_up_at)); if c is not null then return c; end if;
  insert into public.customer_interactions(business_id,customer_id,interaction_type,subject,notes,follow_up_at,outcome,created_by) values(p_business_id,p_customer_id,p_interaction_type,btrim(p_subject),p_notes,p_follow_up_at,p_outcome,a) returning id into i;
  r:=jsonb_build_object('interaction_id',i); perform private.finish_idempotent_request(p_business_id,'record_customer_interaction',p_request_id,r); perform private.write_audit(p_business_id,a,'customer.interaction_recorded','customer_interaction',i,p_request_id,jsonb_build_object('customer_id',p_customer_id)); return r;
-end $function$
+end $function$;
 
 
 CREATE OR REPLACE FUNCTION private.owner_record_customer_reward(p_business_id uuid, p_customer_id uuid, p_rule_id uuid, p_order_id uuid, p_entry_type text, p_reward_kind text, p_amount bigint, p_reason text, p_reference text, p_reverses_entry_id uuid, p_request_id uuid)
@@ -68,7 +68,7 @@ begin
  c:=private.begin_idempotent_request(p_business_id,'record_customer_reward',p_request_id,jsonb_build_object('customer',p_customer_id,'rule',p_rule_id,'order',p_order_id,'type',p_entry_type,'kind',p_reward_kind,'amount',p_amount,'reason',p_reason,'reference',p_reference,'reverses',p_reverses_entry_id)); if c is not null then return c; end if;
  insert into public.customer_reward_ledger(business_id,customer_id,rule_id,order_id,entry_type,reward_kind,amount,reason,reference,reverses_entry_id,created_by) values(p_business_id,p_customer_id,p_rule_id,p_order_id,p_entry_type,p_reward_kind,p_amount,btrim(p_reason),nullif(btrim(p_reference),''),p_reverses_entry_id,a) returning id into i;
  r:=jsonb_build_object('reward_entry_id',i); perform private.finish_idempotent_request(p_business_id,'record_customer_reward',p_request_id,r); perform private.write_audit(p_business_id,a,'customer.reward_recorded','customer_reward',i,p_request_id,jsonb_build_object('customer_id',p_customer_id,'entry_type',p_entry_type,'reward_kind',p_reward_kind,'amount',p_amount)); return r;
-end $function$
+end $function$;
 
 
 CREATE OR REPLACE FUNCTION private.owner_save_customer_profile(p_business_id uuid, p_customer_id uuid, p_display_name text, p_business_name text, p_customer_type text, p_phone text, p_email text, p_location text, p_registration_number text, p_preferred_contact_method text, p_customer_status text, p_notes text, p_request_id uuid)
@@ -87,7 +87,7 @@ begin
  if p_customer_id is null then insert into public.customers(business_id,display_name,business_name,phone,phone_normalized,email,notes,created_by,customer_type,location,registration_number,preferred_contact_method,customer_status) values(p_business_id,btrim(p_display_name),nullif(btrim(p_business_name),''),nullif(btrim(p_phone),''),nullif(regexp_replace(coalesce(p_phone,''),'[^0-9+]','','g'),''),nullif(lower(btrim(p_email)),''),p_notes,a,p_customer_type,nullif(btrim(p_location),''),nullif(btrim(p_registration_number),''),p_preferred_contact_method,p_customer_status) returning id into i;
  else update public.customers set display_name=btrim(p_display_name),business_name=nullif(btrim(p_business_name),''),phone=nullif(btrim(p_phone),''),phone_normalized=nullif(regexp_replace(coalesce(p_phone,''),'[^0-9+]','','g'),''),email=nullif(lower(btrim(p_email)),''),notes=p_notes,customer_type=p_customer_type,location=nullif(btrim(p_location),''),registration_number=nullif(btrim(p_registration_number),''),preferred_contact_method=p_preferred_contact_method,customer_status=p_customer_status,updated_at=now() where business_id=p_business_id and id=p_customer_id and archived_at is null and not is_walk_in_profile returning id into i; if i is null then raise exception using errcode='P0002',message='Customer not found'; end if; end if;
  r:=jsonb_build_object('customer_id',i); perform private.finish_idempotent_request(p_business_id,'save_customer_profile',p_request_id,r); perform private.write_audit(p_business_id,a,case when p_customer_id is null then 'customer.created' else 'customer.updated' end,'customer',i,p_request_id,jsonb_build_object('customer_type',p_customer_type)); return r;
-end $function$
+end $function$;
 
 
 CREATE OR REPLACE FUNCTION private.owner_upsert_customer_contact(p_business_id uuid, p_contact_id uuid, p_customer_id uuid, p_full_name text, p_position_title text, p_phone text, p_email text, p_is_primary boolean, p_can_place_orders boolean, p_can_approve_quotes boolean, p_can_collect_orders boolean, p_is_active boolean, p_request_id uuid)
@@ -105,7 +105,7 @@ begin
  if p_contact_id is null then insert into public.customer_contacts(business_id,customer_id,full_name,position_title,phone,email,is_primary,can_place_orders,can_approve_quotes,can_collect_orders,is_active) values(p_business_id,p_customer_id,btrim(p_full_name),nullif(btrim(p_position_title),''),nullif(btrim(p_phone),''),nullif(lower(btrim(p_email)),''),p_is_primary,p_can_place_orders,p_can_approve_quotes,p_can_collect_orders,p_is_active) returning id into i;
  else update public.customer_contacts set customer_id=p_customer_id,full_name=btrim(p_full_name),position_title=nullif(btrim(p_position_title),''),phone=nullif(btrim(p_phone),''),email=nullif(lower(btrim(p_email)),''),is_primary=p_is_primary,can_place_orders=p_can_place_orders,can_approve_quotes=p_can_approve_quotes,can_collect_orders=p_can_collect_orders,is_active=p_is_active,updated_at=now() where business_id=p_business_id and id=p_contact_id returning id into i; if i is null then raise exception using errcode='P0002',message='Contact not found'; end if; end if;
  r:=jsonb_build_object('contact_id',i); perform private.finish_idempotent_request(p_business_id,'upsert_customer_contact',p_request_id,r); perform private.write_audit(p_business_id,a,'customer.contact_saved','customer_contact',i,p_request_id,jsonb_build_object('customer_id',p_customer_id)); return r;
-end $function$
+end $function$;
 
 
 CREATE OR REPLACE FUNCTION private.owner_upsert_customer_loyalty_rule(p_business_id uuid, p_rule_id uuid, p_name text, p_customer_type text, p_reward_event text, p_reward_kind text, p_calculation_method text, p_reward_value bigint, p_minimum_order_amount bigint, p_minimum_order_count integer, p_applies_to text, p_is_active boolean, p_starts_on date, p_ends_on date, p_request_id uuid)
@@ -122,5 +122,5 @@ begin
  if p_rule_id is null then insert into public.customer_loyalty_rules(business_id,name,customer_type,reward_event,reward_kind,calculation_method,reward_value,minimum_order_amount,minimum_order_count,applies_to,is_active,starts_on,ends_on,created_by) values(p_business_id,btrim(p_name),p_customer_type,p_reward_event,p_reward_kind,p_calculation_method,p_reward_value,p_minimum_order_amount,p_minimum_order_count,p_applies_to,p_is_active,p_starts_on,p_ends_on,a) returning id into i;
  else update public.customer_loyalty_rules set name=btrim(p_name),customer_type=p_customer_type,reward_event=p_reward_event,reward_kind=p_reward_kind,calculation_method=p_calculation_method,reward_value=p_reward_value,minimum_order_amount=p_minimum_order_amount,minimum_order_count=p_minimum_order_count,applies_to=p_applies_to,is_active=p_is_active,starts_on=p_starts_on,ends_on=p_ends_on,updated_at=now() where business_id=p_business_id and id=p_rule_id returning id into i; if i is null then raise exception using errcode='P0002',message='Loyalty rule not found'; end if; end if;
  r:=jsonb_build_object('rule_id',i); perform private.finish_idempotent_request(p_business_id,'upsert_customer_loyalty_rule',p_request_id,r); perform private.write_audit(p_business_id,a,'customer.loyalty_rule_saved','customer_loyalty_rule',i,p_request_id,'{}'::jsonb); return r;
-end $function$
+end $function$;
 
