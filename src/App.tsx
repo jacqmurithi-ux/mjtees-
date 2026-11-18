@@ -5,6 +5,9 @@ import QuoteAcceptance from "./QuoteAcceptance";
 import PublicEnquiryForm from "./PublicEnquiryForm";
 import PublicCatalogue from "./PublicCatalogue";
 
+const ASSET_BASE = import.meta.env.BASE_URL;
+const DEFAULT_LOGO = `${ASSET_BASE}assets/mj-printing-branding.svg`;
+
 const services = [
   { title: "Custom apparel", tag: "WEAR YOUR BRAND", description: "T-shirts, polos, jerseys, hoodies and caps for individuals, teams, schools and organisations." },
   { title: "Vinyl & heat transfer", tag: "CUT · PRESS · FINISH", description: "Names, numbers and custom graphics applied to garments and selected products." },
@@ -21,9 +24,9 @@ const categories = [
   { number: "04", name: "Custom merchandise", detail: "Mugs · Gifts · Teamwear", tone: "pink", symbol: "＋" },
 ];
 
-function Brand({ footer = false, logoSrc = "/assets/mj-printing-branding.svg" }: { footer?: boolean; logoSrc?: string }) {
+function Brand({ footer = false, logoSrc = DEFAULT_LOGO }: { footer?: boolean; logoSrc?: string }) {
   return <a className={footer ? "brand footer-brand" : "brand"} href="#home" aria-label="MJ Printing and Branding home">
-    <img src={logoSrc} onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = "/assets/mj-printing-branding.svg"; }} alt="MJ Printing & Branding — Design, Print, Brand" />
+    <img src={logoSrc} onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = DEFAULT_LOGO; }} alt="MJ Printing & Branding — Design, Print, Brand" />
   </a>;
 }
 
@@ -34,7 +37,7 @@ function Website({ onOwner }: { onOwner: () => void }) {
     supabase.from("website_content").select("content").eq("business_id", "a5d48858-a75b-445d-ba23-8fcd65a5b891").eq("is_published", true).maybeSingle()
       .then(({ data, error }) => { if (!error && data?.content) setSiteContent(data.content); });
   }, []);
-  const logoSrc = siteContent?.brand?.logoPath || "/assets/mj-printing-branding.svg";
+  const logoSrc = siteContent?.brand?.logoPath || DEFAULT_LOGO;
   return <main className="public-site">
     <div className="announcement-bar"><span>DESIGN</span><i /> <span>PRINT</span><i /> <span>BRAND</span><b>Custom printing and branding, made around your idea.</b></div>
     <header className="site-header">
