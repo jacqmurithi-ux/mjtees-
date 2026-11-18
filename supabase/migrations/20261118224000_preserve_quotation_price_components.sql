@@ -285,12 +285,22 @@ declare
   v_order_discount bigint[];
   v_printing_net bigint;
 begin
+  if new.quotation_item_id is null then
+    return new;
+  end if;
+
   select qi.price_components
   into v_components
   from public.quotation_items qi
+  join public.orders o
+    on o.business_id=qi.business_id and o.quotation_id=qi.quotation_id
   where qi.business_id=new.business_id
-    and qi.id=new.quotation_item_id;
+    and qi.id=new.quotation_item_id
+    and o.id=new.order_id;
 
+  if not found then
+    raise exception using errcode='23514',message='Order item quotation reference does not match its parent order';
+  end if;
   if v_components is null then
     return new;
   end if;
