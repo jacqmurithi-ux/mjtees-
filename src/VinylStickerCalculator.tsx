@@ -26,9 +26,17 @@ const round = (n: number, places = 4) => Number(n.toFixed(places));
 export default function VinylStickerCalculator({ businessId, stockItems, categories, methods, onApply, onMessage }: Props) {
   const vinylItems = stockItems.filter(x => x.is_active && x.stock_kind === "material" && /vinyl|sticker/i.test(x.name + " " + x.sku) && x.base_unit.toLowerCase().includes("met"));
   const tapeItems = stockItems.filter(x => x.is_active && /tape/i.test(x.name + " " + x.sku) && x.base_unit.toLowerCase().includes("met"));
+  const calculatorCategories = useMemo(() => categories.filter(x => {
+    const name = x.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return name === "stickers labels" || name === "vinyl printing cutting";
+  }), [categories]);
+  const calculatorMethods = useMemo(() => methods.filter(x => {
+    const name = x.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return name === "sticker cutting" || name === "vinyl cutting";
+  }), [methods]);
   const [stockId, setStockId] = useState(vinylItems[0]?.id ?? "");
-  const [categoryId, setCategoryId] = useState(categories.find(x => /sticker|vinyl|vehicle/i.test(x.name))?.id ?? "");
-  const [methodId, setMethodId] = useState(methods.find(x => /cut|plotter|vinyl/i.test(x.name + " " + x.code))?.id ?? "");
+  const [categoryId, setCategoryId] = useState(calculatorCategories[0]?.id ?? "");
+  const [methodId, setMethodId] = useState(calculatorMethods[0]?.id ?? "");
   const [width, setWidth] = useState("5");
   const [height, setHeight] = useState("5");
   const [unit, setUnit] = useState("in");
@@ -51,6 +59,11 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
   const [ceilingMarkup, setCeilingMarkup] = useState("400");
   const [finalPrice, setFinalPrice] = useState("");
   const [savingCeiling, setSavingCeiling] = useState(false);
+
+  useEffect(() => {
+    if (!calculatorCategories.some(x => x.id === categoryId)) setCategoryId(calculatorCategories[0]?.id ?? "");
+    if (!calculatorMethods.some(x => x.id === methodId)) setMethodId(calculatorMethods[0]?.id ?? "");
+  }, [calculatorCategories, calculatorMethods, categoryId, methodId]);
 
   const vinyl = vinylItems.find(x => x.id === stockId);
   const tape = tapeItems.find(x => x.id === tapeStockId);
@@ -153,8 +166,8 @@ export default function VinylStickerCalculator({ businessId, stockItems, categor
     <div className="vinyl-calculator-heading"><div><p className="eyebrow">MJ TEES · PRODUCTION PRICING</p><h3>Vinyl sticker calculator</h3><p>Inventory-linked costing for plotter-cut self-adhesive vinyl. Quoting does not consume stock; material is issued against the production job.</p></div><span className="vinyl-tag">KES</span></div>
     <div className="vinyl-grid">
       <label>Vinyl colour / stock item<select value={stockId} onChange={e => { setStockId(e.target.value); setRollWidth(""); setUsableWidth(""); }}><option value="">Choose vinyl inventory</option>{vinylItems.map(x => <option key={x.id} value={x.id}>{x.name} · {x.sku} · {money(Number(x.current_average_unit_cost))}/{x.base_unit}</option>)}</select></label>
-      <label>Service category<select value={categoryId} onChange={e => setCategoryId(e.target.value)}><option value="">Choose category</option>{categories.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-      <label>Production method<select value={methodId} onChange={e => setMethodId(e.target.value)}><option value="">Choose cutting method</option>{methods.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+      <label>Service category<select value={categoryId} onChange={e => setCategoryId(e.target.value)}><option value="">Choose category</option>{calculatorCategories.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+      <label>Production method<select value={methodId} onChange={e => setMethodId(e.target.value)}><option value="">Choose cutting method</option>{calculatorMethods.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
       <label>Quantity<input type="number" min="1" step="1" value={quantity} onChange={e => { setQuantity(e.target.value); setFinalPrice(""); }}/></label>
       <label>Sticker width<input type="number" min="0.1" step="0.1" value={width} onChange={e => { setWidth(e.target.value); setFinalPrice(""); }}/></label>
       <label>Sticker height<input type="number" min="0.1" step="0.1" value={height} onChange={e => { setHeight(e.target.value); setFinalPrice(""); }}/></label>
