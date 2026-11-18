@@ -21,6 +21,14 @@ revoke all on function public.accept_quotation(text,uuid) from public;
 grant execute on function public.accept_quotation(text,uuid) to anon,authenticated;
 
 -- Event-trigger handlers are invoked by PostgreSQL, not through the Data API.
-revoke all on function public.rls_auto_enable() from public,anon,authenticated;
+-- Guard the optional helper so a clean local database can apply this migration
+-- whether or not the automatic-RLS event trigger has been installed.
+do $block$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke all on function public.rls_auto_enable() from public, anon, authenticated';
+  end if;
+end;
+$block$;
 
 commit;
