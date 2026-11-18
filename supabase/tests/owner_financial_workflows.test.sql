@@ -238,11 +238,35 @@ select is(
   'pass','Subsequent QC pass closes the quality path'
 );
 
+select public.owner_create_production_batch(
+  (select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999'),
+  current_date,'Financial workflow test batch','70000000-0000-4000-8000-000000000001'
+);
+select public.owner_record_production_quantity_movement(
+  (select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999'),
+  (select id from public.production_batches where job_id=(select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999')),
+  'received',1,null,'70000000-0000-4000-8000-000000000002'
+);
+select public.owner_record_production_quantity_movement(
+  (select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999'),
+  (select id from public.production_batches where job_id=(select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999')),
+  'started',1,null,'70000000-0000-4000-8000-000000000003'
+);
+select public.owner_record_production_quantity_movement(
+  (select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999'),
+  (select id from public.production_batches where job_id=(select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999')),
+  'accepted',1,null,'70000000-0000-4000-8000-000000000004'
+);
+select public.owner_close_production_batch(
+  (select id from public.production_batches where job_id=(select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999')),
+  'Quantity reconciled','70000000-0000-4000-8000-000000000005'
+);
+
 select is(
   (public.owner_complete_production_job(
     (select id from public.production_jobs where order_item_id='99999999-9999-4999-8999-999999999999'),
     '50000000-0000-4000-8000-000000000014')->>'actual_cost_total')::bigint,
-  145::bigint,'Completed job cost deducts reusable offcut credit once'
+  145::bigint,'Completed job cost deducts reusable offcut credit once after quantity reconciliation'
 );
 
 select throws_ok(
