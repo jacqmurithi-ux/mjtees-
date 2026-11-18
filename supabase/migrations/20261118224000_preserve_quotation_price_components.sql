@@ -425,7 +425,7 @@ declare
   v_printing_gross bigint;
   v_printing_unit bigint;
   v_gross_parts bigint[];
-  v_line_discount bigint[]
+  v_line_discount bigint[];
   v_order_discount bigint[];
   v_result jsonb;
 begin
