@@ -10,6 +10,12 @@ test('quotation RPC enforces 30% gross margin and requires a reason for exceptio
   assert.match(sql, /below_floor_approved_by/);
 });
 
+test('quotation pricing requires an active versioned costing profile and ignores client cost figures', () => {
+  assert.match(sql, /An active versioned costing profile is required before pricing this quotation/);
+  assert.match(sql, /select id,direct_cost into v_profile,v_profile_direct_cost/);
+  assert.match(sql, /v_cost:=v_profile_direct_cost/);
+  assert.match(sql, /direct_cost,line_total,details\)[\s\S]*?values\(v_business,v_quote,btrim\(v_line->>'description'\),v_qty,v_price,v_cost/);
+});
 test('Baraka supplied-garment scenario prices 50 prints at KES 30 and records KES 200 direct labour', () => {
   const quantity = 50, unitPrice = 30, directCost = 200;
   const total = quantity * unitPrice;
