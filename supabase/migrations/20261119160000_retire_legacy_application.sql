@@ -29,6 +29,5 @@ end $$;
 drop schema if exists private cascade;
 create schema private;
 
--- Remove the former app's website media and files; retain Supabase Storage itself.
-delete from storage.objects where bucket_id='website-media';
-delete from storage.buckets where id='website-media';
+-- Supabase Storage metadata and file operations are API-only; the inspected legacy bucket had zero objects.
+-- Retire the bucket separately through the Supabase Storage API before public release.
