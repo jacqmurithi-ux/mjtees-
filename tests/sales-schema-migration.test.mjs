@@ -146,8 +146,8 @@ test("Database rejects new non-Cash and non-M-Pesa payments while preserving leg
 
 test("Credit note issuance preserves paid invoices and applies value to outstanding balances", () => {
   assert.match(creditNoteSql, /create or replace function public\.owner_issue_sales_credit_note/);
-  assert.match(creditNoteSql, /entry_type='credit_note'/);
-  assert.match(creditNoteSql, /entry_type='apply_to_invoice'/);
+  assert.match(creditNoteSql, /v_customer_id,'credit_note',v_total/);
+  assert.match(creditNoteSql, /v_customer_id,'apply_to_invoice',-v_apply_amount/);
   assert.match(creditNoteSql, /sales\.credit_note_issued/);
   assert.match(creditNoteSql, /private\.assert_active_owner/);
   assert.match(creditNoteSql, /private\.begin_idempotent_request/);
