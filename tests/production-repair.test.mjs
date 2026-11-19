@@ -84,3 +84,10 @@ test('Production screen queries the restored schema, calls the matching RPCs, an
   assert.match(operations, /Reflect\.get\(e,'details'\)/);
   assert.match(operations, /Reflect\.get\(e,'hint'\)/);
 });
+
+test('quotation creation is exposed through the PostgREST public RPC with the exact frontend argument names', () => {
+  assert.match(migration, /create or replace function public\.owner_create_quotation\([\s\S]*?p_customer_id uuid[\s\S]*?p_costing_profile_id uuid[\s\S]*?p_quote_number text[\s\S]*?p_valid_until date[\s\S]*?p_lines jsonb[\s\S]*?p_allow_below_floor boolean default false[\s\S]*?p_exception_reason text default null[\s\S]*?\) returns uuid/);
+  assert.match(migration, /select private\.owner_create_quotation_impl\([\s\S]*?p_allow_below_floor,p_exception_reason/);
+  assert.match(migration, /grant execute on function public\.owner_create_quotation\(uuid,uuid,text,date,jsonb,boolean,text\) to authenticated/);
+  assert.match(migration, /notify pgrst, 'reload schema'/);
+});
