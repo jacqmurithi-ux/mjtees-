@@ -85,3 +85,16 @@ td{font-size:13px}
 .invoice-paid{background:#e6f5eb;color:#176b37}
 .invoice-balance-open{background:#fff2d8;color:#8a5700}
 .invoice-balance-settled{background:#e6f5eb;color:#176b37}
+
+/* Costing and pricing component builder */
+.cost-component-list{display:grid;gap:10px}
+.cost-component-row{display:grid;grid-template-columns:minmax(150px,1.4fr) minmax(145px,1fr) minmax(130px,.8fr) auto;gap:10px;align-items:end;padding:12px;border:1px solid #e5eaf0;border-radius:10px;background:#fbfcfd}
+.cost-remove,.cost-add{border:1px solid #dce3ea;background:#fff;border-radius:8px;padding:10px 12px;font-size:12px;font-weight:700;color:#425164}
+.cost-remove:disabled{opacity:.35}
+.cost-add{justify-self:start;color:#0a7d3b;border-color:#b9dbc6}
+.cost-preview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:14px;background:#f4f8f5;border:1px solid #dcebe0;border-radius:10px}
+.cost-preview>div{display:grid;gap:5px}
+.cost-preview small{font-size:10px;color:#657366}
+.cost-preview b{font-size:17px;color:#183c28}
+.cost-history-components{margin:5px 0 0;padding-left:16px;color:#6c7885;font-size:10px}
+@media(max-width:680px){.cost-component-row{grid-template-columns:1fr}.cost-preview{grid-template-columns:1fr}}
