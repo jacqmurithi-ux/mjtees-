@@ -117,6 +117,169 @@ $function$;
 
 revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) from public,anon,authenticated;
 
+-- These owner RPCs must execute with the trusted database role because the
+-- stock movement helper is deliberately not directly callable by browser clients.
+create or replace function public.owner_create_stock_item(
+  p_location_code text,
+  p_item_name text,
+  p_category text,
+  p_unit text default 'piece',
+  p_opening_quantity numeric default 0,
+  p_reorder_level numeric default 0,
+  p_unit_cost numeric default 0,
+  p_sku text default null
+) returns uuid
+language plpgsql
+security definer
+set search_path=public,private,pg_temp
+as $function$
+declare
+  v_business_id uuid;
+  v_location_id uuid;
+  v_stock_item_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select business_id into v_business_id
+  from public.business_memberships
+  where user_id=auth.uid() and role='owner'
+  order by created_at
+  limit 1;
+  if v_business_id is null then raise exception 'Owner workspace required'; end if;
+  if p_location_code not in ('shop_1','shop_2')
+     or length(btrim(coalesce(p_item_name,'')))=0
+     or length(btrim(coalesce(p_category,'')))=0
+     or p_opening_quantity is null or p_opening_quantity<0
+     or p_reorder_level is null or p_reorder_level<0
+     or p_unit_cost is null or p_unit_cost<0 then
+    raise exception 'Invalid stock details';
+  end if;
+
+  select id into v_location_id
+  from public.inventory_locations
+  where business_id=v_business_id and location_code=p_location_code;
+  if v_location_id is null then raise exception 'Inventory location not found'; end if;
+
+  insert into public.stock_items(
+    business_id,location_id,sku,item_name,category,unit,
+    quantity_on_hand,reorder_level,average_unit_cost
+  ) values (
+    v_business_id,v_location_id,nullif(btrim(p_sku),''),
+    btrim(p_item_name),btrim(p_category),
+    coalesce(nullif(btrim(p_unit),''),'piece'),0,p_reorder_level,0
+  ) returning id into v_stock_item_id;
+
+  if p_opening_quantity>0 then
+    perform private.apply_stock_movement(
+      v_business_id,v_stock_item_id,p_opening_quantity,p_unit_cost,'opening'
+    );
+  end if;
+
+  insert into public.audit_events(
+    business_id,actor_user_id,event_type,entity_type,entity_id,details
+  ) values (
+    v_business_id,auth.uid(),'inventory.stock_item_created','stock_item',
+    v_stock_item_id,jsonb_build_object(
+      'location_code',p_location_code,'opening_quantity',p_opening_quantity,
+      'unit_cost',p_unit_cost
+    )
+  );
+  return v_stock_item_id;
+end
+$function$;
+
+create or replace function public.owner_receive_purchase_order_line(
+  p_line_id uuid,
+  p_received_quantity numeric
+) returns void
+language plpgsql
+security definer
+set search_path=public,private,pg_temp
+as $function$
+declare
+  v_line public.purchase_order_lines%rowtype;
+  v_order public.purchase_orders%rowtype;
+  v_stock public.stock_items%rowtype;
+  v_landed_unit_cost numeric(14,4);
+  v_total_received numeric(14,3);
+  v_total_ordered numeric(14,3);
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select * into v_line from public.purchase_order_lines
+  where id=p_line_id for update;
+  if not found or not exists (
+    select 1 from public.business_memberships
+    where business_id=v_line.business_id and user_id=auth.uid() and role='owner'
+  ) then raise exception 'Purchase line not found'; end if;
+
+  select * into v_order from public.purchase_orders
+  where id=v_line.purchase_order_id and business_id=v_line.business_id
+  for update;
+  if not found then raise exception 'Purchase order not found'; end if;
+  if v_order.status in ('cancelled','received')
+     or p_received_quantity is null or p_received_quantity<=0
+     or v_line.received_quantity+p_received_quantity>v_line.quantity then
+    raise exception 'Invalid or excess goods receipt';
+  end if;
+
+  select * into v_stock from public.stock_items
+  where id=v_line.stock_item_id and business_id=v_line.business_id
+  for update;
+  if not found or not v_stock.active then raise exception 'Active stock item not found'; end if;
+
+  v_landed_unit_cost:=v_line.unit_cost+
+    case when v_order.total>0
+      then (v_order.transport_cost*(v_line.quantity*v_line.unit_cost/v_order.total))/v_line.quantity
+      else 0
+    end;
+
+  perform private.apply_stock_movement(
+    v_line.business_id,v_stock.id,p_received_quantity,v_landed_unit_cost,'purchase'
+  );
+
+  update public.purchase_order_lines
+    set received_quantity=received_quantity+p_received_quantity
+    where id=v_line.id and business_id=v_line.business_id;
+
+  select coalesce(sum(received_quantity),0),coalesce(sum(quantity),0)
+    into v_total_received,v_total_ordered
+    from public.purchase_order_lines
+    where purchase_order_id=v_order.id and business_id=v_order.business_id;
+
+  update public.purchase_orders
+    set status=case when v_total_received>=v_total_ordered then 'received' else 'part_received' end
+    where id=v_order.id and business_id=v_order.business_id;
+
+  insert into public.audit_events(
+    business_id,actor_user_id,event_type,entity_type,entity_id,details
+  ) values (
+    v_line.business_id,auth.uid(),'purchasing.goods_received','purchase_order_line',
+    v_line.id,jsonb_build_object(
+      'purchase_order_id',v_order.id,'stock_item_id',v_stock.id,
+      'received_quantity',p_received_quantity,'landed_unit_cost',v_landed_unit_cost
+    )
+  );
+end
+$function$;
+
+revoke all on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) from public,anon;
+revoke all on function public.owner_receive_purchase_order_line(uuid,numeric) from public,anon;
+grant execute on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) to authenticated;
+grant execute on function public.owner_receive_purchase_order_line(uuid,numeric) to authenticated;
+
+do $permissions$
+begin
+  if to_regprocedure('private.update_job_material_issue(uuid,uuid,numeric,numeric)') is not null then
+    execute 'revoke all on function private.update_job_material_issue(uuid,uuid,numeric,numeric) from public,anon,authenticated';
+  end if;
+  if to_regprocedure('private.update_job_stage(uuid,uuid,text)') is not null then
+    execute 'revoke all on function private.update_job_stage(uuid,uuid,text) from public,anon,authenticated';
+  end if;
+  if to_regprocedure('private.update_purchase_receipt(uuid,uuid,numeric)') is not null then
+    execute 'revoke all on function private.update_purchase_receipt(uuid,uuid,numeric) from public,anon,authenticated';
+  end if;
+end
+$permissions$;
+
 create or replace function public.owner_add_job_material(
   p_job_id uuid,
   p_stock_item_id uuid,
