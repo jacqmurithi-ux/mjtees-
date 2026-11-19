@@ -132,7 +132,7 @@ test('Production page explains missing stock items and missing material requirem
   assert.match(operations, /Add the real materials and their opening quantities in Inventory first/);
   assert.match(operations, /onNavigate\?\.\('inventory'\)/);
   assert.match(operations, /No material requirements planned yet/);
-  assert.match(operations, /Issue remaining planned material/);
+  assert.match(operations, /Issue selected quantity/);
 });
 
 
@@ -148,7 +148,7 @@ test('Production planning supports multiple material requirements on one job and
   assert.match(operations, /const jobMaterials=invoices\.filter\(m=>m\.job_id===selectedJob\)/);
   assert.match(operations, /jobMaterials\.map\(m=>/);
   assert.match(operations, /previous requirements remain listed below/);
-  assert.match(operations, /material\.job_id!==selectedJob/);
+  assert.match(operations, /jobMaterials\.find\(x=>x\.id===selectedMaterial\)/);
   assert.match(operations, /owner_add_job_material/);
 });
 
@@ -226,4 +226,30 @@ test('cost profile history displays component breakdown and retains immutable ve
   assert.match(operations, /owner_create_costing_profile/);
   assert.match(operations, /owner_activate_costing_profile/);
   assert.match(operations, /older versions remain in the audit history|Earlier versions and quotations keep their recorded costs/);
+});
+
+
+test('Production material issue supports partial quantities with client-side planned and available stock validation', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /Issue quantity cannot exceed the remaining planned quantity/);
+  assert.match(operations, /Issue quantity cannot exceed available stock/);
+  assert.match(operations, /p_quantity:quantity/);
+  assert.match(operations, /Issue selected quantity/);
+  assert.match(operations, /max={selectedMaterialRemaining}/);
+  assert.match(operations, /Available in stock:/);
+});
+
+test('Production material selector is constrained to the selected job and resets to its first outstanding requirement', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /const activeJobMaterials=\(m\.data\|\|\[\]\)\.filter\(x=>x\.job_id===activeJobId\)/);
+  assert.match(operations, /activeJobMaterials\.some\(x=>x\.id===selectedMaterial\)/);
+  assert.match(operations, /setIssueQty\(first\?String/);
+  assert.match(operations, /jobMaterials\.find\(x=>x\.id===selectedMaterial\)/);
+});
+
+test('Production UI labels all persisted stages including quality check and cancellation', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /quality_check:'Quality check'/);
+  assert.match(operations, /cancelled:'Cancelled'/);
+  assert.match(operations, /const nextStages:Record<string,string\[]>/);
 });
