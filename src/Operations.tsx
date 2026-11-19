@@ -63,7 +63,13 @@ export default function Operations({page,businessId,onChanged}:{page:Page;busine
    }else if(page==='settings'){
     const {data,error}=await supabase.from('costing_profiles').select('id,profile_name,version,direct_cost,is_active,components,created_at').order('profile_name').order('version',{ascending:false});if(error)throw error;setProfiles(data||[]);
    }
-  }catch(e){fail(e instanceof Error?e.message:'Unable to load this workspace module.')}
+  }catch(e){
+   const detail = e && typeof e === 'object'
+    ? [Reflect.get(e,'message'),Reflect.get(e,'details'),Reflect.get(e,'hint'),Reflect.get(e,'code') ? 'Code: '+Reflect.get(e,'code') : null].filter(Boolean).join(' · ')
+    : String(e ?? 'Unknown error');
+   fail(detail || 'Unable to load this workspace module. Check the browser console for details.');
+   console.error('MJ workspace module load failed', {page,businessId,error:e});
+  }
   finally{setLoading(false)}
  },[page,businessId,customerId,profileId,selectedJob,materialStock,selectedMaterial,supplierId,poStock,payInvoice,fail]);
  useEffect(()=>{void refresh()},[refresh]);
