@@ -117,6 +117,7 @@ test('quotation status RPC is owner-scoped, transition-checked, audited and call
 });
 
 const invoiceItemCostMigration = await readFile(new URL('../supabase/migrations/20261119220000_restore_sales_invoice_item_direct_cost.sql', import.meta.url), 'utf8');
+const pricingIntegrityMigration = await readFile(new URL('../supabase/migrations/20261120110000_fix_costing_pricing_integrity.sql', import.meta.url), 'utf8');
 
 test('invoice item direct production cost is restored additively for quotation conversion', () => {
   assert.match(invoiceItemCostMigration, /alter table public\.sales_invoice_items[\s\S]*?add column if not exists direct_cost numeric\(14,2\) not null default 0/);
@@ -343,4 +344,11 @@ test('costing profiles preserve per-piece and per-job component bases in new imm
   assert.match(operations, /value="per_job">Once per job/);
   assert.match(operations, /value="per_piece">Per finished item/);
   assert.match(operations, /c\.basis\|\|'per_piece'/);
+});
+
+
+test('invoice lines preserve the exact immutable quotation component snapshot', () => {
+  assert.match(pricingIntegrityMigration, /add column if not exists cost_snapshot jsonb not null default '\{\}'::jsonb/);
+  assert.match(pricingIntegrityMigration, /coalesce\(l\.details->'cost_snapshot','\{\}'::jsonb\)/);
+  assert.match(pricingIntegrityMigration, /owner_convert_quote_to_invoice/);
 });
