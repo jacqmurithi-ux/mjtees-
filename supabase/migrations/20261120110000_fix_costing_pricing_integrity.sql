@@ -235,3 +235,49 @@ end
 $fn$;
 
 notify pgrst,'reload schema';
+
+
+
+-- Per-job reports use the same gross-margin denominator as quotations and business reports.
+create or replace function public.owner_job_report()
+returns jsonb
+language plpgsql
+stable
+security invoker
+set search_path=public,pg_temp
+as $fn$
+declare v_business uuid; v_result jsonb;
+begin
+ select business_id into v_business from public.business_memberships
+ where user_id=auth.uid() and role='owner' limit 1;
+ if v_business is null then raise exception 'Owner workspace required'; end if;
+ select coalesce(jsonb_agg(jsonb_build_object(
+  'job_id',j.id,'job_number',j.job_number,'job_name',j.job_name,
+  'customer_name',c.customer_name,'stage',j.stage,
+  'created_at',j.created_at,'due_at',j.due_at,'delivered_at',j.delivered_at,
+  'invoice_number',i.invoice_number,'revenue',coalesce(i.total,0),
+  'direct_cost',coalesce(nullif(j.actual_direct_cost,0),
+   (select sum(ii.direct_cost) from public.sales_invoice_items ii where ii.invoice_id=i.id),0),
+  'gross_profit',coalesce(i.total,0)-coalesce(nullif(j.actual_direct_cost,0),
+   (select sum(ii.direct_cost) from public.sales_invoice_items ii where ii.invoice_id=i.id),0),
+  'gross_margin_percent',case
+   when coalesce(i.total,0)>0 then round((
+    (coalesce(i.total,0)-coalesce(nullif(j.actual_direct_cost,0),
+     (select sum(ii.direct_cost) from public.sales_invoice_items ii where ii.invoice_id=i.id),0))
+    /coalesce(i.total,0))*100,2)
+   else null end,
+  'amount_paid',coalesce(i.amount_paid,0),'balance',coalesce(i.balance,0),
+  'turnaround_hours',case when j.delivered_at is not null
+   then round((extract(epoch from (j.delivered_at-j.created_at))/3600)::numeric,2)
+   else null end
+ ) order by j.created_at desc),'[]'::jsonb)
+ into v_result
+ from public.production_jobs j
+ join public.customers c on c.id=j.customer_id
+ left join public.sales_invoices i on i.id=j.invoice_id
+ where j.business_id=v_business;
+ return v_result;
+end
+$fn$;
+
+notify pgrst,'reload schema';
