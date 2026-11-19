@@ -90,14 +90,20 @@ begin
     raise exception using errcode='22023',message='Credit note total must be greater than zero';
   end if;
 
-  select si,o.customer_id
-    into v_invoice,v_customer_id
+  select si.* into v_invoice
   from public.sales_invoices si
-  join public.orders o on o.business_id=si.business_id and o.id=si.order_id
   where si.business_id=p_business_id and si.id=p_invoice_id
-  for update of si,o;
+  for update;
   if not found then
     raise exception using errcode='P0002',message='Sales invoice not found';
+  end if;
+
+  select o.customer_id into v_customer_id
+  from public.orders o
+  where o.business_id=p_business_id and o.id=v_invoice.order_id
+  for update;
+  if not found then
+    raise exception using errcode='P0002',message='Invoice order not found';
   end if;
   if v_invoice.status not in ('sent','partially_paid','paid','overdue') then
     raise exception using errcode='22023',message='A draft or void invoice cannot receive a credit note';
