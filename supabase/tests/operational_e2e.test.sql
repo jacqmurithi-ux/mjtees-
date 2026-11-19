@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(17);
+select extensions.plan(20);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -81,6 +81,9 @@ select extensions.is((select status from public.sales_invoices where id=current_
 
 select extensions.is((public.owner_operational_report()->>'invoiced_sales')::numeric,1500::numeric,'report includes invoiced sales');
 select extensions.is((public.owner_operational_report()->>'payments_received')::numeric,1500::numeric,'report includes received payment');
+select extensions.is((public.owner_operational_report()->>'direct_production_cost')::numeric,200::numeric,'report carries costing profile direct cost into invoice');
+select extensions.is((public.owner_operational_report()->>'gross_profit')::numeric,1300::numeric,'Baraka gross profit before other direct costs is KES 1,300');
+select extensions.is((public.owner_operational_report()->>'gross_margin_percent')::numeric,86.67::numeric,'report calculates gross margin from recorded invoice costs');
 select extensions.is((public.owner_operational_report()->>'outstanding_receivables')::numeric,0::numeric,'report clears paid receivable');
 select extensions.is((public.owner_operational_report()->>'delivered_jobs')::integer,1,'report includes delivered production job');
 
