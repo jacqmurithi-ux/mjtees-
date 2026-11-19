@@ -68,3 +68,7 @@ td{font-size:13px}
 .op-guidance-warning p{color:#806b49}
 .op-guidance-link{margin-top:10px;min-height:42px;padding:9px 13px;border:0;border-radius:8px;background:#1565c0;color:#fff;font-size:13px;font-weight:700}
 @media(max-width:680px){.op-guidance-link{width:100%;min-height:46px}}
+
+
+/* Dashboard phase 1: business-critical alerts */
+.price-alert{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #edf0f3;font-size:13px}.price-alert>div{display:grid;gap:5px;min-width:0}.price-alert span{font-weight:750;color:#b45309}.price-alert small{font-size:12px;color:var(--muted)}.price-alert button{flex:none;min-height:42px;padding:9px 12px;border:0;border-radius:9px;background:var(--b);color:#fff;font-size:12px;font-weight:700}.dashboard-job{grid-template-columns:1fr auto}.dashboard-job b{grid-column:1/-1}.dashboard-job span{color:var(--muted)}.dashboard-job small{text-align:right}@media(max-width:520px){.price-alert{align-items:flex-start;flex-direction:column}.price-alert button{width:100%}.dashboard-job{grid-template-columns:1fr}.dashboard-job small{text-align:left}}
