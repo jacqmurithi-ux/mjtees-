@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(41);
+select extensions.plan(56);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -37,7 +37,7 @@ select extensions.ok(
 insert into public.customers(business_id,customer_name,customer_type,created_by)
 select (public.owner_bootstrap_workspace()->>'business_id')::uuid,'Example Customer','individual',auth.uid();
 
-select set_config('test.stock_id',public.owner_create_stock_item('shop_1','Generic test stock item','General','piece',10,2,0,'E2E-STOCK')::text,true);
+select set_config('test.stock_id',public.owner_create_stock_item('shop_1','Generic test stock item','General','piece',10,2,10,'E2E-STOCK')::text,true);
 select extensions.throws_ok(
  $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$$,
  'P0001','An active versioned costing profile is required before pricing this quotation',
@@ -94,6 +94,37 @@ select extensions.is((select balance from public.sales_invoices where id=current
 select extensions.is((select sum(pa.amount) from public.payment_allocations pa join public.payments p on p.id=pa.payment_id where pa.invoice_id=current_setting('test.invoice_id')::uuid and p.payment_number='QD-DEP-TEST-001'),200::numeric,'quote deposit creates an allocated append-only payment record');
 select extensions.ok((select customer_supplied_items from public.production_jobs where id=current_setting('test.job_id')::uuid),'production job records customer-supplied garments');
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer-owned items do not reduce MJ stock');
+
+select extensions.ok(not has_table_privilege('authenticated','public.production_job_materials','INSERT'),'production materials cannot be inserted directly outside the owner RPC');
+select extensions.ok(not has_function_privilege('authenticated','private.apply_stock_movement(uuid,uuid,numeric,numeric,text)','EXECUTE'),'private stock movement helper cannot be called directly by clients');
+select set_config('test.material_id',public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,2)::text,true);
+select extensions.is((select planned_quantity from public.production_job_materials where id=current_setting('test.material_id')::uuid),2::numeric,'owner can plan a positive quantity of same-business stock for a production job');
+select extensions.throws_ok(
+ $select public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,0)$,
+ 'P0001','Planned quantity must be greater than zero',
+ 'rejects a zero production material plan');
+select extensions.throws_ok(
+ $select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'printing')$,
+ 'P0001','Invalid production stage transition',
+ 'rejects skipping required production stages');
+select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1);
+select extensions.is((select issued_quantity from public.production_job_materials where id=current_setting('test.material_id')::uuid),1::numeric,'partial material issue is recorded against the plan');
+select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),9::numeric,'partial material issue reduces available stock through the ledger');
+select extensions.throws_ok(
+ $select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1.01)$,
+ 'P0001','Issue quantity exceeds planned balance',
+ 'rejects issuing more than the remaining planned quantity');
+select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1);
+select extensions.is((select issued_quantity from public.production_job_materials where id=current_setting('test.material_id')::uuid),2::numeric,'remaining planned material can be issued exactly once');
+select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),8::numeric,'full material issue leaves the correct stock balance');
+select extensions.is((select actual_direct_cost from public.production_jobs where id=current_setting('test.job_id')::uuid),20::numeric,'issued material cost is added to actual production direct cost');
+select extensions.is((select count(*)::integer from public.stock_movements where stock_item_id=current_setting('test.stock_id')::uuid and movement_type='job_issue' and quantity=-1),2,'each partial issue creates its own append-only stock movement');
+select extensions.is((select count(*)::integer from public.audit_events where entity_type='production_job_material' and entity_id=current_setting('test.material_id')::uuid and event_type in('production.material_planned','production.material_issued')),2,'material planning and issuing both create audit events');
+select set_config('test.insufficient_material_id',public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,20)::text,true);
+select extensions.throws_ok(
+ $select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,9)$,
+ 'P0001','Insufficient stock',
+ 'rejects issuing material beyond available stock');
 
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'artwork_proof');
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'screens_prepared');
