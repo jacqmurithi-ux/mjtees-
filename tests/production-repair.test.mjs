@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261119192000_restore_production_material_workflow.sql', import.meta.url), 'utf8');
 const quotationMigration = await readFile(new URL('../supabase/migrations/20261119191500_restore_public_quotation_rpc.sql', import.meta.url), 'utf8');
+const quotationColumnsMigration = await readFile(new URL('../supabase/migrations/20261119200000_add_quotation_margin_exception_columns.sql', import.meta.url), 'utf8');
 
 test('production materials are business-scoped and reference jobs and stock within the same business', () => {
   assert.match(migration, /business_id uuid not null references public\.businesses\(id\)/);
@@ -91,4 +92,13 @@ test('quotation creation is exposed through the PostgREST public RPC with the ex
   assert.match(quotationMigration, /select private\.owner_create_quotation_impl\([\s\S]*?p_allow_below_floor,p_exception_reason/);
   assert.match(quotationMigration, /grant execute on function public\.owner_create_quotation\(uuid,uuid,text,date,jsonb,boolean,text\) to authenticated/);
   assert.match(quotationMigration, /notify pgrst, 'reload schema'/);
+});
+
+
+test('quotation margin exception audit columns are restored additively and owner attribution references Auth', () => {
+  assert.match(quotationColumnsMigration, /alter table public\.quotations[\s\S]*?add column if not exists below_floor_exception_reason text/);
+  assert.match(quotationColumnsMigration, /add column if not exists below_floor_approved_by uuid references auth\.users\(id\)/);
+  assert.match(quotationColumnsMigration, /comment on column public\.quotations\.below_floor_exception_reason/);
+  assert.match(quotationColumnsMigration, /comment on column public\.quotations\.below_floor_approved_by/);
+  assert.doesNotMatch(quotationColumnsMigration, /drop column|update public\.quotations|delete from public\.quotations/i);
 });
