@@ -119,9 +119,9 @@ test('quotation status RPC is owner-scoped, transition-checked, audited and call
 const invoiceItemCostMigration = await readFile(new URL('../supabase/migrations/20261119220000_restore_sales_invoice_item_direct_cost.sql', import.meta.url), 'utf8');
 
 test('invoice item direct production cost is restored additively for quotation conversion', () => {
-  assert.match(invoiceItemCostMigration, /alter table public\\.sales_invoice_items[\\s\\S]*?add column if not exists direct_cost numeric\\(14,2\\) not null default 0/);
-  assert.match(invoiceItemCostMigration, /check \\(direct_cost >= 0\\)/);
-  assert.match(invoiceItemCostMigration, /comment on column public\\.sales_invoice_items\\.direct_cost/);
+  assert.match(invoiceItemCostMigration, /alter table public\.sales_invoice_items[\s\S]*?add column if not exists direct_cost numeric\(14,2\) not null default 0/);
+  assert.match(invoiceItemCostMigration, /check \(direct_cost >= 0\)/);
+  assert.match(invoiceItemCostMigration, /comment on column public\.sales_invoice_items\.direct_cost/);
   assert.match(invoiceItemCostMigration, /notify pgrst, 'reload schema'/);
-  assert.doesNotMatch(invoiceItemCostMigration, /drop column|truncate|delete from|update public\\.sales_invoice_items/i);
+  assert.doesNotMatch(invoiceItemCostMigration, /drop column|truncate|delete from|update public\.sales_invoice_items/i);
 });
