@@ -382,7 +382,7 @@ select is((public.owner_apply_sales_customer_credit(
   100::bigint,'Owner can apply customer credit to an issued invoice');
 select is((select sum(amount) from public.sales_customer_credit_entries
   where customer_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
-  175::numeric,'Customer credit balance falls after applying credit');
+  150::numeric,'Customer credit balance reflects only accepted Cash and M-Pesa entries after applying credit');
 select is((select status from public.sales_invoices
   where quotation_id='a1000000-0000-4000-8000-000000000001'),
   'partially_paid','Applied customer credit updates the invoice status');
