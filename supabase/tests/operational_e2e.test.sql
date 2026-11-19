@@ -65,18 +65,28 @@ select extensions.throws_ok(
 
 select set_config('test.profile_id',public.owner_create_costing_profile(
  'Generic production service',
- '[{"name":"Outsourced printing labour","cost":600,"basis":"per_job"}]'::jsonb,
+ '[{"name":"Outsourced printing labour","category":"production","cost":600,"basis":"per_job"}]'::jsonb,
  600,true
 )::text,true);
 select extensions.ok((select is_active and version=1 and direct_cost=600 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');
 
+select public.owner_update_max_unit_selling_price(450);
+select extensions.is((select max_unit_selling_price from public.business_settings where business_id=current_setting('test.business_id')::uuid),450::numeric,'owner can set a maximum selling price per finished item');
+select extensions.throws_ok(
+ $select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-CEILING',current_date+7,'[{"description":"Ceiling test","quantity":1,"unit_price":500,"details":{}}]'::jsonb,false,null)$,
+ 'P0001','Unit selling price exceeds the owner-set maximum price of KSh 450.00',
+ 'server rejects a unit selling price above the owner-set ceiling');
+select public.owner_update_max_unit_selling_price(null);
+select extensions.is((select max_unit_selling_price from public.business_settings where business_id=current_setting('test.business_id')::uuid),null::numeric,'owner can clear the optional selling price ceiling');
+
 select set_config('test.cost_override_quote',public.owner_create_quotation(
  (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,
  'Q-COST-BREAKDOWN',current_date+7,
- '[{"description":"Generic garment printing","quantity":16,"unit_price":700,"details":{"blank_cost_per_piece":450,"other_costs_total":800}}]'::jsonb,false,null
+ '[{"description":"Generic garment printing","quantity":16,"unit_price":800,"details":{"blank_cost_per_piece":450,"other_costs_total":800}}]'::jsonb,false,null
 )::text,true);
-select extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.cost_override_quote')::uuid),8000::numeric,'quote direct cost is blank cost per piece times quantity plus other direct costs');
-select extensions.is((select round(((q.total-l.direct_cost)/l.direct_cost)*100,2) from public.quotations q join public.quotation_lines l on l.quotation_id=q.id where q.id=current_setting('test.cost_override_quote')::uuid),40.00::numeric,'contribution divided by direct cost produces the expected 40 percent margin');
+select extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.cost_override_quote')::uuid),8600::numeric,'quotation cost combines per-job labour, quantity-aware blank cost and other job costs');
+select extensions.is((select round(((q.total-l.direct_cost)/q.total)*100,2) from public.quotations q join public.quotation_lines l on l.quotation_id=q.id where q.id=current_setting('test.cost_override_quote')::uuid),32.81::numeric,'quotation uses gross profit divided by revenue for true gross margin');
+select extensions.ok((select details->'cost_snapshot'->>'profile_version'='1' and jsonb_array_length(details->'cost_snapshot'->'components')=3 from public.quotation_lines where quotation_id=current_setting('test.cost_override_quote')::uuid),'quotation stores a versioned component cost snapshot');
 
 select extensions.throws_ok(
  $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":2,"unit_price":100,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
@@ -99,7 +109,7 @@ select set_config('test.quote_id',public.owner_create_quotation(
 )::text,true);
 
 select extensions.is((select total from public.quotations where id=current_setting('test.quote_id')::uuid),1000::numeric,'test quotation total is KES 1,000');
-select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/(select nullif(sum(direct_cost),0) from public.quotation_lines where quotation_id=q.id))*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),66.67::numeric,'test contribution divided by direct cost is 66.67 percent');
+select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),40.00::numeric,'customer-supplied quote excludes blank-item cost and calculates gross margin over revenue');
 
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'sent');
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'accepted');
@@ -115,6 +125,28 @@ select extensions.is((select amount_paid from public.sales_invoices where id=cur
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),800::numeric,'invoice balance is reduced by the quote deposit');
 select extensions.is((select sum(pa.amount) from public.payment_allocations pa join public.payments p on p.id=pa.payment_id where pa.invoice_id=current_setting('test.invoice_id')::uuid and p.payment_number='QD-DEP-TEST-001'),200::numeric,'quote deposit creates an allocated append-only payment record');
 select extensions.ok((select customer_supplied_items from public.production_jobs where id=current_setting('test.job_id')::uuid),'production job records customer-supplied garments');
+select extensions.is((select direct_cost from public.sales_invoice_items where invoice_id=current_setting('test.invoice_id')::uuid),600::numeric,'invoice retains the original quotation cost snapshot');
+
+select set_config('test.mixed_profile_id',public.owner_create_costing_profile(
+ 'Mixed basis production',
+ '[{"name":"Blank garment","category":"blank_item","cost":100,"basis":"per_piece"},{"name":"Decoration labour","category":"production","cost":50,"basis":"per_piece"},{"name":"Screen setup","category":"production","cost":300,"basis":"per_job"}]'::jsonb,
+ 450,true
+)::text,true);
+select set_config('test.mixed_quote_id',public.owner_create_quotation(
+ (select id from public.customers where customer_name='Example Customer'),current_setting('test.mixed_profile_id')::uuid,
+ 'Q-MIXED-BASIS',current_date+7,
+ '[{"description":"Mixed basis production","quantity":3,"unit_price":500,"details":{}}]'::jsonb,false,null
+)::text,true);
+select extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.mixed_quote_id')::uuid),750::numeric,'three-piece quote multiplies per-piece components and counts per-job setup once');
+select set_config('test.customer_supplied_quote_id',public.owner_create_quotation(
+ (select id from public.customers where customer_name='Example Customer'),current_setting('test.mixed_profile_id')::uuid,
+ 'Q-CUSTOMER-SUPPLIED',current_date+7,
+ '[{"description":"Customer-supplied garments","quantity":3,"unit_price":500,"details":{"customer_supplied_items":true}}]'::jsonb,false,null
+)::text,true);
+select extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.customer_supplied_quote_id')::uuid),450::numeric,'customer-supplied garments omit only blank-item component and retain per-piece decoration plus per-job setup');
+select extensions.ok((select details->'cost_snapshot'->>'profile_id'=current_setting('test.mixed_profile_id') from public.quotation_lines where quotation_id=current_setting('test.mixed_quote_id')::uuid),'quotation snapshot identifies the exact costing profile version');
+select extensions.ok((select costing_profile_id=current_setting('test.profile_id')::uuid from public.quotations where id=current_setting('test.quote_id')::uuid),'historical quotation retains the costing profile version used when it was created');
+
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer-owned items do not reduce MJ stock');
 
 select extensions.ok(not has_table_privilege('authenticated','public.production_job_materials','INSERT'),'production materials cannot be inserted directly outside the owner RPC');
@@ -196,7 +228,7 @@ select extensions.is((public.owner_operational_report()->>'invoiced_sales')::num
 select extensions.is((public.owner_operational_report()->>'payments_received')::numeric,1000::numeric,'report includes received payment');
 select extensions.is((public.owner_operational_report()->>'direct_production_cost')::numeric,600::numeric,'report carries costing profile direct cost into invoice');
 select extensions.is((public.owner_operational_report()->>'gross_profit')::numeric,400::numeric,'gross profit before other direct costs is KES 400');
-select extensions.is((public.owner_operational_report()->>'gross_margin_percent')::numeric,66.67::numeric,'report calculates contribution divided by direct cost');
+select extensions.is((public.owner_operational_report()->>'gross_margin_percent')::numeric,40.00::numeric,'report calculates gross profit divided by invoiced sales');
 select extensions.is((public.owner_operational_report()->>'outstanding_receivables')::numeric,0::numeric,'report clears paid receivable');
 select extensions.is((public.owner_operational_report()->>'delivered_jobs')::integer,1,'report includes delivered production job');
 
