@@ -31,8 +31,7 @@ do $$
 declare t text;
 begin
  foreach t in array array[
- 'quotations','quotation_lines','sales_invoices','sales_invoice_items','production_jobs',
- 'suppliers','purchase_orders','purchase_order_lines','refunds','expenses'
+ 'suppliers','refunds'
  ] loop
   execute format(
    'create policy %I on public.%I for all to authenticated using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner'')) with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner''))',
@@ -53,6 +52,25 @@ grant select,insert on public.costing_profiles to authenticated;
 -- Ledger rows are append-only. Inventory quantities can only change through the private stock movement helper.
 drop policy if exists stock_items_owner_access on public.stock_items;
 create policy stock_items_owner_insert on public.stock_items for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner') and quantity_on_hand=0 and average_unit_cost=0);
+create policy quotations_owner_insert on public.quotations for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy quotations_owner_status_update on public.quotations for update to authenticated
+ using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'))
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy quotation_lines_owner_insert on public.quotation_lines for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy sales_invoices_owner_insert on public.sales_invoices for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy sales_invoice_items_owner_insert on public.sales_invoice_items for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy production_jobs_owner_insert on public.production_jobs for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy purchase_orders_owner_insert on public.purchase_orders for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy purchase_order_lines_owner_insert on public.purchase_order_lines for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy expenses_owner_insert on public.expenses for insert to authenticated
  with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
 create policy payments_owner_insert on public.payments for insert to authenticated
  with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
@@ -60,8 +78,12 @@ create policy payment_allocations_owner_insert on public.payment_allocations for
  with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
 create policy audit_events_owner_insert on public.audit_events for insert to authenticated
  with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+revoke update,delete on public.quotations,public.quotation_lines,public.sales_invoices,public.sales_invoice_items,public.production_jobs,public.purchase_orders,public.purchase_order_lines,public.expenses from authenticated;
+grant select,insert on public.quotations,public.quotation_lines,public.sales_invoices,public.sales_invoice_items,public.production_jobs,public.purchase_orders,public.purchase_order_lines,public.expenses to authenticated;
 revoke update,delete on public.stock_items from authenticated;
 grant select,insert on public.stock_items to authenticated;
+revoke update,delete on public.quotations from authenticated;
+grant update(status) on public.quotations to authenticated;
 revoke insert,update,delete on public.stock_movements from authenticated;
 grant select on public.stock_movements to authenticated;
 revoke update,delete on public.payments,public.payment_allocations,public.audit_events from authenticated;
@@ -130,6 +152,60 @@ begin
  if v_business is null then raise exception 'Costing profile not found'; end if;
  perform private.activate_costing_profile(v_business,p_profile_id);
 end $;
+
+create or replace function private.update_invoice_balance(p_business_id uuid,p_invoice_id uuid,p_amount numeric)
+returns void language plpgsql security definer set search_path=public,pg_temp as $
+declare i public.sales_invoices%rowtype;
+begin
+ if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
+ select * into i from public.sales_invoices where id=p_invoice_id and business_id=p_business_id for update;
+ if not found or p_amount<=0 or p_amount>i.balance then raise exception 'Invalid invoice payment allocation'; end if;
+ perform private.update_invoice_balance(i.business_id,i.id,p_amount);
+end $;
+
+create or replace function private.update_job_material_issue(p_business_id uuid,p_material_id uuid,p_quantity numeric,p_cost numeric)
+returns void language plpgsql security definer set search_path=public,pg_temp as $
+declare m public.production_job_materials%rowtype;
+begin
+ if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
+ select * into m from public.production_job_materials where id=p_material_id and business_id=p_business_id for update;
+ if not found or p_quantity<=0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Invalid job material issue'; end if;
+ update public.production_job_materials set issued_quantity=issued_quantity+p_quantity where id=m.id;
+ update public.production_jobs set actual_direct_cost=actual_direct_cost+p_cost where id=m.job_id and business_id=p_business_id;
+end $;
+
+create or replace function private.update_job_stage(p_business_id uuid,p_job_id uuid,p_stage text)
+returns void language plpgsql security definer set search_path=public,pg_temp as $
+declare v_old text;
+begin
+ if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
+ select stage into v_old from public.production_jobs where id=p_job_id and business_id=p_business_id for update;
+ if not found or v_old in('delivered','cancelled') then raise exception 'Production job not found or already closed'; end if;
+ update public.production_jobs set stage=p_stage,delivered_at=case when p_stage='delivered' then now() else delivered_at end where id=p_job_id and business_id=p_business_id;
+end $;
+
+create or replace function private.update_purchase_receipt(p_business_id uuid,p_line_id uuid,p_received_quantity numeric)
+returns void language plpgsql security definer set search_path=public,pg_temp as $
+declare l public.purchase_order_lines%rowtype; po public.purchase_orders%rowtype; v_received numeric(14,3);
+begin
+ if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
+ select * into l from public.purchase_order_lines where id=p_line_id and business_id=p_business_id for update;
+ if not found then raise exception 'Purchase line not found'; end if;
+ select * into po from public.purchase_orders where id=l.purchase_order_id and business_id=p_business_id for update;
+ if po.status in('cancelled','received') or p_received_quantity<=0 or l.received_quantity+p_received_quantity>l.quantity then raise exception 'Invalid or excess goods receipt'; end if;
+ update public.purchase_order_lines set received_quantity=received_quantity+p_received_quantity where id=l.id;
+ select coalesce(sum(received_quantity),0) into v_received from public.purchase_order_lines where purchase_order_id=po.id;
+ update public.purchase_orders set status=case when v_received>=(select sum(quantity) from public.purchase_order_lines where purchase_order_id=po.id) then 'received' else 'part_received' end where id=po.id;
+end $;
+
+revoke all on function private.update_invoice_balance(uuid,uuid,numeric) from public,anon;
+revoke all on function private.update_job_material_issue(uuid,uuid,numeric,numeric) from public,anon;
+revoke all on function private.update_job_stage(uuid,uuid,text) from public,anon;
+revoke all on function private.update_purchase_receipt(uuid,uuid,numeric) from public,anon;
+grant execute on function private.update_invoice_balance(uuid,uuid,numeric) to authenticated;
+grant execute on function private.update_job_material_issue(uuid,uuid,numeric,numeric) to authenticated;
+grant execute on function private.update_job_stage(uuid,uuid,text) to authenticated;
+grant execute on function private.update_purchase_receipt(uuid,uuid,numeric) to authenticated;
 
 create or replace function public.owner_create_stock_item(
  p_location_code text,p_item_name text,p_category text,p_unit text default 'piece',
@@ -256,8 +332,7 @@ begin
  select * into s from public.stock_items where id=m.stock_item_id and business_id=m.business_id for update;
  if s.quantity_on_hand<p_quantity then raise exception 'Insufficient stock'; end if;
  perform private.apply_stock_movement(m.business_id,s.id,-p_quantity,s.average_unit_cost,'job_issue');
- update public.production_job_materials set issued_quantity=issued_quantity+p_quantity where id=m.id;
- update public.production_jobs set actual_direct_cost=actual_direct_cost+(p_quantity*s.average_unit_cost) where id=m.job_id;
+ perform private.update_job_material_issue(m.business_id,m.id,p_quantity,p_quantity*s.average_unit_cost);
 end $$;
 
 create or replace function public.owner_set_production_stage(p_job_id uuid,p_stage text)
@@ -268,7 +343,7 @@ begin
  if v_business is null or not exists(select 1 from public.business_memberships where business_id=v_business and user_id=auth.uid() and role='owner') then raise exception 'Production job not found'; end if;
  if p_stage not in('awaiting_artwork','artwork_proof','screens_prepared','printing','finishing','quality_check','ready','delivered','cancelled') then raise exception 'Invalid production stage'; end if;
  if v_old in('delivered','cancelled') then raise exception 'Closed jobs cannot be changed'; end if;
- update public.production_jobs set stage=p_stage,delivered_at=case when p_stage='delivered' then now() else delivered_at end where id=p_job_id;
+ perform private.update_job_stage(v_business,p_job_id,p_stage);
 end $$;
 
 create or replace function public.owner_record_payment(
@@ -400,9 +475,7 @@ begin
  if not found then raise exception 'Stock item not found'; end if;
  v_landed:=l.unit_cost+case when po.total>0 then (po.transport_cost*(l.quantity*l.unit_cost/po.total))/l.quantity else 0 end;
  perform private.apply_stock_movement(l.business_id,s.id,p_received_quantity,v_landed,'purchase');
- update public.purchase_order_lines set received_quantity=received_quantity+p_received_quantity where id=l.id;
- select coalesce(sum(received_quantity),0) into v_received from public.purchase_order_lines where purchase_order_id=po.id;
- update public.purchase_orders set status=case when v_received>= (select sum(quantity) from public.purchase_order_lines where purchase_order_id=po.id) then 'received' else 'part_received' end where id=po.id;
+ perform private.update_purchase_receipt(l.business_id,l.id,p_received_quantity);
 end $$;
 
 revoke all on function public.owner_create_supplier(text,text,text) from public,anon;
