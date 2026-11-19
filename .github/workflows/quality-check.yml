@@ -27,3 +27,5 @@ jobs:
         run: npm run test:pricing
       - name: Test bulk printing safeguards
         run: npm run test:bulk-printing
+      - name: Test Sales schema migration safeguards
+        run: npm run test:sales-schema
