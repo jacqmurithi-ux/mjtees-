@@ -129,10 +129,15 @@ begin
     raise exception using errcode='55000',message='Only a sent proof can be approved or rejected';
   end if;
   if p_approved_by_contact_id is not null and not exists(
-    select 1 from public.customer_contacts c
+    select 1
+    from public.customer_contacts c
+    join public.production_jobs j on j.business_id=c.business_id
+    join public.order_items oi on oi.business_id=j.business_id and oi.id=j.order_item_id
+    join public.orders o on o.business_id=oi.business_id and o.id=oi.order_id
     where c.business_id=v_artwork.business_id and c.id=p_approved_by_contact_id
+      and c.customer_id=o.customer_id and j.id=v_artwork.job_id
   ) then
-    raise exception using errcode='22023',message='Approval contact does not belong to this business';
+    raise exception using errcode='22023',message='Approval contact must belong to the customer on this order';
   end if;
   update public.sales_job_artworks
     set proof_status=p_proof_status,
@@ -169,7 +174,7 @@ begin
     or length(btrim(coalesce(p_colour_name,''))) not between 1 and 100
     or length(coalesce(p_ink_reference,''))>100
     or length(coalesce(p_screen_reference,''))>100
-    or p_print_location not in ('front','back','left_sleeve','right_sleeve','cap_front','mug_wrap','other')
+    or p_print_location is null or p_print_location not in ('front','back','left_sleeve','right_sleeve','cap_front','mug_wrap','other')
     or p_sequence_no is null or p_sequence_no<1
     or length(coalesce(p_notes,''))>1000 then
     raise exception using errcode='22023',message='Enter a valid colour separation, print location and sequence';
