@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(13);
+select extensions.plan(15);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -21,6 +21,19 @@ insert into public.customers(business_id,customer_name,customer_type,created_by)
 select (public.owner_bootstrap_workspace()->>'business_id')::uuid,'Baraka Uniform Supplies','school',auth.uid();
 
 select set_config('test.stock_id',public.owner_create_stock_item('shop_1','Blank school T-shirts','Apparel','piece',10,2,0,'BARAKA-BLANK-TEE')::text,true);
+select extensions.throws_ok(
+ $$select public.owner_create_quotation((select id from public.customers where customer_name='Baraka Uniform Supplies'),'Q-BARAKA-LOW',current_date+7,'[{"description":"Low price test","quantity":50,"unit_price":5,"direct_cost":200,"details":{}}]'::jsonb,false,null)$$,
+ 'P0001','Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.',
+ 'blocks quotations below the 30 percent floor without an exception');
+
+select set_config('test.exception_quote_id',public.owner_create_quotation(
+ (select id from public.customers where customer_name='Baraka Uniform Supplies'),
+ 'Q-BARAKA-EXCEPTION',current_date+7,
+ '[{"description":"Approved below-floor test","quantity":50,"unit_price":5,"direct_cost":200,"details":{}}]'::jsonb,
+ true,'Approved contract exception'
+)::text,true);
+select extensions.ok((select below_floor_approved_by=auth.uid() and below_floor_exception_reason='Approved contract exception' from public.quotations where id=current_setting('test.exception_quote_id')::uuid),'below-floor exception records owner approver and reason');
+
 select set_config('test.quote_id',public.owner_create_quotation(
  (select id from public.customers where customer_name='Baraka Uniform Supplies'),
  'Q-BARAKA-E2E',current_date+7,
