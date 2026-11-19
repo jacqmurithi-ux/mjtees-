@@ -125,3 +125,12 @@ test('invoice item direct production cost is restored additively for quotation c
   assert.match(invoiceItemCostMigration, /notify pgrst, 'reload schema'/);
   assert.doesNotMatch(invoiceItemCostMigration, /drop column|truncate|delete from|update public\.sales_invoice_items/i);
 });
+
+test('Production page explains missing stock items and missing material requirements with a path to Inventory', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /No active stock items available/);
+  assert.match(operations, /Add the real materials and their opening quantities in Inventory first/);
+  assert.match(operations, /onNavigate\?\.\('inventory'\)/);
+  assert.match(operations, /No material requirements planned yet/);
+  assert.match(operations, /Issue remaining planned material/);
+});
