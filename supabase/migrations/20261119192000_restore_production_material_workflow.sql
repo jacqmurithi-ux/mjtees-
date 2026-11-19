@@ -463,3 +463,31 @@ revoke all on function public.owner_set_production_stage(uuid,text) from public,
 grant execute on function public.owner_add_job_material(uuid,uuid,numeric) to authenticated;
 grant execute on function public.owner_issue_job_material(uuid,numeric) to authenticated;
 grant execute on function public.owner_set_production_stage(uuid,text) to authenticated;
+
+-- Restore the public PostgREST entry point for quotation creation.
+-- The implementation remains private and SECURITY DEFINER; this invoker wrapper
+-- preserves the established owner authorization and server-side pricing rules.
+create or replace function public.owner_create_quotation(
+ p_customer_id uuid,
+ p_costing_profile_id uuid,
+ p_quote_number text,
+ p_valid_until date,
+ p_lines jsonb,
+ p_allow_below_floor boolean default false,
+ p_exception_reason text default null
+) returns uuid
+language sql
+security invoker
+set search_path=public,private,pg_temp
+as $function$
+ select private.owner_create_quotation_impl(
+  p_customer_id,p_costing_profile_id,p_quote_number,p_valid_until,p_lines,
+  p_allow_below_floor,p_exception_reason
+ );
+$function$;
+
+revoke all on function public.owner_create_quotation(uuid,uuid,text,date,jsonb,boolean,text) from public,anon;
+grant execute on function public.owner_create_quotation(uuid,uuid,text,date,jsonb,boolean,text) to authenticated;
+
+-- Ensure PostgREST notices the restored RPC without requiring a manual dashboard refresh.
+notify pgrst, 'reload schema';
