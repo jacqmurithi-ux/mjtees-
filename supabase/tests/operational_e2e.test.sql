@@ -48,7 +48,15 @@ select set_config('test.profile_id',public.owner_create_costing_profile(
  '[{"name":"Outsourced printing labour","cost":600,"basis":"per_job"}]'::jsonb,
  600,true
 )::text,true);
-select extensions.ok((select is_active and version=1 and direct_cost=600 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');\n\nselect set_config('test.cost_override_quote',public.owner_create_quotation(\n (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,\n 'Q-COST-BREAKDOWN',current_date+7,\n '[{\"description\":\"Generic garment printing\",\"quantity\":16,\"unit_price\":700,\"details\":{\"blank_cost_per_piece\":450,\"other_costs_total\":800}}]'::jsonb,false,null\n)::text,true);\nselect extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.cost_override_quote')::uuid),8000::numeric,'quote direct cost is blank cost per piece times quantity plus other direct costs');\nselect extensions.is((select round(((q.total-l.direct_cost)/l.direct_cost)*100,2) from public.quotations q join public.quotation_lines l on l.quotation_id=q.id where q.id=current_setting('test.cost_override_quote')::uuid),40.00::numeric,'contribution divided by direct cost produces the expected 40 percent margin');
+select extensions.ok((select is_active and version=1 and direct_cost=600 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');
+
+select set_config('test.cost_override_quote',public.owner_create_quotation(
+ (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,
+ 'Q-COST-BREAKDOWN',current_date+7,
+ '[{\"description\":\"Generic garment printing\",\"quantity\":16,\"unit_price\":700,\"details\":{\"blank_cost_per_piece\":450,\"other_costs_total\":800}}]'::jsonb,false,null
+)::text,true);
+select extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.cost_override_quote')::uuid),8000::numeric,'quote direct cost is blank cost per piece times quantity plus other direct costs');
+select extensions.is((select round(((q.total-l.direct_cost)/l.direct_cost)*100,2) from public.quotations q join public.quotation_lines l on l.quotation_id=q.id where q.id=current_setting('test.cost_override_quote')::uuid),40.00::numeric,'contribution divided by direct cost produces the expected 40 percent margin');
 
 select extensions.throws_ok(
  $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":2,"unit_price":100,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
@@ -93,7 +101,11 @@ select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'d
 select extensions.ok((select delivered_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production delivery is timestamped');
 select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
-select extensions.throws_ok(\n $select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',1001,null)$,\n 'P0001','Invalid payment method or amount exceeds invoice balance',\n 'rejects a customer payment greater than the outstanding invoice balance');\nselect public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',1000,'E2E-TEST-REF');
+select extensions.throws_ok(
+ $select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',1001,null)$,
+ 'P0001','Invalid payment method or amount exceeds invoice balance',
+ 'rejects a customer payment greater than the outstanding invoice balance');
+select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',1000,'E2E-TEST-REF');
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),0::numeric,'payment clears invoice balance');
 select extensions.is((select status from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),'paid','invoice status changes to paid');
 
