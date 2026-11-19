@@ -36,8 +36,8 @@ end $$;
 create or replace function public.owner_create_supplier(
   p_supplier_name text,
   p_phone text default null,
-  p_email text default null,
-  p_notes text default null
+  p_email text,
+  p_notes text
 ) returns uuid
 language plpgsql
 security definer
@@ -77,6 +77,20 @@ begin
   );
 
   return v_id;
+end
+$fn$;
+
+create or replace function public.owner_create_supplier(
+  p_supplier_name text,
+  p_phone text default null,
+  p_email text default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $fn$
+begin
+  return public.owner_create_supplier(p_supplier_name, p_phone, p_email, null);
 end
 $fn$;
 
@@ -500,6 +514,7 @@ begin
 end
 $fn$;
 
+revoke all on function public.owner_create_supplier(text,text,text) from public, anon;
 revoke all on function public.owner_create_supplier(text,text,text,text) from public, anon;
 revoke all on function public.owner_create_purchase_order(uuid,text,numeric,jsonb) from public, anon;
 revoke all on function public.owner_receive_purchase_order_line(uuid,numeric) from public, anon;
@@ -507,6 +522,7 @@ revoke all on function public.owner_record_supplier_payment(uuid,uuid,text,text,
 revoke all on function public.owner_supplier_price_alerts() from public, anon;
 revoke all on function public.owner_review_supplier_price_change(uuid,uuid,uuid,uuid) from public, anon;
 
+grant execute on function public.owner_create_supplier(text,text,text) to authenticated;
 grant execute on function public.owner_create_supplier(text,text,text,text) to authenticated;
 grant execute on function public.owner_create_purchase_order(uuid,text,numeric,jsonb) to authenticated;
 grant execute on function public.owner_receive_purchase_order_line(uuid,numeric) to authenticated;
