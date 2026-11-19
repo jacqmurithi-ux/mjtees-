@@ -41,6 +41,15 @@ begin
  end loop;
 end $;
 
+-- Costing profiles are versioned and immutable; only the active pointer can be changed privately.
+drop policy if exists costing_profiles_owner_access on public.costing_profiles;
+create policy costing_profiles_owner_read on public.costing_profiles for select to authenticated
+ using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy costing_profiles_owner_insert on public.costing_profiles for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+revoke update,delete on public.costing_profiles from authenticated;
+grant select,insert on public.costing_profiles to authenticated;
+
 -- Ledger rows are append-only. Inventory quantities can only change through the private stock movement helper.
 drop policy if exists stock_items_owner_access on public.stock_items;
 create policy stock_items_owner_insert on public.stock_items for insert to authenticated
@@ -85,6 +94,43 @@ revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,te
 grant usage on schema private to authenticated;
 grant execute on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) to authenticated;
 
+create or replace function private.activate_costing_profile(p_business_id uuid,p_profile_id uuid)
+returns void language plpgsql security definer set search_path=public,pg_temp as $
+declare v_name text;
+begin
+ if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
+ select profile_name into v_name from public.costing_profiles where id=p_profile_id and business_id=p_business_id;
+ if v_name is null then raise exception 'Costing profile not found'; end if;
+ update public.costing_profiles set is_active=false where business_id=p_business_id and profile_name=v_name and is_active;
+ update public.costing_profiles set is_active=true where id=p_profile_id and business_id=p_business_id;
+end $;
+revoke all on function private.activate_costing_profile(uuid,uuid) from public,anon;
+grant execute on function private.activate_costing_profile(uuid,uuid) to authenticated;
+
+create or replace function public.owner_create_costing_profile(
+ p_profile_name text,p_components jsonb,p_direct_cost numeric,p_activate boolean default true
+) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $
+declare v_business uuid; v_version integer; v_id uuid;
+begin
+ select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
+ if v_business is null or length(btrim(coalesce(p_profile_name,'')))<2 then raise exception 'Valid costing profile and owner workspace required'; end if;
+ if jsonb_typeof(p_components)<>'array' or jsonb_array_length(p_components)=0 or p_direct_cost<0 then raise exception 'Costing profile requires components and a non-negative direct cost'; end if;
+ select coalesce(max(version),0)+1 into v_version from public.costing_profiles where business_id=v_business and profile_name=btrim(p_profile_name);
+ insert into public.costing_profiles(business_id,profile_name,version,is_active,components,direct_cost)
+ values(v_business,btrim(p_profile_name),v_version,false,p_components,p_direct_cost) returning id into v_id;
+ if p_activate then perform private.activate_costing_profile(v_business,v_id); end if;
+ return v_id;
+end $;
+
+create or replace function public.owner_activate_costing_profile(p_profile_id uuid)
+returns void language plpgsql security invoker set search_path=public,pg_temp as $
+declare v_business uuid;
+begin
+ select business_id into v_business from public.costing_profiles where id=p_profile_id;
+ if v_business is null then raise exception 'Costing profile not found'; end if;
+ perform private.activate_costing_profile(v_business,p_profile_id);
+end $;
+
 create or replace function public.owner_create_stock_item(
  p_location_code text,p_item_name text,p_category text,p_unit text default 'piece',
  p_opening_quantity numeric default 0,p_reorder_level numeric default 0,p_unit_cost numeric default 0,p_sku text default null
@@ -107,16 +153,18 @@ begin
 end $$;
 
 create or replace function public.owner_create_quotation(
- p_customer_id uuid,p_quote_number text,p_valid_until date,p_lines jsonb,
+ p_customer_id uuid,p_costing_profile_id uuid,p_quote_number text,p_valid_until date,p_lines jsonb,
  p_allow_below_floor boolean default false,p_exception_reason text default null
 ) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
-declare v_business uuid; v_user uuid; v_quote uuid; v_total numeric(14,2):=0; v_cost numeric(14,2):=0;
+declare v_business uuid; v_user uuid; v_quote uuid; v_profile uuid; v_total numeric(14,2):=0; v_cost numeric(14,2):=0;
  v_line jsonb; v_qty numeric; v_price numeric; v_cost_line numeric; v_desc text;
 begin
  v_user:=auth.uid();
  select business_id into v_business from public.business_memberships where user_id=v_user and role='owner' limit 1;
  if v_business is null then raise exception 'Owner workspace required'; end if;
  if not exists(select 1 from public.customers where id=p_customer_id and business_id=v_business) then raise exception 'Customer not found in this workspace'; end if;
+ select id into v_profile from public.costing_profiles where id=p_costing_profile_id and business_id=v_business and is_active;
+ if v_profile is null then raise exception 'An active versioned costing profile is required before pricing this quotation'; end if;
  if jsonb_typeof(p_lines)<>'array' or jsonb_array_length(p_lines)=0 then raise exception 'At least one quotation line is required'; end if;
  for v_line in select value from jsonb_array_elements(p_lines) loop
   v_qty:=(v_line->>'quantity')::numeric; v_price:=(v_line->>'unit_price')::numeric;
@@ -130,8 +178,8 @@ begin
    raise exception 'Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.';
   end if;
  end if;
- insert into public.quotations(business_id,customer_id,quote_number,valid_until,total,created_by,below_floor_exception_reason,below_floor_approved_by)
- values(v_business,p_customer_id,btrim(p_quote_number),p_valid_until,v_total,v_user,
+ insert into public.quotations(business_id,customer_id,costing_profile_id,quote_number,valid_until,total,created_by,below_floor_exception_reason,below_floor_approved_by)
+ values(v_business,p_customer_id,v_profile,btrim(p_quote_number),p_valid_until,v_total,v_user,
   case when ((v_total-v_cost)/v_total)*100<30 then btrim(p_exception_reason) end,
   case when ((v_total-v_cost)/v_total)*100<30 then v_user end)
  returning id into v_quote;
@@ -280,7 +328,9 @@ begin
 end $$;
 
 revoke all on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) from public,anon;
-revoke all on function public.owner_create_quotation(uuid,text,date,jsonb,boolean,text) from public,anon;
+revoke all on function public.owner_create_costing_profile(text,jsonb,numeric,boolean) from public,anon;
+revoke all on function public.owner_activate_costing_profile(uuid) from public,anon;
+revoke all on function public.owner_create_quotation(uuid,uuid,text,date,jsonb,boolean,text) from public,anon;
 revoke all on function public.owner_set_quotation_status(uuid,text) from public,anon;
 revoke all on function public.owner_convert_quote_to_invoice(uuid,text,text,date) from public,anon;
 revoke all on function public.owner_add_job_material(uuid,uuid,numeric) from public,anon;
@@ -290,7 +340,9 @@ revoke all on function public.owner_record_payment(uuid,text,text,numeric,text) 
 revoke all on function public.owner_record_expense(text,text,numeric,text,date) from public,anon;
 revoke all on function public.owner_operational_report() from public,anon;
 grant execute on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) to authenticated;
-grant execute on function public.owner_create_quotation(uuid,text,date,jsonb,boolean,text) to authenticated;
+grant execute on function public.owner_create_costing_profile(text,jsonb,numeric,boolean) to authenticated;
+grant execute on function public.owner_activate_costing_profile(uuid) to authenticated;
+grant execute on function public.owner_create_quotation(uuid,uuid,text,date,jsonb,boolean,text) to authenticated;
 grant execute on function public.owner_set_quotation_status(uuid,text) to authenticated;
 grant execute on function public.owner_convert_quote_to_invoice(uuid,text,text,date) to authenticated;
 grant execute on function public.owner_add_job_material(uuid,uuid,numeric) to authenticated;
