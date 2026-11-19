@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+const foundation = readFileSync("supabase/migrations/20261119000400_sales_foundation_schema.sql", "utf8");
 const migration = readFileSync("supabase/migrations/20261119000800_custom_order_management_workflows.sql", "utf8");
 const component = readFileSync("src/CustomOrderDetails.tsx", "utf8");
 const production = readFileSync("src/OrderProductionWorkflow.tsx", "utf8");
@@ -57,4 +58,19 @@ test("payment reversal is unavailable while legacy refunds remain separate", () 
   assert.match(reversalRemoval, /drop function if exists public\.owner_reverse_payment/);
   assert.match(reversalRemoval, /drop function if exists private\.owner_reverse_payment/);
   assert.match(readme, /Payment reversal is not supported/);
+});
+
+test("custom order migration explicitly depends on the earlier Sales foundation", () => {
+  for (const table of [
+    "sales_job_size_breakdown",
+    "sales_job_artworks",
+    "sales_job_colour_separations",
+  ]) {
+    assert.ok(foundation.includes("create table public." + table));
+    assert.ok(migration.includes("public." + table));
+  }
+  assert.ok(
+    "20261119000400_sales_foundation_schema.sql" < "20261119000800_custom_order_management_workflows.sql",
+    "Sales foundation must sort before custom-order RPCs",
+  );
 });
