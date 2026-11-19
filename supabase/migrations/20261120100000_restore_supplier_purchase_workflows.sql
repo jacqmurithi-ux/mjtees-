@@ -31,7 +31,14 @@ begin
       add constraint purchase_order_lines_stock_item_id_fkey
       foreign key (stock_item_id) references public.stock_items(id);
   end if;
-end $$;
+end $;
+
+create index if not exists purchase_order_lines_stock_item_id_idx
+  on public.purchase_order_lines(stock_item_id);
+create index if not exists supplier_payments_business_supplier_paid_at_idx
+  on public.supplier_payments(business_id, supplier_id, paid_at desc);
+create index if not exists supplier_payments_business_purchase_order_idx
+  on public.supplier_payments(business_id, purchase_order_id);
 
 create or replace function public.owner_create_supplier(
   p_supplier_name text,
@@ -240,6 +247,18 @@ begin
       and business_id = v_business and status <> 'cancelled'
   ) then
     raise exception 'Purchase order does not belong to this supplier or is cancelled';
+  end if;
+
+  -- Serialize payments for a supplier so concurrent submissions cannot
+  -- both consume the same outstanding balance.
+  perform 1 from public.suppliers
+  where id = p_supplier_id and business_id = v_business
+  for update;
+  if p_purchase_order_id is not null then
+    perform 1 from public.purchase_orders
+    where id = p_purchase_order_id and supplier_id = p_supplier_id
+      and business_id = v_business
+    for update;
   end if;
 
   select coalesce(sum(po.total + po.transport_cost), 0)
