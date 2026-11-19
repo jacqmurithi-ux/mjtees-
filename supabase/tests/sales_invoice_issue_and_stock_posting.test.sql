@@ -389,7 +389,7 @@ select is((select status from public.sales_invoices
 
 -- A credit note against a paid invoice becomes customer credit; it never
 -- reverses or deletes the original payment or invoice.
-select set_config('mj.test.paid_credit_note_id',
+select set_config('mj.test.paid_credit_note_result',
   public.owner_issue_sales_credit_note(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
@@ -400,7 +400,9 @@ select set_config('mj.test.paid_credit_note_id',
       'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
     )),
     0,'74000000-0000-4000-8000-000000000001'
-  )->>'credit_note_id',true);
+  )::text,true);
+select set_config('mj.test.paid_credit_note_id',
+  current_setting('mj.test.paid_credit_note_result')::jsonb->>'credit_note_id',true);
 
 select is((select status from public.sales_credit_notes where id=current_setting('mj.test.paid_credit_note_id')::uuid),
   'issued','Owner can issue a credit note against a paid invoice');
@@ -408,16 +410,7 @@ select is((select credit_note_number from public.sales_credit_notes where id=cur
   'CN-0001','Credit note number is generated from the CN sequence');
 select is((select total_amount from public.sales_credit_notes where id=current_setting('mj.test.paid_credit_note_id')::uuid),
   100::bigint,'Credit note stores its whole-KES total');
-select is((public.owner_issue_sales_credit_note(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
-  'Customer return on paid invoice',
-  jsonb_build_array(jsonb_build_object(
-    'invoice_item_id',(select id from public.sales_invoice_items
-      where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
-    'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
-  )),0,'74000000-0000-4000-8000-000000000001'
-)->>'amount_applied_to_invoice'),
+select is(current_setting('mj.test.paid_credit_note_result')::jsonb->>'amount_applied_to_invoice',
   '0','A paid invoice credit note is not applied against the already-paid invoice');
 select is((select status from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
   'paid','Paid invoice remains paid after a credit note');
