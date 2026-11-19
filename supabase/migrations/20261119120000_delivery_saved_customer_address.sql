@@ -19,6 +19,67 @@ create index deliveries_business_customer_address_idx
   on public.deliveries(business_id, customer_address_id)
   where customer_address_id is not null;
 
+alter table public.orders
+  add column customer_address_id uuid,
+  add constraint orders_customer_address_fk
+  foreign key (business_id, customer_address_id)
+  references public.customer_addresses(business_id, id)
+  on delete restrict;
+
+create index orders_business_customer_address_idx
+  on public.orders(business_id, customer_address_id)
+  where customer_address_id is not null;
+
+create or replace function private.owner_set_order_delivery_address(
+  p_order_id uuid,p_customer_address_id uuid,p_request_id uuid
+) returns jsonb
+language plpgsql security definer set search_path=''
+as $
+declare
+  v_order public.orders%rowtype;
+  v_actor uuid;
+  v_payload jsonb;
+  v_cached jsonb;
+  v_result jsonb;
+begin
+  select * into v_order from public.orders where id=p_order_id for update;
+  if not found then raise exception using errcode='P0002',message='Order not found'; end if;
+  v_actor:=private.assert_active_owner(v_order.business_id);
+  if p_request_id is null then
+    raise exception using errcode='22023',message='A request id is required';
+  end if;
+  if v_order.status in ('completed','cancelled') then
+    raise exception using errcode='55000',message='A completed or cancelled order cannot change its delivery address';
+  end if;
+  if p_customer_address_id is not null and not exists(
+    select 1 from public.customer_addresses a
+    where a.business_id=v_order.business_id and a.id=p_customer_address_id
+      and a.customer_id=v_order.customer_id
+  ) then
+    raise exception using errcode='22023',message='Delivery address must belong to the customer on this order';
+  end if;
+  v_payload:=jsonb_build_object('order_id',p_order_id,'customer_address_id',p_customer_address_id);
+  v_cached:=private.begin_idempotent_request(v_order.business_id,'set_order_delivery_address',p_request_id,v_payload);
+  if v_cached is not null then return v_cached; end if;
+  update public.orders set customer_address_id=p_customer_address_id,updated_at=now()
+  where business_id=v_order.business_id and id=p_order_id;
+  v_result:=jsonb_build_object('order_id',p_order_id,'customer_address_id',p_customer_address_id);
+  perform private.finish_idempotent_request(v_order.business_id,'set_order_delivery_address',p_request_id,v_result);
+  perform private.write_audit(v_order.business_id,v_actor,'order.delivery_address_set','order',p_order_id,p_request_id,v_result);
+  return v_result;
+end;
+$;
+
+create or replace function public.owner_set_order_delivery_address(
+  p_order_id uuid,p_customer_address_id uuid,p_request_id uuid
+) returns jsonb language sql security invoker set search_path=''
+as $ select private.owner_set_order_delivery_address($1,$2,$3); $;
+
+revoke all on function private.owner_set_order_delivery_address(uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function private.owner_set_order_delivery_address(uuid,uuid,uuid) to authenticated;
+revoke all on function public.owner_set_order_delivery_address(uuid,uuid,uuid) from public,anon;
+grant execute on function public.owner_set_order_delivery_address(uuid,uuid,uuid) to authenticated;
+
 create or replace function private.owner_record_delivery(
   p_order_id uuid,p_method text,p_carrier text,p_tracking_reference text,
   p_customer_paid_charge bigint,p_recipient_name text,p_request_id uuid,
