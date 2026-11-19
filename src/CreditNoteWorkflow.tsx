@@ -258,7 +258,7 @@ export default function CreditNoteWorkflow({
             <label>Original invoice item
               <select value={line.invoice_item_id} onChange={event => selectInvoiceItem(index, event.target.value)}>
                 <option value="">General adjustment / not linked to an item</option>
-                {selectedItems.map(item => <option key={item.id} value={item.id}>{item.description} · {money(Number(item.line_total))}</option>)}
+                {selectedItems.filter(item => item.id === line.invoice_item_id || !lines.some((other, otherIndex) => otherIndex !== index && other.invoice_item_id === item.id)).map(item => <option key={item.id} value={item.id}>{item.description} · {money(Number(item.line_total))}</option>)}
               </select>
             </label>
             <label>Description
