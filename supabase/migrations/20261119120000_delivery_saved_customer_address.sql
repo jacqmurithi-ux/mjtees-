@@ -34,7 +34,7 @@ create or replace function private.owner_set_order_delivery_address(
   p_order_id uuid,p_customer_address_id uuid,p_request_id uuid
 ) returns jsonb
 language plpgsql security definer set search_path=''
-as $
+as $$
 declare
   v_order public.orders%rowtype;
   v_actor uuid;
@@ -68,12 +68,12 @@ begin
   perform private.write_audit(v_order.business_id,v_actor,'order.delivery_address_set','order',p_order_id,p_request_id,v_result);
   return v_result;
 end;
-$;
+$$;
 
 create or replace function public.owner_set_order_delivery_address(
   p_order_id uuid,p_customer_address_id uuid,p_request_id uuid
 ) returns jsonb language sql security invoker set search_path=''
-as $ select private.owner_set_order_delivery_address($1,$2,$3); $;
+as $$ select private.owner_set_order_delivery_address($1,$2,$3); $$;
 
 revoke all on function private.owner_set_order_delivery_address(uuid,uuid,uuid) from public,anon,authenticated;
 grant execute on function private.owner_set_order_delivery_address(uuid,uuid,uuid) to authenticated;
