@@ -58,8 +58,8 @@ test('payments are cash or M-Pesa Paybill, allocated once, and cannot exceed inv
 test('purchasing receipts update stock and weighted average cost', () => {
   assert.match(sql, /owner_create_purchase_order/);
   assert.match(sql, /owner_receive_purchase_order_line/);
-  assert.match(sql, /average_unit_cost=case/);
-  assert.match(sql, /'purchase',p_received_quantity/);
+  assert.match(sql, /v_new_cost:=case/);
+  assert.match(sql, /apply_stock_movement\(l\.business_id,s\.id,p_received_quantity,v_landed,'purchase'\)/);
 });
 
 test('reports use recorded invoices, payments, receivables and expenses', () => {
