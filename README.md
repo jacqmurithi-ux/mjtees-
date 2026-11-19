@@ -68,6 +68,8 @@ The Cloudflare Turnstile hostname must match one of the allowed website origins.
 
 Migrations are in `supabase/migrations`; pgTAP tests are in `supabase/tests`. The CI workflow applies them only to an ephemeral local Supabase stack. Review the complete migration set, security policies, RPC grants and tests before any hosted execution.
 
+**Sales/custom-order release dependency:** apply every unapplied migration in filename order. In particular, `20261119000400_sales_foundation_schema.sql` creates `sales_job_size_breakdown`, `sales_job_artworks` and `sales_job_colour_separations`; `20261119000800_custom_order_management_workflows.sql` depends on those tables and must never be applied on its own. The bulk-printing output, Sales invoice, manual-payment and customer-credit migrations preceding it are also part of the pending release chain.
+
 Owner access is by email/password with public registration disabled. The signed-in user must have an active `owner` membership for the business. No default password or public owner signup exists. First-owner provisioning must use the reviewed trusted bootstrap process and a separate explicit approval.
 
 ## Operational scope
