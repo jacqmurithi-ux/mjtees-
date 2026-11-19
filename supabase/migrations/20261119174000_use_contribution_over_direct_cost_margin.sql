@@ -23,7 +23,10 @@ begin
   v_price:=(v_line->>'unit_price')::numeric;
   v_desc:=btrim(v_line->>'description');
   if v_qty<=0 or v_price<0 or coalesce(v_desc,'')='' then raise exception 'Invalid quotation line'; end if;
-  if coalesce(v_line->'details'->>'direct_cost','')<>'' then
+  if coalesce(v_line->'details'->>'blank_cost_per_piece','')<>'' or coalesce(v_line->'details'->>'other_costs_total','')<>'' then
+   v_cost:=coalesce(nullif(v_line->'details'->>'blank_cost_per_piece','')::numeric,0)*v_qty
+    +coalesce(nullif(v_line->'details'->>'other_costs_total','')::numeric,0);
+  elsif coalesce(v_line->'details'->>'direct_cost','')<>'' then
    v_cost:=(v_line->'details'->>'direct_cost')::numeric;
   end if;
   v_total:=v_total+(v_qty*v_price);
