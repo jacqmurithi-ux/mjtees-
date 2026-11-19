@@ -10,6 +10,9 @@ const realtime = readFileSync("supabase/migrations/20261119130000_enable_owner_w
 test("customer-supplied screen printing has a versioned outsourced-labour costing preset", () => {
   assert.match(quote, /prepareScreenPrintingCostProfile/);
   assert.match(quote, /code==="screen_printing"/);
+  assert.match(quote, /customer-supplied-screen-printing/);
+  assert.match(quote, /owner_upsert_catalogue_item/);
+  assert.match(quote, /p_catalogue_item_id:null/);
   assert.match(quote, /componentType:"outsourced_service"/);
   assert.match(quote, /driverType:"per_order"/);
   assert.match(quote, /fixedCost:"200"/);
@@ -21,6 +24,9 @@ test("service-only quotations retain customer-supplied garments and manual agree
   assert.match(quote, /customerSupplies/);
   assert.match(quote, /Final agreed unit selling price/);
   assert.match(quote, /owner_create_quotation/);
+  assert.match(quote, /quantity:"50"/);
+  assert.match(quote, /unitPrice:"30"/);
+  assert.match(quote, /customerSupplies:true/);
   assert.match(quote, /invoicePaymentTerms/);
   assert.match(quote, /net_7/);
   assert.match(quote, /net_14/);
