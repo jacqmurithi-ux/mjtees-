@@ -20,18 +20,9 @@ from (
 where pol.id = matches.id
   and pol.stock_item_id is null;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.purchase_order_lines'::regclass
-      and conname = 'purchase_order_lines_stock_item_id_fkey'
-  ) then
-    alter table public.purchase_order_lines
-      add constraint purchase_order_lines_stock_item_id_fkey
-      foreign key (stock_item_id) references public.stock_items(id);
-  end if;
-end $;
+alter table public.purchase_order_lines
+  add constraint purchase_order_lines_stock_item_id_fkey
+  foreign key (stock_item_id) references public.stock_items(id);
 
 create index if not exists purchase_order_lines_stock_item_id_idx
   on public.purchase_order_lines(stock_item_id);
