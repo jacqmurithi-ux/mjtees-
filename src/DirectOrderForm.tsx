@@ -42,14 +42,16 @@ export default function DirectOrderForm({businessId,customer,addresses,contacts,
   const {data,error:rpcError}=await supabase.rpc("owner_create_direct_order",{p_business_id:businessId,p_customer_id:customer.id,p_enquiry_id:null,p_lines:payload,p_order_discount:Number(discount),p_customer_notes:customerNotes.trim()||null,p_internal_notes:orderInternalNotes||null,p_request_id:rid(),p_margin_exception_reason:marginReason.trim()||null});
   if(rpcError){setError(rpcError.message);setBusy(false);return;}
   const orderNumber=String(data?.order_number||"");
-  if(orderNumber){
-   const {data:order}=await supabase.from("orders").select("id").eq("business_id",businessId).eq("order_number",orderNumber).maybeSingle();
-   if(order?.id&&(requiredBy||hours!==null)){
+  let scheduleWarning="";
+  if(orderNumber&&(requiredBy||hours!==null)){
+   const {data:order,error:lookupError}=await supabase.from("orders").select("id").eq("business_id",businessId).eq("order_number",orderNumber).maybeSingle();
+   if(lookupError||!order?.id)scheduleWarning="The order was created, but its schedule could not be verified. Open the order and set its required date and turnaround.";
+   else {
     const {error:scheduleError}=await supabase.rpc("owner_update_order_schedule",{p_order_id:order.id,p_required_by:requiredBy||null,p_promised_turnaround_hours:hours,p_request_id:rid()});
-    if(scheduleError)setNotice("Order "+orderNumber+" created, but its turnaround schedule needs saving: "+scheduleError.message);
+    if(scheduleError)scheduleWarning="The order was created, but its turnaround schedule was not saved: "+scheduleError.message;
    }
   }
-  setNotice("Order "+(orderNumber||"created")+" for "+customer.display_name+" is confirmed. Contact and delivery-address selections are saved as internal order-intake references; confirm the final handover details in Delivery & Collection.");
+  setNotice("Order "+(orderNumber||"created")+" for "+customer.display_name+" is confirmed. "+(scheduleWarning?scheduleWarning+" ":"")+"Contact and delivery-address selections are saved as internal order-intake references; confirm the final handover details in Delivery & Collection.");
   setBusy(false);onCreated();
  }
  return <form className="record-form direct-customer-order" onSubmit={submit}>
@@ -66,14 +68,14 @@ export default function DirectOrderForm({businessId,customer,addresses,contacts,
    <label>Unit *<input required maxLength={24} value={line.unit} onChange={e=>update(index,{unit:e.target.value})}/></label>
    <label>Agreed unit price (KES)<input type="number" min="0" step="1" value={line.unitPrice} onChange={e=>update(index,{unitPrice:e.target.value})} placeholder="Leave blank for suggested price"/></label>
    <label>Line discount (KES)<input type="number" min="0" step="1" value={line.discount} onChange={e=>update(index,{discount:e.target.value})}/></label>
-   <label>Sale type<select value={line.saleMode} onChange={e=>update(index,{saleMode:e.target.value,productionMethodId:e.target.value==="blank"?"":line.productionMethodId})}><option value="value_added">Printed / branded item</option><option value="blank">Blank item sale</option></select></label>
+   <label>Sale type<select value={line.saleMode} onChange={e=>update(index,{saleMode:e.target.value,productionMethodId:e.target.value==="blank"?"":line.productionMethodId})}><option value="value_added">Printed / branded item</option><option value="blank" disabled={line.customerSupplies}>Blank item sale (MJ-supplied item)</option></select></label>
    {line.saleMode==="value_added"&&<label>Printing / production method<select value={line.productionMethodId} onChange={e=>update(index,{productionMethodId:e.target.value})}><option value="">Choose method / general service</option>{methods.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>}
    <label>Garment / item type<input maxLength={100} value={line.garmentType} onChange={e=>update(index,{garmentType:e.target.value})} placeholder="T-shirt, hoodie, mug…"/></label>
    <label>Print position<input maxLength={80} value={line.printPosition} onChange={e=>update(index,{printPosition:e.target.value})} placeholder="Front, back, sleeve…"/></label>
    <label>Artwork reference / link<input maxLength={1000} value={line.artworkReference} onChange={e=>update(index,{artworkReference:e.target.value})} placeholder="Drive link or artwork reference"/></label>
    <label className="wide-field">Printing / production instructions<textarea maxLength={2000} value={line.instructions} onChange={e=>update(index,{instructions:e.target.value})}/></label>
    <label>Shop stock item<select disabled={line.customerSupplies} value={line.stockItemId} onChange={e=>update(index,{stockItemId:e.target.value})}><option value="">No stock item linked</option>{stock.filter(x=>line.saleMode!=="blank"||x.stock_kind==="blank_product").map(x=><option key={x.id} value={x.id}>{x.name} · {x.sku} ({x.base_unit})</option>)}</select></label>
-   <label className="check-field"><input type="checkbox" checked={line.customerSupplies} onChange={e=>update(index,{customerSupplies:e.target.checked,stockItemId:e.target.checked?"":line.stockItemId})}/> Customer supplies the item (no shop stock deduction)</label>
+   <label className="check-field"><input type="checkbox" checked={line.customerSupplies} onChange={e=>update(index,{customerSupplies:e.target.checked,stockItemId:e.target.checked?"":line.stockItemId,saleMode:e.target.checked?"value_added":line.saleMode})}/> Customer supplies the item (no shop stock deduction)</label>
    <button type="button" className="secondary-action" disabled={lines.length===1} onClick={()=>setLines(v=>v.filter((_,i)=>i!==index))}>Remove item</button>
   </div>)}<button type="button" className="secondary-action" onClick={()=>setLines(v=>[...v,blank()])}>＋ Add another item</button></div>
   <label>Order discount (KES)<input type="number" min="0" step="1" value={discount} onChange={e=>setDiscount(e.target.value)}/></label>
