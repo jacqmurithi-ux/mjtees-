@@ -20,10 +20,7 @@ from (
 where pol.id = matches.id
   and pol.stock_item_id is null;
 
-alter table public.purchase_order_lines
-  add constraint purchase_order_lines_stock_item_id_fkey
-  foreign key (stock_item_id) references public.stock_items(id);
-
+-- The stock_item_id column and its FK were created in the earlier operational migration.
 create index if not exists purchase_order_lines_stock_item_id_idx
   on public.purchase_order_lines(stock_item_id);
 create index if not exists supplier_payments_business_supplier_paid_at_idx
