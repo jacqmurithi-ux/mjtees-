@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { supabase } from "./lib/supabase";
 
 type SizeRow = { id:string; person_name:string; jersey_number:string|null; size:string; colour:string|null; quantity:number; notes:string|null; created_at:string };
@@ -57,7 +58,7 @@ export default function CustomOrderDetails({businessId,jobId}:{businessId:string
   setBusy(false);
  };
 
- const addSize=async(e:React.FormEvent)=>{
+ const addSize=async(e:FormEvent)=>{
   e.preventDefault();
   if(!personName.trim()||!size.trim()||!Number.isFinite(Number(quantity))||Number(quantity)<=0){setError("Enter the wearer name, size and a positive quantity.");return;}
   await run("owner_add_job_size_breakdown",{
