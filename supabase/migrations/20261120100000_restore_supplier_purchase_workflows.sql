@@ -35,7 +35,7 @@ end $$;
 
 create or replace function public.owner_create_supplier(
   p_supplier_name text,
-  p_phone text default null,
+  p_phone text,
   p_email text,
   p_notes text
 ) returns uuid
