@@ -5,6 +5,9 @@ import { readFileSync } from "node:fs";
 const migration = readFileSync("supabase/migrations/20261119000800_custom_order_management_workflows.sql", "utf8");
 const component = readFileSync("src/CustomOrderDetails.tsx", "utf8");
 const production = readFileSync("src/OrderProductionWorkflow.tsx", "utf8");
+const payment = readFileSync("src/PaymentWorkflow.tsx", "utf8");
+const reversalRemoval = readFileSync("supabase/migrations/20261119000900_disable_payment_reversal.sql", "utf8");
+const readme = readFileSync("README.md", "utf8");
 
 test("custom order detail writes use owner-authorised transactional RPCs", () => {
   for (const name of [
@@ -47,4 +50,11 @@ test("custom order details are available within each production job", () => {
   assert.match(component, /Artwork stays in Google Drive/);
   assert.match(component, /Individual garment \/ player sizes/);
   assert.match(component, /Colour separations \/ screen setup/);
+});
+
+test("payment reversal is unavailable while legacy refunds remain separate", () => {
+  assert.doesNotMatch(payment, /reverse/i);
+  assert.match(reversalRemoval, /drop function if exists public\.owner_reverse_payment/);
+  assert.match(reversalRemoval, /drop function if exists private\.owner_reverse_payment/);
+  assert.match(readme, /Payment reversal is not supported/);
 });
