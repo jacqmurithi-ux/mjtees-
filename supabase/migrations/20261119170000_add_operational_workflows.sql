@@ -261,7 +261,7 @@ begin
  if v_total<=0 then raise exception 'Quotation total must be greater than zero'; end if;
  if ((v_total-v_cost)/v_total)*100 < 30 then
   if not coalesce(p_allow_below_floor,false) or length(btrim(coalesce(p_exception_reason,'')))<8 then
-   raise exception 'Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.';
+   raise exception 'Quotation is below the 30%% gross-margin floor. An authorised exception and reason are required.';
   end if;
  end if;
  insert into public.quotations(business_id,customer_id,costing_profile_id,quote_number,valid_until,total,created_by,below_floor_exception_reason,below_floor_approved_by)
