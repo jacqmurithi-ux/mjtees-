@@ -107,6 +107,16 @@ test('transaction inserts are routed through private owner-checked implementatio
   assert.match(migration, /grant execute on function private\.owner_record_payment_impl/);
 });
 
+test('release migrations never drop or delete the existing Supabase Auth user', async () => {
+  const retirement = await readFile(new URL('../supabase/migrations/20261119160000_retire_legacy_application.sql', import.meta.url), 'utf8');
+  const fresh = await readFile(new URL('../supabase/migrations/20261119161000_clean_mj_workspace.sql', import.meta.url), 'utf8');
+  const workflows = await readFile(new URL('../supabase/migrations/20261119170000_add_operational_workflows.sql', import.meta.url), 'utf8');
+  const lock = await readFile(new URL('../supabase/migrations/20261119171000_lock_transaction_writes.sql', import.meta.url), 'utf8');
+  for (const migration of [retirement,fresh,workflows,lock]) {
+    assert.doesNotMatch(migration, /drop schema auth|drop table auth\.users|delete from auth\.users|truncate auth\.users/i);
+  }
+});
+
 test('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
   for (const fn of ['owner_create_quotation','owner_convert_quote_to_invoice','owner_issue_job_material','owner_record_payment','owner_record_expense','owner_operational_report']) {
     assert.match(sql, new RegExp('revoke all on function public\\.' + fn));
