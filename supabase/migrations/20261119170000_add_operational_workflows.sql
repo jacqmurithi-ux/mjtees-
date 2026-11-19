@@ -35,7 +35,7 @@ begin
  ] loop
   execute format(
    'create policy %I on public.%I for all to authenticated using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner'')) with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner''))',
-   t||'_owner_write'
+   t||'_owner_write',t
   );
  end loop;
 end $$;
