@@ -77,6 +77,14 @@ test('payment, allocation, stock movement and audit ledgers are append-only', ()
   assert.match(sql, /private\.apply_stock_movement/);
 });
 
+test('financial and stock quantities cannot be manually edited through table grants', () => {
+  assert.match(sql, /revoke update,delete on public\.quotations,public\.quotation_lines,public\.sales_invoices/);
+  assert.match(sql, /grant update\(status\) on public\.quotations/);
+  assert.match(sql, /revoke update,delete on public\.stock_items/);
+  assert.match(sql, /quantity_on_hand=0 and average_unit_cost=0/);
+  assert.match(sql, /revoke update,delete on public\.production_job_materials/);
+});
+
 test('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
   for (const fn of ['owner_create_quotation','owner_convert_quote_to_invoice','owner_issue_job_material','owner_record_payment','owner_record_expense','owner_operational_report']) {
     assert.match(sql, new RegExp('revoke all on function public\\.' + fn));
