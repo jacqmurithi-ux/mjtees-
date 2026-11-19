@@ -66,8 +66,8 @@ test("custom order migration explicitly depends on the earlier Sales foundation"
     "sales_job_artworks",
     "sales_job_colour_separations",
   ]) {
-    assert.match(foundation, new RegExp("create table public\\\\." + table));
-    assert.match(migration, new RegExp("public\\\\." + table));
+    assert.ok(foundation.includes("create table public." + table));
+    assert.ok(migration.includes("public." + table));
   }
   assert.ok(
     "20261119000400_sales_foundation_schema.sql" < "20261119000800_custom_order_management_workflows.sql",
