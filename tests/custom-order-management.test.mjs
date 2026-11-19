@@ -38,7 +38,7 @@ test("custom order UI reads owner-visible records and calls RPCs, never direct-w
     "owner_add_job_artwork",
     "owner_set_job_artwork_status",
     "owner_add_job_colour_separation",
-  ]) assert.match(component, new RegExp('run\\("' + name + '"'));
+  ]) assert.match(component, new RegExp('run\\(\\s*"' + name + '"'));
 });
 
 test("custom order details are available within each production job", () => {
