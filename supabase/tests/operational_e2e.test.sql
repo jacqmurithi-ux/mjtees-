@@ -51,7 +51,7 @@ select set_config('test.profile_id',public.owner_create_costing_profile(
 select extensions.ok((select is_active and version=1 and direct_cost=600 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');
 
 select extensions.throws_ok(
- $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":50,"unit_price":5,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
+ $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":2,"unit_price":100,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
  'P0001','Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.',
  'blocks quotations below the 30 percent floor without an exception');
 
@@ -66,7 +66,7 @@ select extensions.ok((select below_floor_approved_by=auth.uid() and below_floor_
 select set_config('test.quote_id',public.owner_create_quotation(
  (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,
  'Q-TEST-E2E',current_date+7,
- '[{"description":"Generic production service for customer-supplied items","quantity":50,"unit_price":30,"direct_cost":0,"details":{"item_type":"printing_service","customer_supplied_items":true}}]'::jsonb,
+ '[{"description":"Generic production service for customer-supplied items","quantity":2,"unit_price":500,"direct_cost":0,"details":{"item_type":"printing_service","customer_supplied_items":true}}]'::jsonb,
  false,null
 )::text,true);
 
@@ -81,7 +81,7 @@ select set_config('test.job_id',(current_setting('test.converted')::jsonb->>'job
 
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),1000::numeric,'credit invoice remains fully outstanding before payment');
 select extensions.ok((select customer_supplied_items from public.production_jobs where id=current_setting('test.job_id')::uuid),'production job records customer-supplied garments');
-select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer garments do not reduce MJ apparel stock');
+select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer-owned items do not reduce MJ stock');
 
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'artwork_proof');
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'screens_prepared');
