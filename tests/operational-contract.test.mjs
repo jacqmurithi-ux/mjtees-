@@ -38,7 +38,7 @@ test('stock issues are owner-authorized, quantity-limited and recorded as moveme
   assert.match(sql, /owner_issue_job_material/);
   assert.match(sql, /Insufficient stock/);
   assert.match(sql, /Issue quantity exceeds planned balance/);
-  assert.match(sql, /'job_issue',-p_quantity/);
+  assert.match(sql, /apply_stock_movement\(m\.business_id,s\.id,-p_quantity,s\.average_unit_cost,'job_issue'\)/);\n  assert.match(sql, /insert into public\.stock_movements/);
 });
 
 test('payments are cash or M-Pesa Paybill, allocated once, and cannot exceed invoice balance', () => {
@@ -60,6 +60,14 @@ test('reports use recorded invoices, payments, receivables and expenses', () => 
   assert.match(sql, /outstanding_receivables/);
   assert.match(sql, /payments_received/);
   assert.match(sql, /'expenses'/);
+});
+
+
+test('payment, allocation, stock movement and audit ledgers are append-only', () => {
+  assert.match(sql, /revoke update,delete on public\.payments,public\.payment_allocations,public\.audit_events from authenticated/);
+  assert.match(sql, /revoke insert,update,delete on public\.stock_movements from authenticated/);
+  assert.match(sql, /revoke update,delete on public\.stock_items from authenticated/);
+  assert.match(sql, /private\.apply_stock_movement/);
 });
 
 test('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
