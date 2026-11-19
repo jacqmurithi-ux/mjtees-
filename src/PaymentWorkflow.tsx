@@ -6,6 +6,7 @@ type CustomerOption = { id: string; display_name: string };
 type OrderRow = { id: string; order_number: string; customer_id: string };
 type Invoice = { id: string; invoice_number: string; status: string; total_amount: number; due_date: string | null; order_id: string; customer_id: string; order_number: string };
 type AccountType = "cash" | "mpesa_paybill" | "bank" | "cheque_clearing";
+type NewAccountType = "cash" | "mpesa_paybill";
 type Method = "cash" | "mpesa_manual" | "bank_transfer" | "cheque";
 type Account = { id: string; account_name: string; account_type: AccountType; account_reference: string | null; bank_name: string | null; is_active: boolean };
 type Payment = { id: string; payment_number: string; method: Method; status: string; amount: number; received_at: string; mpesa_reference: string | null; external_reference: string | null; receiving_account_id: string | null; notes: string | null; duplicate_reference_warning: boolean };
@@ -66,9 +67,8 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
   const [notes, setNotes] = useState("");
   const [allocationDrafts, setAllocationDrafts] = useState<AllocationDraft[]>([]);
   const [accountName, setAccountName] = useState("");
-  const [accountType, setAccountType] = useState<AccountType>("cash");
+  const [accountType, setAccountType] = useState<NewAccountType>("cash");
   const [accountReference, setAccountReference] = useState("");
-  const [bankName, setBankName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -143,13 +143,13 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
     const { error: rpcError } = await supabase.rpc("owner_upsert_sales_payment_account", {
       p_business_id: businessId, p_account_id: null, p_account_name: accountName.trim(),
       p_account_type: accountType, p_account_reference: accountReference.trim() || null,
-      p_bank_name: accountType === "bank" ? bankName.trim() || null : null,
+      p_bank_name: null,
       p_is_active: true, p_request_id: requestId(),
     });
     if (rpcError) setError(rpcError.message);
     else {
       setNotice("Receiving account saved.");
-      setAccountName(""); setAccountReference(""); setBankName("");
+      setAccountName(""); setAccountReference("");
       await load(); onChanged();
     }
     setBusy(false);
@@ -289,9 +289,8 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
       <p>Set up the shop cash drawer and M-Pesa Paybill. Account types cannot be changed after payments have been recorded.</p>
       <form className="record-form" onSubmit={createAccount}>
         <label>Account name *<input required maxLength={100} value={accountName} onChange={event => setAccountName(event.target.value)} placeholder="e.g. Shop cash drawer" /></label>
-        <label>Account type<select value={accountType} onChange={event => setAccountType(event.target.value as AccountType)}><option value="cash">Cash</option><option value="mpesa_paybill">M-Pesa Paybill</option></select></label>
+        <label>Account type<select value={accountType} onChange={event => setAccountType(event.target.value as NewAccountType)}><option value="cash">Cash</option><option value="mpesa_paybill">M-Pesa Paybill</option></select></label>
         <label>Account / Paybill reference<input maxLength={160} value={accountReference} onChange={event => setAccountReference(event.target.value)} placeholder="Account number or Paybill number" /></label>
-        
         <div className="form-actions"><button className="primary-action compact" disabled={busy || !accountName.trim()}>{busy ? "Saving…" : "＋ Add receiving account"}</button></div>
       </form>
       <div className="record-list">{accountTotals.map(account => <article className="record-row" key={account.id}><div><b>{account.account_name}</b><small>{account.account_type.replace("_", " ")}{account.account_reference ? " · " + account.account_reference : ""}{account.bank_name ? " · " + account.bank_name : ""}</small></div><div><b>{money(account.total)}</b><small>{money(account.reconciled)} reconciled · {money(account.unreconciled)} unreconciled · {account.count} payments</small></div></article>)}{!accounts.length && <p className="empty-records">Add a receiving account before recording payments.</p>}</div>
