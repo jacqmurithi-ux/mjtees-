@@ -118,8 +118,8 @@ test('release migrations never drop or delete the existing Supabase Auth user', 
 
 test('release removes the unused recursive invoice-balance helper', async () => {
   const migration = await readFile(new URL('../supabase/migrations/20261119173000_remove_recursive_invoice_balance_helper.sql', import.meta.url), 'utf8');
-  assert.match(migration, /revoke all on function private\\.update_invoice_balance/);
-  assert.match(migration, /drop function if exists private\\.update_invoice_balance/);
+  assert.ok(migration.includes('revoke all on function private.update_invoice_balance'));
+  assert.ok(migration.includes('drop function if exists private.update_invoice_balance'));
 });
 
 test('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
