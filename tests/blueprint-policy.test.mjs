@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+const sql = await readFile(new URL('../supabase/migrations/20261119161000_clean_mj_workspace.sql', import.meta.url), 'utf8');
+test('only cash and M-Pesa Paybill are valid manual payment methods', () => assert.match(sql, /method text not null check\(method in\('cash','mpesa_paybill'\)\)/));
+test('VAT is disabled by database constraint', () => assert.match(sql, /vat_enabled boolean not null default false check\(vat_enabled=false\)/));
+test('approved margin floor and target are fixed', () => { assert.match(sql, /gross_margin_floor numeric\(5,2\) not null default 30 check\(gross_margin_floor=30\)/); assert.match(sql, /full_cost_target_multiplier numeric\(4,2\) not null default 1\.8 check\(full_cost_target_multiplier=1\.8\)/); });
+test('customer-owned garments are tracked separately from MJ stock', () => assert.match(sql, /customer_supplied_items boolean not null default false/));
+test('refunds are separate and payment reversal is absent', () => { assert.match(sql, /create table public\.refunds/); assert.doesNotMatch(sql, /reversal/i); });
+test('business tables enable row-level security', () => assert.match(sql, /enable row level security/));
