@@ -170,3 +170,31 @@ test('quotation pricing shows rounded minimum, 1.8x warning and margin exception
   assert.match(operations, /Below 30% margin/);
   assert.match(operations, /blank_cost_per_piece:effectiveBlankCost/);
 });
+
+
+test('quotation deposits show received and remaining balances and cannot exceed the remaining quote value', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /const depositTotals=useMemo/);
+  assert.ok(operations.includes('Deposits {cash(Number(depositTotals[q.id]||0))}'));
+  assert.match(operations, /Deposit cannot exceed the remaining quotation balance/);
+  assert.match(operations, /selectedDepositRemaining/);
+  assert.ok(operations.includes("Number(depositTotals[q.id]||0)<Number(q.total)"));
+});
+
+test('invoice cards expose customer, paid amount and outstanding balance; customer payments are bounded by balance', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /amount_paid,balance,customer_id,due_date/);
+  assert.match(operations, /invoice-paid/);
+  assert.match(operations, /invoice-balance-open/);
+  assert.match(operations, /Payment cannot exceed the outstanding invoice balance/);
+  assert.ok(operations.includes('max:String(selectedInvoice?.balance??0)'));
+  assert.match(operations, /owner_record_payment/);
+});
+
+test('quotation conversion continues to allocate deposits through the existing owner RPC without editing payment history', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /owner_convert_quote_to_invoice/);
+  assert.match(operations, /owner_record_quote_deposit/);
+  assert.match(operations, /payment ledger remains append-only/);
+  assert.doesNotMatch(operations, /reverse_payment|payment_reversal/i);
+});

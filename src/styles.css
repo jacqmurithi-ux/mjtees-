@@ -78,3 +78,10 @@ td{font-size:13px}
 
 /* Quote pricing and margin indicators */
 .op-pricing-guidance{display:flex;flex-wrap:wrap;gap:10px 20px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft,#f7f9f8);font-size:13px}.op-pricing-guidance span{display:flex;gap:6px;align-items:center}.op-pricing-guidance small{width:100%;color:var(--muted)}.quote-indicators{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.quote-indicators span{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:750}.quote-margin-ok{background:#e6f5eb;color:#176b37}.quote-margin-low{background:#fdeaea;color:#a12a2a}.quote-exception{background:#f1f2f4;color:#505963}.quote-target-warning{background:#fff2d8;color:#8a5700}.op-margin .above{color:#176b37}
+
+.quote-deposit{background:#edf3fb;color:#28547e}
+.invoice-indicators{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.invoice-indicators span{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:750}
+.invoice-paid{background:#e6f5eb;color:#176b37}
+.invoice-balance-open{background:#fff2d8;color:#8a5700}
+.invoice-balance-settled{background:#e6f5eb;color:#176b37}
