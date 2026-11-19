@@ -7,7 +7,8 @@ type Row = Record<string, any>;
 const cash=(n:number)=>new Intl.NumberFormat('en-KE',{style:'currency',currency:'KES',maximumFractionDigits:2}).format(Number(n||0));
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const nextNumber=(prefix:string)=>prefix+'-'+Date.now().toString().slice(-8);
-const stages=['awaiting_artwork','artwork_proof','screens_prepared','printing','finishing','ready','delivered'];\nconst stageLabel=(s:string)=>({awaiting_artwork:'Awaiting artwork',artwork_proof:'Artwork proof sent',screens_prepared:'Artwork approved',printing:'Printing',finishing:'Finishing & quality',ready:'Ready for collection',delivered:'Delivered'}[s]||s.replaceAll('_',' '));
+const stages=['awaiting_artwork','artwork_proof','screens_prepared','printing','finishing','ready','delivered'];
+const stageLabel=(s:string)=>({awaiting_artwork:'Awaiting artwork',artwork_proof:'Artwork proof sent',screens_prepared:'Artwork approved',printing:'Printing',finishing:'Finishing & quality',ready:'Ready for collection',delivered:'Delivered'}[s]||s.replaceAll('_',' '));
 const field=(label:string,value:string,onChange:(v:string)=>void,props:Record<string,unknown>={})=><label className="op-field">{label}<input value={value} onChange={e=>onChange(e.target.value)} {...props}/></label>;
 const selectField=(label:string,value:string,onChange:(v:string)=>void,options:{value:string;label:string}[]) => <label className="op-field">{label}<select value={value} onChange={e=>onChange(e.target.value)}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 function Panel({title,children}:{title:string;children:React.ReactNode}){return <section className="panel op-panel"><h3>{title}</h3>{children}</section>}
@@ -25,8 +26,8 @@ export default function Operations({page,businessId,onChanged}:{page:Page;busine
  const [payInvoice,setPayInvoice]=useState(''),[paymentNumber,setPaymentNumber]=useState(nextNumber('PAY')),[paymentMethod,setPaymentMethod]=useState('cash'),[paymentAmount,setPaymentAmount]=useState(''),[paymentRef,setPaymentRef]=useState('');
  const [expenseCategory,setExpenseCategory]=useState('Operating'),[expenseDescription,setExpenseDescription]=useState(''),[expenseAmount,setExpenseAmount]=useState(''),[expenseMethod,setExpenseMethod]=useState('cash');
  const [profileName,setProfileName]=useState('Standard production'),[componentName,setComponentName]=useState('Direct labour'),[profileCost,setProfileCost]=useState('0');
- const activeProfile=profiles.find(p=>p.id===profileId&&p.is_active)||profiles.find(p=>p.is_active);const cost=Number(activeProfile?.direct_cost||0);
- const total=Number(qty||0)*Number(price||0),margin=cost>0?((total-cost)/cost)*100:Number.NaN,fullCostTargetWarning=total<cost*1.8;
+ const activeProfile=profiles.find(p=>p.id===profileId&&p.is_active)||profiles.find(p=>p.is_active);const cost=Number(blankCostPerPiece||0)*Number(qty||0)+Number(otherCosts||0);
+ const total=Number(qty||0)*Number(price||0),margin=cost>0?((total-cost)/cost)*100:Number.NaN,fullCostTargetWarning=cost>0&&total<cost*1.8;
  const notify=useCallback((message:string)=>{setNotice(message);setError('')},[]);
  const fail=useCallback((message:string)=>{setError(message);setNotice('')},[]);
  const refresh=useCallback(async()=>{
