@@ -8,9 +8,10 @@ type Movement = { id:string; movement_type:string; direction:string; amount:numb
 type ClosingAdjustment = { id:string; adjustment_type:string; amount:number; reason:string; created_at:string };
 type ReconciliationAdjustment = { id:string; bucket:string; direction:string; amount:number; reason:string; created_at:string };
 type Reconciliation = { id:string; method:string; status:string; system_receipts:number; system_refunds:number; statement_receipts:number; statement_refunds:number; net_system:number; net_statement:number; difference:number; statement_reference:string|null; notes:string|null; variance_reason:string|null };
-type Delivery = { id:string; order_id:string; method:string; carrier:string|null; tracking_reference:string|null; customer_paid_charge:number; recipient_name:string|null; dispatched_at:string|null; handed_over_at:string|null; created_at:string; attempt_status:string; failed_at:string|null; failure_reason:string|null; orders:{order_number:string;status:string}|null };
-type ReadyOrder = { id:string; order_number:string; status:string };
-type Summary = { outstanding_balances:number; production_workload:number; avg_production_hours:number|null; avg_ready_turnaround_hours:number|null; avg_customer_turnaround_hours:number|null; on_time_handovers:number; late_handovers:number; orders_in_progress:number; ready_awaiting_collection:number; courier_outstanding:number; failed_delivery_attempts:number; overdue_orders:number; pending_mpesa:number; order_value:number; posted_receipts:number; posted_refunds:number; expenses:number; cash_expenses:number; production_costs:number; daily_closing:Closing|null; mpesa_reconciliation:Reconciliation|null };
+type Delivery = { id:string; order_id:string; method:string; carrier:string|null; tracking_reference:string|null; customer_paid_charge:number; recipient_name:string|null; customer_address_id:string|null; destination_label:string|null; destination_address_text:string|null; destination_locality:string|null; destination_phone:string|null; dispatched_at:string|null; handed_over_at:string|null; created_at:string; attempt_status:string; failed_at:string|null; failure_reason:string|null; orders:{order_number:string;status:string}|null };
+type ReadyOrder = { id:string; order_number:string; status:string; customer_id:string };
+type CustomerAddress = { id:string; customer_id:string; label:string|null; recipient_name:string|null; phone:string|null; address_text:string; locality:string|null; is_default:boolean };
+ type Summary = { outstanding_balances:number; production_workload:number; avg_production_hours:number|null; avg_ready_turnaround_hours:number|null; avg_customer_turnaround_hours:number|null; on_time_handovers:number; late_handovers:number; orders_in_progress:number; ready_awaiting_collection:number; courier_outstanding:number; failed_delivery_attempts:number; overdue_orders:number; pending_mpesa:number; order_value:number; posted_receipts:number; posted_refunds:number; expenses:number; cash_expenses:number; production_costs:number; daily_closing:Closing|null; mpesa_reconciliation:Reconciliation|null };
 const rid=()=>crypto.randomUUID();
 const money=(n:number|null|undefined)=>new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:0}).format(Number(n??0));
 const todayNairobi=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Nairobi",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
@@ -26,6 +27,7 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
  const [reconciliationAdjustmentForm,setReconciliationAdjustmentForm]=useState({bucket:"system_receipt",direction:"add",amount:"",reason:""});
  const [deliveries,setDeliveries]=useState<Delivery[]>([]);
  const [readyOrders,setReadyOrders]=useState<ReadyOrder[]>([]);
+ const [customerAddresses,setCustomerAddresses]=useState<CustomerAddress[]>([]);
  const [summary,setSummary]=useState<Summary|null>(null);
  const [openingFloat,setOpeningFloat]=useState("");
  const [actualCash,setActualCash]=useState("");
@@ -33,7 +35,7 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
  const [varianceReason,setVarianceReason]=useState("");
  const [movement,setMovement]=useState({type:"till_top_up",amount:"",source:"",destination:"",reference:"",notes:""});
  const [statement,setStatement]=useState({receipts:"",refunds:"0",reference:"",notes:"",varianceReason:""});
- const [deliveryForm,setDeliveryForm]=useState({order:"",method:"collection" as "collection"|"courier",carrier:"",tracking:"",recipient:"",charge:"0"});
+ const [deliveryForm,setDeliveryForm]=useState({order:"",method:"collection" as "collection"|"courier",carrier:"",tracking:"",recipient:"",charge:"0",addressId:""});
  const [failureReasons,setFailureReasons]=useState<Record<string,string>>({});
  const [paymentExceptions,setPaymentExceptions]=useState<Record<string,string>>({});
  const [busy,setBusy]=useState(false);
@@ -44,15 +46,16 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   if(!supabase)return;
   setError("");
   const client=supabase;
-  const [sum,close,movs,recon,delivery,ready]=await Promise.all([
+  const [sum,close,movs,recon,delivery,ready,addresses]=await Promise.all([
    client.rpc("owner_get_daily_operations_summary",{p_business_id:businessId,p_business_date:businessDate}),
    client.from("daily_closings").select("*").eq("business_id",businessId).eq("business_date",businessDate).maybeSingle(),
    client.from("cash_movements").select("id,movement_type,direction,amount,notes,reference,created_at").eq("business_id",businessId).eq("business_date",businessDate).order("created_at",{ascending:false}),
    client.from("daily_payment_reconciliations").select("*").eq("business_id",businessId).eq("business_date",businessDate).eq("method","mpesa").maybeSingle(),
-   client.from("deliveries").select("id,order_id,method,carrier,tracking_reference,customer_paid_charge,recipient_name,dispatched_at,handed_over_at,created_at,attempt_status,failed_at,failure_reason,orders(order_number,status)").eq("business_id",businessId).order("created_at",{ascending:false}).limit(200),
-   client.from("orders").select("id,order_number,status").eq("business_id",businessId).eq("status","ready").order("received_at",{ascending:false}).limit(200)
+   client.from("deliveries").select("id,order_id,method,carrier,tracking_reference,customer_paid_charge,recipient_name,customer_address_id,destination_label,destination_address_text,destination_locality,destination_phone,dispatched_at,handed_over_at,created_at,attempt_status,failed_at,failure_reason,orders(order_number,status)").eq("business_id",businessId).order("created_at",{ascending:false}).limit(200),
+   client.from("orders").select("id,order_number,status,customer_id").eq("business_id",businessId).eq("status","ready").order("received_at",{ascending:false}).limit(200),
+   client.from("customer_addresses").select("id,customer_id,label,recipient_name,phone,address_text,locality,is_default").eq("business_id",businessId).order("is_default",{ascending:false})
   ]);
-  const failure=sum.error||close.error||movs.error||recon.error||delivery.error||ready.error;
+  const failure=sum.error||close.error||movs.error||recon.error||delivery.error||ready.error||addresses.error;
   if(failure)throw failure;
   const nextClose=(close.data??null) as Closing|null;
   const nextRecon=(recon.data??null) as Reconciliation|null;
@@ -64,7 +67,7 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   setSummary(sum.data as Summary);setClosing(nextClose);setMovements((movs.data??[]) as Movement[]);
   setClosingAdjustments((closeAdj.data??[]) as ClosingAdjustment[]);setReconciliationAdjustments((reconAdj.data??[]) as ReconciliationAdjustment[]);
   setReconciliation(nextRecon);
-  setDeliveries((delivery.data??[]) as unknown as Delivery[]);setReadyOrders((ready.data??[]) as ReadyOrder[]);
+  setDeliveries((delivery.data??[]) as unknown as Delivery[]);setReadyOrders((ready.data??[]) as ReadyOrder[]);setCustomerAddresses((addresses.data??[]) as CustomerAddress[]);
   if(nextClose){setOpeningFloat(String(nextClose.opening_float));setActualCash(nextClose.actual_cash===null?"":String(nextClose.actual_cash));setClosingNotes(nextClose.notes??"");setVarianceReason(nextClose.variance_reason??"");}
   else {setOpeningFloat("");setActualCash("");setClosingNotes("");setVarianceReason("");}
   if(nextRecon){setStatement({receipts:String(nextRecon.statement_receipts),refunds:String(nextRecon.statement_refunds),reference:nextRecon.statement_reference??"",notes:nextRecon.notes??"",varianceReason:nextRecon.variance_reason??""});}
@@ -133,8 +136,8 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   setBusy(true);setError("");setNotice("");
   const {error:e2}=await supabase.rpc("owner_record_delivery",{p_order_id:deliveryForm.order,p_method:deliveryForm.method,
    p_carrier:deliveryForm.carrier.trim()||null,p_tracking_reference:deliveryForm.tracking.trim()||null,
-   p_customer_paid_charge:Number(deliveryForm.charge),p_recipient_name:deliveryForm.recipient.trim(),p_request_id:rid()});
-  if(e2)setError(e2.message);else{setNotice("Delivery attempt recorded. Courier dispatch remains outstanding until receipt confirmation.");setDeliveryForm({order:"",method:"collection",carrier:"",tracking:"",recipient:"",charge:"0"});await load();onChanged();}
+   p_customer_paid_charge:Number(deliveryForm.charge),p_recipient_name:deliveryForm.recipient.trim(),p_request_id:rid(),p_customer_address_id:deliveryForm.addressId||null});
+  if(e2)setError(e2.message);else{setNotice("Delivery attempt recorded. Courier dispatch remains outstanding until receipt confirmation.");setDeliveryForm({order:"",method:"collection",carrier:"",tracking:"",recipient:"",charge:"0",addressId:""});await load();onChanged();}
   setBusy(false);
  }
  async function confirmDelivery(delivery:Delivery){
@@ -214,7 +217,8 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
   {section==="Deliveries"&&<>
    <section className="connected-panel"><div className="panel-toolbar"><div><h2>Record delivery / collection attempt</h2><p>Each retry creates a new attempt. Failed and completed attempts remain in the history.</p></div></div>
     <form className="record-form" onSubmit={recordDelivery}>
-     <label>Ready order<select required value={deliveryForm.order} onChange={e=>setDeliveryForm(v=>({...v,order:e.target.value}))}><option value="">Select order</option>{readyOrders.map(o=><option key={o.id} value={o.id}>{o.order_number}</option>)}</select></label>
+     <label>Ready order<select required value={deliveryForm.order} onChange={e=>setDeliveryForm(v=>({...v,order:e.target.value,addressId:""}))}><option value="">Select order</option>{readyOrders.map(o=><option key={o.id} value={o.id}>{o.order_number}</option>)}</select></label>
+     <label className="wide-field">Saved customer delivery address<select value={deliveryForm.addressId} onChange={e=>{const a=customerAddresses.find(x=>x.id===e.target.value);setDeliveryForm(v=>({...v,addressId:e.target.value,recipient:a?.recipient_name||v.recipient}));}} disabled={!deliveryForm.order}><option value="">Enter destination manually / collection</option>{customerAddresses.filter(a=>a.customer_id===readyOrders.find(o=>o.id===deliveryForm.order)?.customer_id).map(a=><option key={a.id} value={a.id}>{a.label||"Address"} · {a.address_text}{a.locality?" · "+a.locality:""}{a.is_default?" · Default":""}</option>)}</select><small>Only saved addresses belonging to the selected order's customer are available. The address is snapshotted on this delivery attempt.</small></label>
      <label>Method<select value={deliveryForm.method} onChange={e=>setDeliveryForm(v=>({...v,method:e.target.value as "collection"|"courier"}))}><option value="collection">Customer collection</option><option value="courier">Courier</option></select></label>
      <label>Recipient name<input required value={deliveryForm.recipient} onChange={e=>setDeliveryForm(v=>({...v,recipient:e.target.value}))}/></label>
      {deliveryForm.method==="courier"&&<label>Carrier<input required value={deliveryForm.carrier} onChange={e=>setDeliveryForm(v=>({...v,carrier:e.target.value}))}/></label>}
@@ -224,7 +228,7 @@ export default function Milestone08Workflow({businessId,section,onChanged}:{busi
     </form>
    </section>
    <section className="connected-panel"><div className="panel-toolbar"><div><h2>Delivery attempt history</h2><p>Dispatched parcels remain outstanding until receipt is confirmed.</p></div></div>
-    <div className="record-list">{deliveries.map(d=><article className="record-row" key={d.id}><div><b>{d.orders?.order_number??"Order"} · {d.method}</b><small>{d.recipient_name??"Recipient pending"}{d.carrier?" · "+d.carrier:""}{d.tracking_reference?" · "+d.tracking_reference:""} · {new Date(d.created_at).toLocaleString("en-KE")}</small>{d.failure_reason&&<small>Failure: {d.failure_reason}</small>}{d.attempt_status==="dispatched"&&<small>Awaiting courier receipt confirmation</small>}</div><div><span className={"status-chip "+d.attempt_status}>{d.attempt_status.replaceAll("_"," ")}</span>{["prepared","dispatched"].includes(d.attempt_status)&&!d.handed_over_at&&<div className="inline-controls">
+    <div className="record-list">{deliveries.map(d=><article className="record-row" key={d.id}><div><b>{d.orders?.order_number??"Order"} · {d.method}</b><small>{d.recipient_name??"Recipient pending"}{d.carrier?" · "+d.carrier:""}{d.tracking_reference?" · "+d.tracking_reference:""} · {new Date(d.created_at).toLocaleString("en-KE")}</small>{d.destination_address_text&&<small>Destination: {d.destination_label?d.destination_label+" · ":""}{d.destination_address_text}{d.destination_locality?" · "+d.destination_locality:""}{d.destination_phone?" · "+d.destination_phone:""}</small>}{d.failure_reason&&<small>Failure: {d.failure_reason}</small>}{d.attempt_status==="dispatched"&&<small>Awaiting courier receipt confirmation</small>}</div><div><span className={"status-chip "+d.attempt_status}>{d.attempt_status.replaceAll("_"," ")}</span>{["prepared","dispatched"].includes(d.attempt_status)&&!d.handed_over_at&&<div className="inline-controls">
  <input aria-label="Payment exception reason" placeholder="Payment exception reason (if needed)" value={paymentExceptions[d.id]??""} onChange={e=>setPaymentExceptions(v=>({...v,[d.id]:e.target.value}))}/>
  <button className="primary-action compact" disabled={busy} onClick={()=>void confirmDelivery(d)}>{d.method==="courier"?"Confirm recipient received parcel":"Confirm collection"}</button>
  <input aria-label="Failure reason" placeholder="Failure reason" value={failureReasons[d.id]??""} onChange={e=>setFailureReasons(v=>({...v,[d.id]:e.target.value}))}/>
