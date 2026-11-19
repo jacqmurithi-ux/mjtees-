@@ -34,14 +34,14 @@ select set_config('test.profile_id',public.owner_create_costing_profile(
 select extensions.ok((select is_active and version=1 and direct_cost=200 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');
 
 select extensions.throws_ok(
- $$select public.owner_create_quotation((select id from public.customers where customer_name='Baraka Uniform Supplies'),current_setting('test.profile_id')::uuid,'Q-BARAKA-LOW',current_date+7,'[{"description":"Low price test","quantity":50,"unit_price":5,"direct_cost":200,"details":{}}]'::jsonb,false,null)$$,
+ $$select public.owner_create_quotation((select id from public.customers where customer_name='Baraka Uniform Supplies'),current_setting('test.profile_id')::uuid,'Q-BARAKA-LOW',current_date+7,'[{"description":"Low price test","quantity":50,"unit_price":5,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
  'P0001','Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.',
  'blocks quotations below the 30 percent floor without an exception');
 
 select set_config('test.exception_quote_id',public.owner_create_quotation(
  (select id from public.customers where customer_name='Baraka Uniform Supplies'),current_setting('test.profile_id')::uuid,
  'Q-BARAKA-EXCEPTION',current_date+7,
- '[{"description":"Approved below-floor test","quantity":50,"unit_price":5,"direct_cost":200,"details":{}}]'::jsonb,
+ '[{"description":"Approved below-floor test","quantity":50,"unit_price":5,"direct_cost":0,"details":{}}]'::jsonb,
  true,'Approved contract exception'
 )::text,true);
 select extensions.ok((select below_floor_approved_by=auth.uid() and below_floor_exception_reason='Approved contract exception' from public.quotations where id=current_setting('test.exception_quote_id')::uuid),'below-floor exception records owner approver and reason');
@@ -49,7 +49,7 @@ select extensions.ok((select below_floor_approved_by=auth.uid() and below_floor_
 select set_config('test.quote_id',public.owner_create_quotation(
  (select id from public.customers where customer_name='Baraka Uniform Supplies'),current_setting('test.profile_id')::uuid,
  'Q-BARAKA-E2E',current_date+7,
- '[{"description":"Screen printing on customer-supplied school T-shirts","quantity":50,"unit_price":30,"direct_cost":200,"details":{"item_type":"printing_service","customer_supplied_items":true}}]'::jsonb,
+ '[{"description":"Screen printing on customer-supplied school T-shirts","quantity":50,"unit_price":30,"direct_cost":0,"details":{"item_type":"printing_service","customer_supplied_items":true}}]'::jsonb,
  false,null
 )::text,true);
 
