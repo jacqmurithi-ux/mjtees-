@@ -19,7 +19,7 @@ export default function App(){
    supabase.from('quotations').select('id,total,status'),
    supabase.from('sales_invoices').select('id,balance').not('status','in','("draft","void")'),
    supabase.from('production_jobs').select('id,job_number,job_name,stage,due_at,customer:customers!production_jobs_customer_id_fkey(customer_name),quotation:quotations!production_jobs_quotation_id_fkey(quotation_lines(description,quantity))').not('stage','in','("delivered","cancelled")').order('due_at'),
-   supabase.from('purchase_orders').select('total,transport_cost,status').neq('status','cancelled'),
+   supabase.from('purchase_orders').select('total,transport_cost,status').in('status',['sent','part_received','received']),
    supabase.from('supplier_payments').select('amount'),
    supabase.from('stock_items').select('id,item_name,quantity_on_hand,unit,reorder_level').eq('active',true).order('item_name'),
    supabase.rpc('owner_supplier_price_alerts')
