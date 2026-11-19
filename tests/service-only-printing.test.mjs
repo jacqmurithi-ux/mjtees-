@@ -21,6 +21,10 @@ test("service-only quotations retain customer-supplied garments and manual agree
   assert.match(quote, /customerSupplies/);
   assert.match(quote, /Final agreed unit selling price/);
   assert.match(quote, /owner_create_quotation/);
+  assert.match(quote, /invoicePaymentTerms/);
+  assert.match(quote, /net_7/);
+  assert.match(quote, /net_14/);
+  assert.match(quote, /net_30/);
 });
 
 test("outsourced printing labour can be recorded against the production job", () => {
