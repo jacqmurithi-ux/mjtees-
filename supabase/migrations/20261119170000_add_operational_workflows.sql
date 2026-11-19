@@ -300,8 +300,8 @@ begin
  select coalesce(bool_or(coalesce((details->>'customer_supplied_items')::boolean,false)),false)
  into v_customer_supplied from public.quotation_lines where quotation_id=q.id and business_id=q.business_id;
  v_job_name:='Production for '||q.quote_number;
- insert into public.production_jobs(business_id,invoice_id,quotation_id,customer_id,job_number,job_name,customer_supplied_items,actual_direct_cost)
- values(q.business_id,v_invoice,q.id,q.customer_id,btrim(p_job_number),v_job_name,v_customer_supplied,0)
+ insert into public.production_jobs(business_id,invoice_id,quotation_id,customer_id,job_number,job_name,customer_supplied_items,actual_direct_cost,due_at)
+ values(q.business_id,v_invoice,q.id,q.customer_id,btrim(p_job_number),v_job_name,v_customer_supplied,0,case when p_due_date is null then null else (p_due_date::timestamp at time zone 'Africa/Nairobi') end)
  returning id into v_job;
  update public.quotations set status='converted' where id=q.id;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
@@ -393,6 +393,7 @@ begin
   'outstanding_receivables',coalesce((select sum(balance) from public.sales_invoices where business_id=v_business and status not in('draft','void')),0),
   'active_jobs',(select count(*) from public.production_jobs where business_id=v_business and stage not in('delivered','cancelled')),
   'delivered_jobs',(select count(*) from public.production_jobs where business_id=v_business and stage='delivered'),
+  'average_turnaround_hours',(select round(avg(extract(epoch from (delivered_at-created_at))/3600)::numeric,2) from public.production_jobs where business_id=v_business and delivered_at is not null),
   'stock_items',(select count(*) from public.stock_items where business_id=v_business and active),
   'low_stock_items',(select count(*) from public.stock_items where business_id=v_business and active and quantity_on_hand<=reorder_level),
   'expenses',coalesce((select sum(amount) from public.expenses where business_id=v_business),0),
