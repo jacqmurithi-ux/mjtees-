@@ -151,5 +151,7 @@ test("Credit note issuance preserves paid invoices and applies value to outstand
   assert.match(creditNoteSql, /sales\.credit_note_issued/);
   assert.match(creditNoteSql, /private\.assert_active_owner/);
   assert.match(creditNoteSql, /private\.begin_idempotent_request/);
+  assert.match(creditNoteSql, /v_requested_item_credit/);
+  assert.match(creditNoteSql, /Combined credit note lines exceed the remaining value/);
   assert.doesNotMatch(creditNoteSql, /owner_reverse_payment|payment_reversed|reversal/i);
 });
