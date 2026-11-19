@@ -53,7 +53,7 @@ select extensions.ok((select is_active and version=1 and direct_cost=600 from pu
 select set_config('test.cost_override_quote',public.owner_create_quotation(
  (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,
  'Q-COST-BREAKDOWN',current_date+7,
- '[{\"description\":\"Generic garment printing\",\"quantity\":16,\"unit_price\":700,\"details\":{\"blank_cost_per_piece\":450,\"other_costs_total\":800}}]'::jsonb,false,null
+ '[{"description":"Generic garment printing","quantity":16,"unit_price":700,"details":{"blank_cost_per_piece":450,"other_costs_total":800}}]'::jsonb,false,null
 )::text,true);
 select extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.cost_override_quote')::uuid),8000::numeric,'quote direct cost is blank cost per piece times quantity plus other direct costs');
 select extensions.is((select round(((q.total-l.direct_cost)/l.direct_cost)*100,2) from public.quotations q join public.quotation_lines l on l.quotation_id=q.id where q.id=current_setting('test.cost_override_quote')::uuid),40.00::numeric,'contribution divided by direct cost produces the expected 40 percent margin');
