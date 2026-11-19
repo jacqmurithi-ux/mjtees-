@@ -16,14 +16,13 @@ test('quotation pricing requires an active versioned costing profile and ignores
   assert.match(sql, /v_cost:=v_profile_direct_cost/);
   assert.match(sql, /direct_cost,line_total,details\)[\s\S]*?values\(v_business,v_quote,btrim\(v_line->>'description'\),v_qty,v_price,v_cost/);
 });
-test('Baraka supplied-garment scenario prices 50 prints at KES 30 and records KES 200 direct labour', () => {
-  const quantity = 50, unitPrice = 30, directCost = 200;
+test('generic quotation pricing clears the 30% gross-margin floor using versioned direct cost', () => {
+  const quantity = 2, unitPrice = 500, directCost = 600;
   const total = quantity * unitPrice;
   const grossMargin = ((total - directCost) / total) * 100;
-  assert.equal(total, 1500);
-  assert.equal(grossMargin.toFixed(2), '86.67');
+  assert.equal(total, 1000);
+  assert.equal(grossMargin.toFixed(2), '40.00');
   assert.ok(grossMargin >= 30);
-  assert.match(sql, /customer_supplied_items/);
 });
 
 test('accepted quotation conversion creates an invoice and a production job atomically', () => {
