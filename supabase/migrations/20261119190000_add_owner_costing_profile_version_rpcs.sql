@@ -18,18 +18,17 @@ begin
  v_name:=btrim(coalesce(p_profile_name,''));
  if length(v_name)<2 then raise exception 'A costing profile name is required'; end if;
  if p_direct_cost is null or p_direct_cost<0 then raise exception 'Direct production cost must be zero or greater'; end if;
- if p_components is null or jsonb_typeof(p_components)<>'array' then raise exception 'Cost components must be supplied as a list'; end if;
- if not exists(select 1 from jsonb_array_elements(p_components) c
+ if p_components is null or jsonb_typeof(p_components)<>'array' or jsonb_array_length(p_components)=0 then
+  raise exception 'At least one cost component is required';
+ end if;
+ if exists(select 1 from jsonb_array_elements(p_components) c
   where coalesce(length(btrim(c->>'name')),0)=0
     or coalesce((c->>'cost')::numeric,-1)<0) then
-  null;
- else
   raise exception 'Each cost component needs a name and a non-negative cost';
  end if;
  select business_id into v_business
  from public.business_memberships
  where user_id=auth.uid() and role='owner'
- order by created_at asc
  limit 1;
  if v_business is null then raise exception 'Owner workspace required'; end if;
  perform pg_advisory_xact_lock(hashtext(v_business::text),hashtext(lower(v_name)));
@@ -63,7 +62,6 @@ begin
  select business_id into v_business
  from public.business_memberships
  where user_id=auth.uid() and role='owner'
- order by created_at asc
  limit 1;
  if v_business is null then raise exception 'Owner workspace required'; end if;
  perform 1 from public.costing_profiles
