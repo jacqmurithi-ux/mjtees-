@@ -175,10 +175,10 @@ test('quotation pricing shows rounded minimum, 1.8x warning and margin exception
 test('quotation deposits show received and remaining balances and cannot exceed the remaining quote value', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
   assert.match(operations, /const depositTotals=useMemo/);
-  assert.match(operations, /Deposits \\{cash\\(Number\\(depositTotals\\[q\\.id\\]\\|\\|0\\)\\)\\}/);
+  assert.ok(operations.includes('Deposits {cash(Number(depositTotals[q.id]||0))}'));
   assert.match(operations, /Deposit cannot exceed the remaining quotation balance/);
   assert.match(operations, /selectedDepositRemaining/);
-  assert.match(operations, /Number\\(depositTotals\\[q\\.id\\]\\|\\|0\\)<Number\\(q\\.total\\)/);
+  assert.ok(operations.includes("Number(depositTotals[q.id]||0)<Number(q.total)"));
 });
 
 test('invoice cards expose customer, paid amount and outstanding balance; customer payments are bounded by balance', async () => {
@@ -187,7 +187,7 @@ test('invoice cards expose customer, paid amount and outstanding balance; custom
   assert.match(operations, /invoice-paid/);
   assert.match(operations, /invoice-balance-open/);
   assert.match(operations, /Payment cannot exceed the outstanding invoice balance/);
-  assert.match(operations, /max:String\\(selectedInvoice\\?\\.balance\\?\\?0\\)/);
+  assert.ok(operations.includes('max:String(selectedInvoice?.balance??0)'));
   assert.match(operations, /owner_record_payment/);
 });
 
