@@ -312,3 +312,16 @@ test('Purchasing preserves the append-only supplier payment ledger and displays 
   assert.match(operations, /owner_review_supplier_price_change/);
   assert.doesNotMatch(operations, /delete\(['"]supplier_payments/);
 });
+
+
+test('Supplier purchasing migration preserves stock history and protects owner RPCs', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/20261120100000_restore_supplier_purchase_workflows.sql', import.meta.url), 'utf8');
+  assert.match(migration, /add column if not exists stock_item_id uuid/);
+  assert.match(migration, /having count\(\*\) = 1/);
+  assert.match(migration, /private\.apply_stock_movement/);
+  assert.match(migration, /purchasing\.goods_received/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /revoke all on function public\.owner_create_purchase_order/);
+  assert.match(migration, /grant execute on function public\.owner_create_purchase_order/);
+  assert.match(migration, /owner_supplier_price_alerts/);
+});
