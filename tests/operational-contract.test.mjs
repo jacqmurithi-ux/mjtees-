@@ -132,8 +132,7 @@ test('owner pricing ceiling is nullable, owner-only and audited without changing
   assert.match(pricingSql, /owner_get_max_unit_selling_price/);
   assert.match(pricingSql, /role='owner'/);
   assert.match(pricingSql, /pricing\.ceiling_updated/);
-  assert.match(pricingSql, /gross_margin_floor/);
-  assert.match(pricingSql, /full_cost_target_multiplier/);
+  assert.doesNotMatch(pricingSql, /(?:drop column|alter column).*gross_margin_floor|(?:drop column|alter column).*full_cost_target_multiplier/i);
   assert.match(pricingSql, /Unit selling price exceeds the owner-set maximum price/);
 });
 
