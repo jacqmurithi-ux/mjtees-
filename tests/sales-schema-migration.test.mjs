@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const sql = readFileSync(new URL("../supabase/migrations/20261119000400_sales_foundation_schema.sql", import.meta.url), "utf8");
 const manualPaymentsSql = readFileSync(new URL("../supabase/migrations/20261119000600_sales_manual_payment_ledger.sql", import.meta.url), "utf8");
 const salesCreditSql = readFileSync(new URL("../supabase/migrations/20261119000700_sales_customer_credit_application.sql", import.meta.url), "utf8");
+const paymentPolicySql = readFileSync(new URL("../supabase/migrations/20261119092752_sales_manual_payment_method_restrictions.sql", import.meta.url), "utf8");
 
 test("Sales foundation reuses existing customer, quotation, order, payment, stock and production records", () => {
   assert.match(sql, /alter table public\.customers[\s\S]*sales_price_tier_id/);
@@ -129,4 +130,14 @@ test("Invoice conversion sends the exact RPC stock-location argument", () => {
   const ui = readFileSync(new URL("../src/QuoteWorkflow.tsx", import.meta.url), "utf8");
   assert.match(ui, /p_stock_location_id:stockLocationId\|\|null/);
   assert.doesNotMatch(ui, /p_customer_contact_id/);
+});
+
+
+test("Database rejects new non-Cash and non-M-Pesa payments while preserving legacy rows", () => {
+  assert.match(paymentPolicySql, /create trigger payments_sales_new_method_guard\\s+before insert on public\\.payments/);
+  assert.match(paymentPolicySql, /new\\.method not in \\('cash','mpesa_manual'\\)/);
+  assert.match(paymentPolicySql, /create trigger sales_payment_accounts_new_method_guard\\s+before insert or update of account_type on public\\.sales_payment_accounts/);
+  assert.match(paymentPolicySql, /new\\.account_type not in \\('cash','mpesa_paybill'\\)/);
+  assert.match(sql, /method in \\('cash','mpesa_manual','bank_transfer','cheque'\\)/);
+  assert.match(manualPaymentsSql, /account_type in \\('cash','mpesa_paybill','bank','cheque_clearing'\\)/);
 });
