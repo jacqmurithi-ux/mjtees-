@@ -71,6 +71,7 @@ select set_config('test.profile_id',public.owner_create_costing_profile(
 select extensions.ok((select is_active and version=1 and direct_cost=600 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');
 
 select public.owner_update_max_unit_selling_price(450);
+select extensions.is(public.owner_get_max_unit_selling_price(),450::numeric,'owner can read the configured maximum price through the protected RPC');
 select extensions.is((select max_unit_selling_price from public.business_settings where business_id=current_setting('test.business_id')::uuid),450::numeric,'owner can set a maximum selling price per finished item');
 select extensions.throws_ok(
  $select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-CEILING',current_date+7,'[{"description":"Ceiling test","quantity":1,"unit_price":500,"details":{}}]'::jsonb,false,null)$,
@@ -210,6 +211,7 @@ select public.owner_adjust_inventory(current_setting('test.stock_id')::uuid,2,'C
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'inventory adjustment updates stock on hand');
 select extensions.ok(exists(select 1 from public.stock_movements where stock_item_id=current_setting('test.stock_id')::uuid and movement_type='adjustment' and quantity=2),'inventory adjustment creates an auditable stock movement');
 select extensions.is(jsonb_array_length(public.owner_job_report()),1,'per-job report returns the completed production job');
+select extensions.is((public.owner_job_report()->0->>'gross_margin_percent')::numeric,40.00::numeric,'per-job report calculates gross margin over revenue');
 select set_config('test.supplier_id',public.owner_create_supplier('Test Supplier',null,null)::text,true);
 select set_config('test.po_one',public.owner_create_purchase_order(current_setting('test.supplier_id')::uuid,'PO-TEST-001',10,jsonb_build_array(jsonb_build_object('stock_item_id',current_setting('test.stock_id')::uuid,'quantity',10,'unit_cost',10)))::text,true);
 select set_config('test.po_two',public.owner_create_purchase_order(current_setting('test.supplier_id')::uuid,'PO-TEST-002',0,jsonb_build_array(jsonb_build_object('stock_item_id',current_setting('test.stock_id')::uuid,'quantity',10,'unit_cost',12)))::text,true);
