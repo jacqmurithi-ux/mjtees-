@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const quote = readFileSync("src/QuoteWorkflow.tsx", "utf8");
 const production = readFileSync("src/OrderProductionWorkflow.tsx", "utf8");
+const payment = readFileSync("src/PaymentWorkflow.tsx", "utf8");
 const realtime = readFileSync("supabase/migrations/20261119130000_enable_owner_workflow_realtime.sql", "utf8");
 
 test("customer-supplied screen printing has a versioned outsourced-labour costing preset", () => {
@@ -33,8 +34,10 @@ test("outsourced printing labour can be recorded against the production job", ()
 test("owner workflow changes refresh from Realtime while preserving payment exception for later settlement", () => {
   assert.match(quote, /postgres_changes/);
   assert.match(production, /postgres_changes/);
+  assert.match(payment, /postgres_changes/);
+  assert.match(payment, /sales_invoice_payment_allocations/);
   assert.match(production, /invoice remains outstanding until a payment is posted/);
-  for (const table of ["quotations","orders","order_items","sales_invoices","production_jobs","production_cost_entries","production_output_entries","quality_checks","rework_events"]) {
+  for (const table of ["quotations","orders","order_items","sales_invoices","payments","receipts","sales_invoice_payment_allocations","sales_customer_credit_entries","production_jobs","production_cost_entries","production_output_entries","quality_checks","rework_events"]) {
     assert.match(realtime, new RegExp("'" + table + "'"));
   }
 });
