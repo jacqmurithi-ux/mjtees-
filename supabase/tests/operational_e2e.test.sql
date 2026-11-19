@@ -39,7 +39,7 @@ select (public.owner_bootstrap_workspace()->>'business_id')::uuid,'Example Custo
 
 select set_config('test.stock_id',public.owner_create_stock_item('shop_1','Generic test stock item','General','piece',10,2,10,'E2E-STOCK')::text,true);
 select extensions.throws_ok(
- $$assert$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$assert$$,
+ $select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$assert$$,
  'P0001','An active versioned costing profile is required before pricing this quotation',
  'refuses to price without an active versioned costing profile');
 
@@ -141,7 +141,7 @@ select extensions.throws_ok(
 select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
 select extensions.throws_ok(
- $test$assert$select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',801,null)$assert$test$,
+ $test$select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',801,null)$test$,
  'P0001','Invalid payment method or amount exceeds invoice balance',
  'rejects a customer payment greater than the outstanding invoice balance');
 select set_config('test.payment_id',public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',800,'E2E-TEST-REF')::text,true);
