@@ -34,12 +34,13 @@ export default function DirectOrderForm({businessId,customer,addresses,contacts,
   }
   if(!Number.isSafeInteger(Number(discount))||Number(discount)<0){setError("Enter a valid whole-KES order discount.");return;}
   const hours=turnaround.trim()?Number(turnaround):null;if(hours!==null&&(!Number.isInteger(hours)||hours<1||hours>8760)){setError("Turnaround must be between 1 and 8,760 hours.");return;}
-  setBusy(true);setError("");setNotice("");
+  setError("");setNotice("");
   const payload=lines.map(l=>({catalogue_item_id:l.catalogueItemId||null,category_id:l.categoryId,stock_item_id:l.customerSupplies?null:(l.stockItemId||null),description:l.description.trim(),quantity:Number(l.quantity),unit:l.unit.trim(),unit_price:l.unitPrice.trim()?Number(l.unitPrice):null,line_discount:Number(l.discount),sale_mode:l.saleMode,customer_supplies_item:l.customerSupplies,production_method_id:l.saleMode==="blank"?null:(l.productionMethodId||null),production_specification:{print_position:l.printPosition.trim()||null,garment_type:l.garmentType.trim()||null,artwork_reference:l.artworkReference.trim()||null,artwork_instructions:l.instructions.trim()||null}}));
   const selectedAddress=addresses.find(a=>a.id===addressId);
   const selectedContact=contacts.find(c=>c.id===contactId);
   const orderInternalNotes=[internalNotes.trim(),selectedContact?"Order contact ID: "+selectedContact.id+" · "+selectedContact.full_name+" · "+[selectedContact.position_title,selectedContact.phone,selectedContact.email].filter(Boolean).join(" · "):"",selectedAddress?"Delivery address ID: "+selectedAddress.id+" · "+[selectedAddress.label,selectedAddress.recipient_name,selectedAddress.phone,selectedAddress.address_text,selectedAddress.locality].filter(Boolean).join(", "):""].filter(Boolean).join("\n\n");
   if(orderInternalNotes.length>4000||customerNotes.trim().length>4000){setError("Customer and internal notes must each fit within 4,000 characters, including selected contact and delivery references.");return;}
+  setBusy(true);
   const {data,error:rpcError}=await supabase.rpc("owner_create_direct_order",{p_business_id:businessId,p_customer_id:customer.id,p_enquiry_id:null,p_lines:payload,p_order_discount:Number(discount),p_customer_notes:customerNotes.trim()||null,p_internal_notes:orderInternalNotes||null,p_request_id:rid(),p_margin_exception_reason:marginReason.trim()||null});
   if(rpcError){setError(rpcError.message);setBusy(false);return;}
   const orderNumber=String(data?.order_number||"");
