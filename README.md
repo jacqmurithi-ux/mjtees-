@@ -5,7 +5,7 @@
 **Hosting target:** GitHub Pages (manual deployment only)  
 **Backend:** Supabase project `rbbluwsniiwzixlvdnwz`
 
-This repository contains the public website and the private, owner-first shop operations application. The first release covers a published public product/service catalogue managed by the owner, customer enquiries, customers, quotations and revisions, order conversion, payments and receipts, refunds and reversals, stock, purchasing, production, expenses, delivery and reporting.
+This repository contains the public website and the private, owner-first shop operations application. The first release covers a published public product/service catalogue managed by the owner, customer enquiries, customers, quotations and revisions, order conversion, payments and receipts, refunds, stock, purchasing, production, expenses, delivery and reporting.
 
 ## Current release status
 
@@ -75,7 +75,7 @@ Owner access is by email/password with public registration disabled. The signed-
 - One shop with logical stock locations (Shop One: apparel, vinyl and stickers; Shop Two: inks, screens, emulsion and consumables).
 - Customers may bring their own items; no blank garment stock is deducted for customer-supplied goods.
 - Manual M-Pesa evidence stays pending until owner verification.
-- Refunds are recorded pending and affect balances only after posting.
+- Refunds are recorded pending and affect balances only after posting. Payment reversal is not supported.
 - Full payment is required before handover unless the owner records an explicit, audited exception.
 - Courier delivery is recorded at actual carrier cost as a pass-through.
 - Artwork files stay in Google Drive; only references and version/approval details belong in the system.
