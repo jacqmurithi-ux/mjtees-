@@ -167,7 +167,7 @@ declare m public.production_job_materials%rowtype;
 begin
  if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
  select * into m from public.production_job_materials where id=p_material_id and business_id=p_business_id for update;
- if not found or p_quantity<=0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Invalid job material issue'; end if;
+ if not found or p_quantity<=0 or p_cost<0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Invalid job material issue'; end if;
  update public.production_job_materials set issued_quantity=issued_quantity+p_quantity where id=m.id;
  update public.production_jobs set actual_direct_cost=actual_direct_cost+p_cost where id=m.job_id and business_id=p_business_id;
 end $$;
