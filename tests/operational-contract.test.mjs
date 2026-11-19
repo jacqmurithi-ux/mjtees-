@@ -44,7 +44,8 @@ test('stock issues are owner-authorized, quantity-limited and recorded as moveme
   assert.match(sql, /owner_issue_job_material/);
   assert.match(sql, /Insufficient stock/);
   assert.match(sql, /Issue quantity exceeds planned balance/);
-  assert.match(sql, /apply_stock_movement\(m\.business_id,s\.id,-p_quantity,s\.average_unit_cost,'job_issue'\)/);\n  assert.match(sql, /insert into public\.stock_movements/);
+  assert.match(sql, /apply_stock_movement\(m\.business_id,s\.id,-p_quantity,s\.average_unit_cost,'job_issue'\)/);
+  assert.match(sql, /insert into public\.stock_movements/);
 });
 
 test('payments are cash or M-Pesa Paybill, allocated once, and cannot exceed invoice balance', () => {
