@@ -29,6 +29,7 @@ declare
   v_item_amount bigint;
   v_invoice_item_id uuid;
   v_previously_credited bigint;
+  v_requested_item_credit bigint;
   v_subtotal bigint:=0;
   v_total bigint;
   v_existing_credit bigint;
@@ -175,8 +176,16 @@ begin
       where cni.business_id=p_business_id
         and cni.invoice_item_id=v_invoice_item_id
         and cn.status='issued';
-      if v_item_amount>v_invoice_item.line_total-v_previously_credited then
-        raise exception using errcode='22023',message='Credit note line exceeds the remaining value of the original invoice item';
+
+      -- Validate the combined amount for every occurrence of this invoice item
+      -- in the current request, not just the current loop row.
+      select coalesce(sum((entry.value->>'amount')::bigint),0)::bigint
+        into v_requested_item_credit
+      from jsonb_array_elements(coalesce(p_items,'[]'::jsonb)) entry(value)
+      where nullif(entry.value->>'invoice_item_id','')::uuid=v_invoice_item_id;
+
+      if v_requested_item_credit>v_invoice_item.line_total-v_previously_credited then
+        raise exception using errcode='22023',message='Combined credit note lines exceed the remaining value of the original invoice item';
       end if;
     end if;
 
