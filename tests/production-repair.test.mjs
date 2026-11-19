@@ -134,3 +134,20 @@ test('Production page explains missing stock items and missing material requirem
   assert.match(operations, /No material requirements planned yet/);
   assert.match(operations, /Issue remaining planned material/);
 });
+
+
+test('Production stage selector only offers legal next stages and includes quality check', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /quality_check/);
+  assert.match(operations, /const nextStages:Record<string,string\[]>/);
+  assert.match(operations, /\[j\.stage,\.\.\.\(nextStages\[j\.stage\]\|\|\[\]\)\]/);
+});
+
+test('Production planning supports multiple material requirements on one job and scopes issuing to that job', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /const jobMaterials=invoices\.filter\(m=>m\.job_id===selectedJob\)/);
+  assert.match(operations, /jobMaterials\.map\(m=>/);
+  assert.match(operations, /previous requirements remain listed below/);
+  assert.match(operations, /material\.job_id!==selectedJob/);
+  assert.match(operations, /owner_add_job_material/);
+});
