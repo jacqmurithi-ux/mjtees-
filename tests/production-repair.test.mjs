@@ -215,6 +215,7 @@ test('costing profiles use multiple per-piece components with separate blank-ite
 test('customer-supplied items exclude blank-item cost but retain production costs from the active profile', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
   assert.match(operations, /activeBlankProfileCost/);
+  assert.match(operations, /activeBlankProfileJobCost/);
   assert.match(operations, /activeProductionPerPiece/);
   assert.match(operations, /activeProductionPerJob/);
   assert.match(operations, /customerSupplied\?0:.*activeBlankProfileCost/);
