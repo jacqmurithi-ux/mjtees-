@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(22);
+select extensions.plan(25);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -16,6 +16,10 @@ select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111'
 set local role authenticated;
 
 select extensions.is(public.owner_bootstrap_workspace()->>'business_name','MJ Printing & Branding','existing owner can bootstrap the new workspace');
+select set_config('test.business_id',(public.owner_bootstrap_workspace()->>'business_id'),true);
+select extensions.is((select count(*)::integer from public.business_memberships where business_id=current_setting('test.business_id')::uuid and user_id=auth.uid() and role='owner'),1,'bootstrap creates exactly one owner membership for the existing Auth user');
+select extensions.is((select count(*)::integer from public.inventory_locations where business_id=current_setting('test.business_id')::uuid),2,'bootstrap creates both Shop 1 and Shop 2 inventory locations');
+select extensions.ok(exists(select 1 from public.business_settings where business_id=current_setting('test.business_id')::uuid),'bootstrap creates business settings');
 select extensions.ok(
  not has_table_privilege('authenticated','public.costing_profiles','INSERT') and
  not has_table_privilege('authenticated','public.quotations','INSERT') and
