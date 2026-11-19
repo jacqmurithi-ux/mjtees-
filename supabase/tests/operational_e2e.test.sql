@@ -79,7 +79,7 @@ select set_config('test.quote_id',public.owner_create_quotation(
 )::text,true);
 
 select extensions.is((select total from public.quotations where id=current_setting('test.quote_id')::uuid),1000::numeric,'test quotation total is KES 1,000');
-select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),66.67::numeric,'test contribution divided by direct cost is 66.67 percent');
+select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/(select nullif(sum(direct_cost),0) from public.quotation_lines where quotation_id=q.id))*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),66.67::numeric,'test contribution divided by direct cost is 66.67 percent');
 
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'sent');
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'accepted');
