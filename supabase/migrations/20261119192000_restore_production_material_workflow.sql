@@ -1,5 +1,9 @@
 -- Restore the Production material workflow on installations where the original
 -- operational-workflows migration was not applied. Idempotent for clean replays.
+alter table public.production_jobs
+  add column if not exists actual_direct_cost numeric(14,2) not null default 0
+  check (actual_direct_cost >= 0);
+
 create unique index if not exists production_jobs_business_id_id_uidx
   on public.production_jobs(business_id,id);
 create unique index if not exists stock_items_business_id_id_uidx
