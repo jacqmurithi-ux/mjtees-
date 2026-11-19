@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(58);
+select extensions.plan(59);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -134,6 +134,10 @@ select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'q
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'ready');
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'delivered');
 select extensions.ok((select delivered_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production delivery is timestamped');
+select extensions.throws_ok(
+ $select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,1)$,
+ 'P0001','Cannot issue material for a closed production job',
+ 'prevents issuing material after a production job is closed');
 select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
 select extensions.throws_ok(
