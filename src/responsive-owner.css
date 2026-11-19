@@ -91,3 +91,17 @@
 .customer-management .record-row{min-width:0}
 .customer-management .record-row small,.customer-management .record-row p{overflow-wrap:anywhere}
 @media(max-width:760px){.customer-layout{grid-template-columns:minmax(0,1fr)}.customer-directory{max-height:34vh}.customer-facts{grid-template-columns:minmax(0,1fr)}.customer-management .panel-toolbar{align-items:flex-start;flex-wrap:wrap}.customer-management .panel-toolbar .form-actions{flex-wrap:wrap}.customer-detail{padding:.75rem}}
+
+
+/* Sales credit note workflow */
+.credit-note-workflow{display:grid;gap:1rem;min-width:0}
+.credit-note-context{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem 1rem;margin:1rem 0;padding:.9rem 1rem;border:1px solid var(--border,#d8e0e3);border-radius:12px;background:var(--panel,#fff)}
+.credit-note-context span{color:var(--muted,#68767c)}
+.credit-note-context p{flex-basis:100%;margin:.2rem 0 0;color:var(--muted,#68767c)}
+.credit-note-lines{display:grid;gap:.8rem;margin:1rem 0}
+.credit-note-line{display:grid;gap:.75rem;min-width:0;padding:1rem;border:1px solid var(--border,#d8e0e3);border-radius:12px;background:var(--panel,#fff)}
+.credit-note-line-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}
+.credit-note-line-actions,.credit-note-submit{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.credit-note-submit{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border,#d8e0e3)}
+.credit-note-submit p{max-width:620px;color:var(--muted,#68767c);margin:0}
+@media(max-width:640px){.credit-note-line-fields{grid-template-columns:minmax(0,1fr)}.credit-note-submit{align-items:stretch;flex-direction:column}.credit-note-submit .primary-action{width:100%}.credit-note-context{align-items:flex-start;flex-direction:column}}
