@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(60);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values
@@ -387,8 +387,105 @@ select is((select status from public.sales_invoices
   where quotation_id='a1000000-0000-4000-8000-000000000001'),
   'partially_paid','Applied customer credit updates the invoice status');
 
+-- A credit note against a paid invoice becomes customer credit; it never
+-- reverses or deletes the original payment or invoice.
+select set_config('mj.test.paid_credit_note_id',
+  public.owner_issue_sales_credit_note(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+    'Customer return on paid invoice',
+    jsonb_build_array(jsonb_build_object(
+      'invoice_item_id',(select id from public.sales_invoice_items
+        where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
+      'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
+    )),
+    0,'74000000-0000-4000-8000-000000000001'
+  )->>'credit_note_id',true);
+
+select is((select status from public.sales_credit_notes where id=current_setting('mj.test.paid_credit_note_id')::uuid),
+  'issued','Owner can issue a credit note against a paid invoice');
+select is((select credit_note_number from public.sales_credit_notes where id=current_setting('mj.test.paid_credit_note_id')::uuid),
+  'CN-0001','Credit note number is generated from the CN sequence');
+select is((select total_amount from public.sales_credit_notes where id=current_setting('mj.test.paid_credit_note_id')::uuid),
+  100::bigint,'Credit note stores its whole-KES total');
+select is((public.owner_issue_sales_credit_note(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+  'Customer return on paid invoice',
+  jsonb_build_array(jsonb_build_object(
+    'invoice_item_id',(select id from public.sales_invoice_items
+      where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
+    'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
+  )),0,'74000000-0000-4000-8000-000000000001'
+)->>'amount_applied_to_invoice',
+  '0','A paid invoice credit note is not applied against the already-paid invoice');
+select is((select status from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+  'paid','Paid invoice remains paid after a credit note');
+select is((select sum(amount) from public.sales_customer_credit_entries
+  where customer_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+  250::numeric,'Paid invoice credit note becomes customer credit');
+select is((public.owner_issue_sales_credit_note(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+  'Customer return on paid invoice',
+  jsonb_build_array(jsonb_build_object(
+    'invoice_item_id',(select id from public.sales_invoice_items
+      where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
+    'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
+  )),0,'74000000-0000-4000-8000-000000000001')->>'credit_note_id',
+  current_setting('mj.test.paid_credit_note_id'),
+  'Retrying a credit note issue request returns the original credit note');
+select is((select count(*) from public.sales_customer_credit_entries
+  where credit_note_id=current_setting('mj.test.paid_credit_note_id')::uuid),
+  1::bigint,'Idempotent credit note retry does not duplicate its customer credit entry');
+
+-- A credit note against an unpaid invoice is first applied to its outstanding
+-- balance; it cannot create a second payment or reverse an existing receipt.
+select set_config('mj.test.unpaid_credit_note_result',
+  public.owner_issue_sales_credit_note(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
+    'Partial order credit',
+    jsonb_build_array(jsonb_build_object(
+      'invoice_item_id',(select id from public.sales_invoice_items
+        where invoice_id=(select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001')),
+      'description','Partial garment credit','quantity',1,'unit_price',100,'amount',100
+    )),
+    0,'74000000-0000-4000-8000-000000000002'
+  )::text,true);
+select is((current_setting('mj.test.unpaid_credit_note_result')::jsonb->>'amount_applied_to_invoice')::bigint,
+  100::bigint,'Credit note reduces the unpaid invoice balance first');
+select is((current_setting('mj.test.unpaid_credit_note_result')::jsonb->>'invoice_balance')::bigint,
+  200::bigint,'Credit note returns the correct remaining invoice balance');
+select is((select status from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
+  'partially_paid','Credit note application preserves the partially-paid invoice status');
+select is((select sum(amount) from public.sales_customer_credit_entries
+  where customer_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+  250::numeric,'Applied credit note does not leave excess customer credit');
+
+select throws_ok(
+  $pt$select public.owner_issue_sales_credit_note(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+    'Over-credit attempt',
+    jsonb_build_array(jsonb_build_object(
+      'invoice_item_id',(select id from public.sales_invoice_items
+        where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
+      'description','Over-credit','quantity',1,'unit_price',1,'amount',1
+    )),0,'74000000-0000-4000-8000-000000000003'
+  )$pt$,
+  '22023',null,'Credit notes cannot exceed the original invoice value');
 
 select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
+select throws_ok(
+  $pt$select public.owner_issue_sales_credit_note(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
+    'Non-owner credit attempt',
+    jsonb_array_build_object('description','Test line','quantity',1,'unit_price',1,'amount',1),
+    0,'74000000-0000-4000-8000-000000000004'
+  )$pt$,
+  '42501',null,'Non-owner cannot issue a Sales credit note');
 select throws_ok(
   $pt$select public.owner_record_sales_payment(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
