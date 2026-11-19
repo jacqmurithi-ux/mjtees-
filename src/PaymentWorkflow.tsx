@@ -26,10 +26,14 @@ const localDateTime = () => {
 const accountTypeForMethod: Record<Method, AccountType[]> = {
   cash: ["cash"],
   mpesa_manual: ["mpesa_paybill"],
+  bank_transfer: ["bank"],
+  cheque: ["bank", "cheque_clearing"],
 };
 const methodLabel: Record<Method, string> = {
   cash: "Cash",
   mpesa_manual: "M-Pesa Paybill",
+  bank_transfer: "Bank transfer (legacy)",
+  cheque: "Cheque (legacy)",
 };
 
 export default function PaymentWorkflow({ businessId, customers, onChanged }: { businessId: string; customers: CustomerOption[]; onChanged: () => void }) {
