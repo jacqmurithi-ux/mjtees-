@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(38);
+select plan(40);
 
 -- Isolated synthetic fixtures; all changes are rolled back at the end.
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
@@ -253,6 +253,15 @@ select is(
     '50000000-0000-4000-8000-000000000014')->>'actual_cost_total')::bigint,
   145::bigint,'Completed job cost deducts reusable offcut credit once'
 );
+
+select is(
+  public.owner_set_order_delivery_address('acacacac-acac-4cac-8cac-acacacacacac',
+    'abababab-abab-4bab-8bab-abababababab','61000000-0000-4000-8000-000000000002')->>'customer_address_id',
+  'abababab-abab-4bab-8bab-abababababab','Owner can link a saved customer address to the order');
+
+select is(
+  (select customer_address_id::text from public.orders where id='acacacac-acac-4cac-8cac-acacacacacac'),
+  'abababab-abab-4bab-8bab-abababababab','Order retains its selected delivery address for later fulfilment');
 
 select is(
   public.owner_record_delivery('acacacac-acac-4cac-8cac-acacacacacac','courier','Test Courier','TRACK-ADDR-1',
