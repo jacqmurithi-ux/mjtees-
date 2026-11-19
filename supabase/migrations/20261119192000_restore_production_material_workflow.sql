@@ -347,6 +347,7 @@ as $function$
 declare
   v_material public.production_job_materials%rowtype;
   v_stock public.stock_items%rowtype;
+  v_job_stage text;
   v_cost numeric(14,2);
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
@@ -364,6 +365,15 @@ begin
   ) then
     raise exception 'Job material not found';
   end if;
+
+  select stage into v_job_stage
+  from public.production_jobs
+  where id=v_material.job_id and business_id=v_material.business_id
+  for update;
+  if not found or v_job_stage in ('delivered','cancelled') then
+    raise exception 'Cannot issue material for a closed production job';
+  end if;
+
   if v_material.issued_quantity+p_quantity>v_material.planned_quantity then
     raise exception 'Issue quantity exceeds planned balance';
   end if;
