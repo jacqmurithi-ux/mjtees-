@@ -256,3 +256,67 @@ grant execute on function public.owner_set_production_stage(uuid,text) to authen
 grant execute on function public.owner_record_payment(uuid,text,text,numeric,text) to authenticated;
 grant execute on function public.owner_record_expense(text,text,numeric,text,date) to authenticated;
 grant execute on function public.owner_operational_report() to authenticated;
+
+
+create or replace function public.owner_create_supplier(p_supplier_name text,p_phone text default null,p_email text default null)
+returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_id uuid;
+begin
+ select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
+ if v_business is null or length(btrim(coalesce(p_supplier_name,'')))<2 then raise exception 'Valid supplier and owner workspace required'; end if;
+ insert into public.suppliers(business_id,supplier_name,phone,email)
+ values(v_business,btrim(p_supplier_name),nullif(btrim(p_phone),''),nullif(btrim(p_email),'')) returning id into v_id;
+ return v_id;
+end $$;
+
+create or replace function public.owner_create_purchase_order(
+ p_supplier_id uuid,p_po_number text,p_transport_cost numeric,p_lines jsonb
+) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_total numeric(14,2):=0; v_line jsonb; v_stock uuid; v_qty numeric; v_cost numeric; v_po uuid;
+begin
+ select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
+ if v_business is null or not exists(select 1 from public.suppliers where id=p_supplier_id and business_id=v_business) then raise exception 'Supplier not found'; end if;
+ if p_transport_cost<0 or jsonb_typeof(p_lines)<>'array' or jsonb_array_length(p_lines)=0 then raise exception 'Invalid purchase order'; end if;
+ for v_line in select value from jsonb_array_elements(p_lines) loop
+  v_stock:=(v_line->>'stock_item_id')::uuid; v_qty:=(v_line->>'quantity')::numeric; v_cost:=(v_line->>'unit_cost')::numeric;
+  if v_qty<=0 or v_cost<0 or not exists(select 1 from public.stock_items where id=v_stock and business_id=v_business and active) then raise exception 'Invalid purchase line'; end if;
+  v_total:=v_total+(v_qty*v_cost);
+ end loop;
+ insert into public.purchase_orders(business_id,supplier_id,po_number,status,total,transport_cost)
+ values(v_business,p_supplier_id,btrim(p_po_number),'sent',v_total,p_transport_cost) returning id into v_po;
+ for v_line in select value from jsonb_array_elements(p_lines) loop
+  v_stock:=(v_line->>'stock_item_id')::uuid; v_qty:=(v_line->>'quantity')::numeric; v_cost:=(v_line->>'unit_cost')::numeric;
+  insert into public.purchase_order_lines(business_id,purchase_order_id,stock_item_id,item_description,quantity,unit_cost)
+  select v_business,v_po,s.id,s.item_name,v_qty,v_cost from public.stock_items s where s.id=v_stock and s.business_id=v_business;
+ end loop;
+ return v_po;
+end $$;
+
+create or replace function public.owner_receive_purchase_order_line(p_line_id uuid,p_received_quantity numeric)
+returns void language plpgsql security invoker set search_path=public,pg_temp as $$
+declare l public.purchase_order_lines%rowtype; po public.purchase_orders%rowtype; s public.stock_items%rowtype;
+ v_landed numeric(14,4); v_new_qty numeric(14,3); v_received numeric(14,3);
+begin
+ select * into l from public.purchase_order_lines where id=p_line_id for update;
+ if not found or not exists(select 1 from public.business_memberships where business_id=l.business_id and user_id=auth.uid() and role='owner') then raise exception 'Purchase line not found'; end if;
+ select * into po from public.purchase_orders where id=l.purchase_order_id for update;
+ if po.status in('cancelled','received') or p_received_quantity<=0 or l.received_quantity+p_received_quantity>l.quantity then raise exception 'Invalid or excess goods receipt'; end if;
+ select * into s from public.stock_items where id=l.stock_item_id and business_id=l.business_id for update;
+ if not found then raise exception 'Stock item not found'; end if;
+ v_landed:=l.unit_cost+case when po.total>0 then (po.transport_cost*(l.quantity*l.unit_cost/po.total))/l.quantity else 0 end;
+ v_new_qty:=s.quantity_on_hand+p_received_quantity;
+ update public.stock_items set average_unit_cost=case when v_new_qty>0 then ((s.quantity_on_hand*s.average_unit_cost)+(p_received_quantity*v_landed))/v_new_qty else v_landed end,
+ quantity_on_hand=v_new_qty where id=s.id;
+ update public.purchase_order_lines set received_quantity=received_quantity+p_received_quantity where id=l.id;
+ insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
+ values(l.business_id,s.id,'purchase',p_received_quantity,v_landed,auth.uid());
+ select coalesce(sum(received_quantity),0) into v_received from public.purchase_order_lines where purchase_order_id=po.id;
+ update public.purchase_orders set status=case when v_received>= (select sum(quantity) from public.purchase_order_lines where purchase_order_id=po.id) then 'received' else 'part_received' end where id=po.id;
+end $$;
+
+revoke all on function public.owner_create_supplier(text,text,text) from public,anon;
+revoke all on function public.owner_create_purchase_order(uuid,text,numeric,jsonb) from public,anon;
+revoke all on function public.owner_receive_purchase_order_line(uuid,numeric) from public,anon;
+grant execute on function public.owner_create_supplier(text,text,text) to authenticated;
+grant execute on function public.owner_create_purchase_order(uuid,text,numeric,jsonb) to authenticated;
+grant execute on function public.owner_receive_purchase_order_line(uuid,numeric) to authenticated;
