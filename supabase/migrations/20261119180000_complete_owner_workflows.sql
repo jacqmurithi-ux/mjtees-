@@ -167,7 +167,7 @@ begin
  if v_business is null then raise exception 'Owner workspace required'; end if;
  with ranked as (
   select po.supplier_id,s.supplier_name,pol.stock_item_id,pol.id line_id,pol.unit_cost,po.created_at,
-   si.item_name,row_number() over(partition by po.supplier_id,pol.stock_item_id order by po.created_at desc,pol.id desc) rn
+   si.item_name,row_number() over(partition by po.supplier_id,pol.stock_item_id order by po.created_at desc,po.po_number desc,pol.id desc) rn
   from public.purchase_order_lines pol join public.purchase_orders po on po.id=pol.purchase_order_id
   join public.suppliers s on s.id=po.supplier_id join public.stock_items si on si.id=pol.stock_item_id
   where po.business_id=v_business and po.status<>'cancelled' and pol.stock_item_id is not null
