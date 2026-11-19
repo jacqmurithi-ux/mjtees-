@@ -156,21 +156,22 @@ create or replace function public.owner_create_quotation(
  p_customer_id uuid,p_costing_profile_id uuid,p_quote_number text,p_valid_until date,p_lines jsonb,
  p_allow_below_floor boolean default false,p_exception_reason text default null
 ) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
-declare v_business uuid; v_user uuid; v_quote uuid; v_profile uuid; v_total numeric(14,2):=0; v_cost numeric(14,2):=0;
+declare v_business uuid; v_user uuid; v_quote uuid; v_profile uuid; v_profile_direct_cost numeric(14,2); v_total numeric(14,2):=0; v_cost numeric(14,2):=0;
  v_line jsonb; v_qty numeric; v_price numeric; v_cost_line numeric; v_desc text;
 begin
  v_user:=auth.uid();
  select business_id into v_business from public.business_memberships where user_id=v_user and role='owner' limit 1;
  if v_business is null then raise exception 'Owner workspace required'; end if;
  if not exists(select 1 from public.customers where id=p_customer_id and business_id=v_business) then raise exception 'Customer not found in this workspace'; end if;
- select id into v_profile from public.costing_profiles where id=p_costing_profile_id and business_id=v_business and is_active;
+ select id,direct_cost into v_profile,v_profile_direct_cost from public.costing_profiles where id=p_costing_profile_id and business_id=v_business and is_active;
  if v_profile is null then raise exception 'An active versioned costing profile is required before pricing this quotation'; end if;
- if jsonb_typeof(p_lines)<>'array' or jsonb_array_length(p_lines)=0 then raise exception 'At least one quotation line is required'; end if;
+ if jsonb_typeof(p_lines)<>'array' or jsonb_array_length(p_lines)<>1 then raise exception 'This costing profile prices one production line per quotation'; end if;
+ v_cost:=v_profile_direct_cost;
  for v_line in select value from jsonb_array_elements(p_lines) loop
   v_qty:=(v_line->>'quantity')::numeric; v_price:=(v_line->>'unit_price')::numeric;
-  v_cost_line:=coalesce((v_line->>'direct_cost')::numeric,0); v_desc:=btrim(v_line->>'description');
-  if v_qty<=0 or v_price<0 or v_cost_line<0 or coalesce(v_desc,'')='' then raise exception 'Invalid quotation line'; end if;
-  v_total:=v_total+(v_qty*v_price); v_cost:=v_cost+v_cost_line;
+  v_cost_line:=0; v_desc:=btrim(v_line->>'description');
+  if v_qty<=0 or v_price<0 or coalesce(v_desc,'')='' then raise exception 'Invalid quotation line'; end if;
+  v_total:=v_total+(v_qty*v_price);
  end loop;
  if v_total<=0 then raise exception 'Quotation total must be greater than zero'; end if;
  if ((v_total-v_cost)/v_total)*100 < 30 then
@@ -185,9 +186,8 @@ begin
  returning id into v_quote;
  for v_line in select value from jsonb_array_elements(p_lines) loop
   v_qty:=(v_line->>'quantity')::numeric; v_price:=(v_line->>'unit_price')::numeric;
-  v_cost_line:=coalesce((v_line->>'direct_cost')::numeric,0);
   insert into public.quotation_lines(business_id,quotation_id,description,quantity,unit_price,direct_cost,line_total,details)
-  values(v_business,v_quote,btrim(v_line->>'description'),v_qty,v_price,v_cost_line,v_qty*v_price,coalesce(v_line->'details','{}'::jsonb));
+  values(v_business,v_quote,btrim(v_line->>'description'),v_qty,v_price,v_cost,v_qty*v_price,coalesce(v_line->'details','{}'::jsonb));
  end loop;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(v_business,v_user,'quotation.created','quotation',v_quote,jsonb_build_object('total',v_total,'direct_cost',v_cost,'gross_margin_percent',round(((v_total-v_cost)/v_total)*100,2)));
