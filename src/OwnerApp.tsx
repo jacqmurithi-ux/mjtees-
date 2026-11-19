@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase, supabaseConfigured } from "./lib/supabase";
 import QuoteWorkflow from "./QuoteWorkflow";
 import PaymentWorkflow from "./PaymentWorkflow";
+import CreditNoteWorkflow from "./CreditNoteWorkflow";
 import OrderProductionWorkflow from "./OrderProductionWorkflow";
 import ShopOperationsWorkflow from "./ShopOperationsWorkflow";
 import CatalogueManagement from "./CatalogueManagement";
@@ -16,13 +17,13 @@ type Business = { id: string; name: string; trading_name: string | null };
 type Customer = { id: string; display_name: string; business_name: string | null; phone: string | null; email: string | null; created_at: string };
 type Enquiry = { id: string; public_reference: string; contact_name: string; phone: string | null; email: string | null; requested_service: string; description: string; quantity: number | null; desired_by: string | null; customer_supplies_item: boolean; artwork_drive_url: string | null; status: string; created_at: string };
 
-const sections = ["Overview", "Enquiries", "Customers", "Catalogue", "Website Content", "Quotations", "Orders", "Payments", "Inventory", "Purchasing", "Production", "Expenses", "Daily Closing", "Reconciliation", "Deliveries", "Reports"] as const;
+const sections = ["Overview", "Enquiries", "Customers", "Catalogue", "Website Content", "Quotations", "Orders", "Payments", "Credit Notes", "Inventory", "Purchasing", "Production", "Expenses", "Daily Closing", "Reconciliation", "Deliveries", "Reports"] as const;
 type Section = typeof sections[number];
 const requestId = () => crypto.randomUUID();
 const money = (n:number) => new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:0}).format(n);
 const primaryMobile: Section[] = ["Overview", "Enquiries", "Orders", "Payments"];
-const moreSections: Section[] = ["Customers", "Catalogue", "Quotations", "Inventory", "Purchasing", "Production", "Expenses", "Daily Closing", "Reconciliation", "Deliveries", "Reports"];
-const navIcon: Record<Section,string> = { Overview:"⌂",Enquiries:"✉",Customers:"♙",Catalogue:"▦","Website Content":"✎",Quotations:"▤",Orders:"▣",Payments:"KSh",Inventory:"▥",Purchasing:"↗",Production:"⚙",Expenses:"−","Daily Closing":"▣",Reconciliation:"↔",Deliveries:"➜",Reports:"▥" };
+const moreSections: Section[] = ["Customers", "Catalogue", "Quotations", "Credit Notes", "Inventory", "Purchasing", "Production", "Expenses", "Daily Closing", "Reconciliation", "Deliveries", "Reports"];
+const navIcon: Record<Section,string> = { Overview:"⌂",Enquiries:"✉",Customers:"♙",Catalogue:"▦","Website Content":"✎",Quotations:"▤",Orders:"▣",Payments:"KSh","Credit Notes":"CN",Inventory:"▥",Purchasing:"↗",Production:"⚙",Expenses:"−","Daily Closing":"▣",Reconciliation:"↔",Deliveries:"➜",Reports:"▥" };
 
 export default function OwnerApp({ onExit }: { onExit: () => void }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -144,6 +145,7 @@ export default function OwnerApp({ onExit }: { onExit: () => void }) {
       {section === "Orders" && business && <OrderProductionWorkflow businessId={business.id} customers={customers} onChanged={() => void loadWorkspace()} />}
       {section === "Production" && business && <OrderProductionWorkflow businessId={business.id} customers={customers} onChanged={() => void loadWorkspace()} />}
       {section === "Payments" && business && <PaymentWorkflow businessId={business.id} customers={customers} onChanged={() => void loadWorkspace()} />}
+      {section === "Credit Notes" && business && <CreditNoteWorkflow businessId={business.id} customers={customers} onChanged={() => void loadWorkspace()} />}
       {["Inventory","Purchasing","Expenses"].includes(section) && business && <ShopOperationsWorkflow businessId={business.id} section={section as "Inventory"|"Purchasing"|"Expenses"} onChanged={() => void loadWorkspace()} />}
       {["Daily Closing","Reconciliation","Deliveries","Reports"].includes(section) && business && <Milestone08Workflow businessId={business.id} section={section as "Daily Closing"|"Reconciliation"|"Deliveries"|"Reports"} onChanged={() => void loadWorkspace()} /> }
       <footer className="connected-footer">MJ Printing & Branding · KES · Africa/Nairobi</footer>
