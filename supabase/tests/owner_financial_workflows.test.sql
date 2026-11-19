@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(40);
 
 -- Isolated synthetic fixtures; all changes are rolled back at the end.
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
@@ -16,6 +16,15 @@ values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111
 
 insert into public.customers(id,business_id,display_name,created_by)
 values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Test Customer','11111111-1111-4111-8111-111111111111');
+
+insert into public.customer_addresses(id,business_id,customer_id,label,recipient_name,phone,address_text,locality,is_default)
+values('abababab-abab-4bab-8bab-abababababab','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','Main shop','Jane Recipient','0712345678',
+ '12 Market Road, Unit 4','Nanyuki',true);
+
+insert into public.orders(id,business_id,order_number,customer_id,status,subtotal_amount,discount_amount,total_amount,created_by)
+values('acacacac-acac-4cac-8cac-acacacacacac','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','TEST-ORDER-DELIVERY',
+ 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','ready',1000,0,1000,'11111111-1111-4111-8111-111111111111');
 
 insert into public.orders(id,business_id,order_number,customer_id,status,subtotal_amount,discount_amount,total_amount,created_by)
 values('cccccccc-cccc-4ccc-8ccc-cccccccccccc','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','TEST-ORDER-1',
@@ -245,9 +254,31 @@ select is(
   145::bigint,'Completed job cost deducts reusable offcut credit once'
 );
 
+select is(
+  public.owner_set_order_delivery_address('acacacac-acac-4cac-8cac-acacacacacac',
+    'abababab-abab-4bab-8bab-abababababab','61000000-0000-4000-8000-000000000002')->>'customer_address_id',
+  'abababab-abab-4bab-8bab-abababababab','Owner can link a saved customer address to the order');
+
+select is(
+  (select customer_address_id::text from public.orders where id='acacacac-acac-4cac-8cac-acacacacacac'),
+  'abababab-abab-4bab-8bab-abababababab','Order retains its selected delivery address for later fulfilment');
+
+select is(
+  public.owner_record_delivery('acacacac-acac-4cac-8cac-acacacacacac','courier','Test Courier','TRACK-ADDR-1',
+    150,'Jane Recipient','61000000-0000-4000-8000-000000000001','abababab-abab-4bab-8bab-abababababab')->>'customer_address_id',
+  'abababab-abab-4bab-8bab-abababababab','Delivery attempt stores the selected saved customer address'
+);
+
+select is(
+  (select destination_address_text||'|'||destination_locality||'|'||destination_phone
+   from public.deliveries where order_id='acacacac-acac-4cac-8cac-acacacacacac'),
+  '12 Market Road, Unit 4|Nanyuki|0712345678',
+  'Delivery stores an immutable destination snapshot for handover history'
+);
+
 select throws_ok(
-  $$select public.owner_handover_order('cccccccc-cccc-4ccc-8ccc-cccccccccccc','collection','Customer',null,null,
-    '60000000-0000-4000-8000-000000000001')$$,
+  $select public.owner_handover_order('cccccccc-cccc-4ccc-8ccc-cccccccccccc','collection','Customer',null,null,
+    '60000000-0000-4000-8000-000000000001')$,
   '22023',null,'Handover is blocked while an order balance remains'
 );
 
