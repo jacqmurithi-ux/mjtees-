@@ -71,3 +71,16 @@ test('the repair is additive and does not alter payments or existing customer re
   assert.doesNotMatch(migration, /drop table|truncate|delete from public\.(customers|payments|sales_invoices)/i);
   assert.doesNotMatch(migration, /payment_reversal|reverse_payment/i);
 });
+
+test('Production screen queries the restored schema, calls the matching RPCs, and exposes Supabase diagnostics', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  for (const table of ['production_jobs','stock_items','production_job_materials']) {
+    assert.match(operations, new RegExp("from\\('" + table + "'\\)"));
+  }
+  for (const rpc of ['owner_add_job_material','owner_issue_job_material','owner_set_production_stage']) {
+    assert.ok(operations.includes(rpc), rpc + ' is wired to the Production screen');
+  }
+  assert.match(operations, /Reflect\.get\(e,'message'\)/);
+  assert.match(operations, /Reflect\.get\(e,'details'\)/);
+  assert.match(operations, /Reflect\.get\(e,'hint'\)/);
+});
