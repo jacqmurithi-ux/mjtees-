@@ -14,7 +14,8 @@
     "test:pricing": "node --test tests/pricing.test.mjs",
     "test:bulk-printing": "node --test tests/bulk-printing.test.mjs",
     "test:sales-schema": "node --test tests/sales-schema-migration.test.mjs",
-    "test": "npm run test:pricing && npm run test:sales-schema && npm run test:bulk-printing"
+    "test": "npm run test:pricing && npm run test:sales-schema && npm run test:bulk-printing && npm run test:custom-orders",
+    "test:custom-orders": "node --test tests/custom-order-management.test.mjs"
   },
   "dependencies": {
     "react": "19.3.1",

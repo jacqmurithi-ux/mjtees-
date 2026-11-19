@@ -29,3 +29,5 @@ jobs:
         run: npm run test:bulk-printing
       - name: Test Sales schema migration safeguards
         run: npm run test:sales-schema
+      - name: Test custom order management safeguards
+        run: npm run test:custom-orders
