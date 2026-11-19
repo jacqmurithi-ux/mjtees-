@@ -72,7 +72,7 @@ grant select on public.supplier_price_reviews to authenticated;
 
 create or replace function public.owner_record_supplier_payment(
  p_supplier_id uuid,p_purchase_order_id uuid,p_payment_number text,p_method text,p_amount numeric,p_reference_code text default null
-) returns uuid language plpgsql security definer set search_path=public,pg_temp as $
+) returns uuid language plpgsql security definer set search_path=public,pg_temp as $fn$
 declare v_business uuid; v_due numeric(14,2); v_id uuid;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -87,11 +87,11 @@ begin
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(v_business,auth.uid(),'supplier.payment_recorded','supplier_payment',v_id,jsonb_build_object('supplier_id',p_supplier_id,'purchase_order_id',p_purchase_order_id,'amount',p_amount));
  return v_id;
-end $$;
+end $fn$;
 
 create or replace function public.owner_record_quote_deposit(
  p_quote_id uuid,p_deposit_number text,p_method text,p_amount numeric,p_reference_code text default null
-) returns uuid language plpgsql security definer set search_path=public,pg_temp as $
+) returns uuid language plpgsql security definer set search_path=public,pg_temp as $fn$
 declare q public.quotations%rowtype; v_received numeric(14,2); v_id uuid;
 begin
  select * into q from public.quotations where id=p_quote_id for update;
@@ -105,10 +105,10 @@ begin
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(q.business_id,auth.uid(),'quotation.deposit_received','quotation',q.id,jsonb_build_object('deposit_id',v_id,'amount',p_amount));
  return v_id;
-end $$;
+end $fn$;
 
 create or replace function public.owner_record_refund(p_payment_id uuid,p_amount numeric,p_reason text)
-returns uuid language plpgsql security definer set search_path=public,pg_temp as $
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $fn$
 declare p public.payments%rowtype; v_refunded numeric(14,2); v_id uuid;
 begin
  select * into p from public.payments where id=p_payment_id;
@@ -119,10 +119,10 @@ begin
  insert into public.refunds(business_id,payment_id,amount,reason,status,created_by)
  values(p.business_id,p.id,p_amount,btrim(p_reason),'pending',auth.uid()) returning id into v_id;
  return v_id;
-end $$;
+end $fn$;
 
 create or replace function public.owner_post_refund(p_refund_id uuid)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $fn$
 declare r public.refunds%rowtype;
 begin
  select * into r from public.refunds where id=p_refund_id for update;
@@ -131,10 +131,10 @@ begin
  update public.refunds set status='posted',posted_by=auth.uid(),posted_at=now() where id=r.id;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(r.business_id,auth.uid(),'refund.posted','refund',r.id,jsonb_build_object('payment_id',r.payment_id,'amount',r.amount,'reason',r.reason));
-end $$;
+end $fn$;
 
 create or replace function public.owner_adjust_inventory(p_stock_item_id uuid,p_quantity_delta numeric,p_reason text)
-returns void language plpgsql security definer set search_path=public,private,pg_temp as $
+returns void language plpgsql security definer set search_path=public,private,pg_temp as $fn$
 declare s public.stock_items%rowtype; v_business uuid;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -144,10 +144,10 @@ begin
  perform private.apply_stock_movement(v_business,s.id,p_quantity_delta,s.average_unit_cost,'adjustment');
  insert into public.inventory_adjustments(business_id,stock_item_id,quantity_delta,reason,created_by)
  values(v_business,s.id,p_quantity_delta,btrim(p_reason),auth.uid());
-end $$;
+end $fn$;
 
 create or replace function public.owner_review_supplier_price_change(p_supplier_id uuid,p_stock_item_id uuid,p_previous_line_id uuid,p_latest_line_id uuid)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $fn$
 declare v_business uuid;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -157,10 +157,10 @@ begin
  and a.stock_item_id=p_stock_item_id and b.stock_item_id=p_stock_item_id and pa.business_id=v_business and pb.business_id=v_business) then raise exception 'Price change record not found'; end if;
  insert into public.supplier_price_reviews(business_id,supplier_id,stock_item_id,previous_line_id,latest_line_id,reviewed_by)
  values(v_business,p_supplier_id,p_stock_item_id,p_previous_line_id,p_latest_line_id,auth.uid()) on conflict do nothing;
-end $$;
+end $fn$;
 
 create or replace function public.owner_supplier_price_alerts()
-returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $$
+returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $fn$$
 declare v_business uuid; v_result jsonb;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -181,10 +181,10 @@ begin
  select coalesce(jsonb_agg(jsonb_build_object('supplier_id',p.supplier_id,'supplier_name',p.supplier_name,'stock_item_id',p.stock_item_id,'item_name',p.item_name,'previous_line_id',p.previous_line_id,'latest_line_id',p.latest_line_id,'previous_cost',p.previous_cost,'latest_cost',p.latest_cost,'change_percent',p.change_percent,'created_at',p.created_at,'reviewed',exists(select 1 from public.supplier_price_reviews r where r.business_id=v_business and r.previous_line_id=p.previous_line_id and r.latest_line_id=p.latest_line_id)) order by p.created_at desc),'[]'::jsonb)
  into v_result from pairs p;
  return v_result;
-end $$;
+end $fn$;
 
 create or replace function public.owner_job_report()
-returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $$
+returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $fn$$
 declare v_business uuid; v_result jsonb;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -202,7 +202,7 @@ begin
  into v_result from public.production_jobs j join public.customers c on c.id=j.customer_id
  left join public.sales_invoices i on i.id=j.invoice_id where j.business_id=v_business;
  return v_result;
-end $$;
+end $fn$;
 
 revoke all on function public.owner_record_supplier_payment(uuid,uuid,text,text,numeric,text) from public,anon;
 revoke all on function public.owner_record_quote_deposit(uuid,text,text,numeric,text) from public,anon;
