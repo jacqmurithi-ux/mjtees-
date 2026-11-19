@@ -151,3 +151,22 @@ test('Production planning supports multiple material requirements on one job and
   assert.match(operations, /material\.job_id!==selectedJob/);
   assert.match(operations, /owner_add_job_material/);
 });
+
+
+test('quotation form uses whole quantities and integer KSh selling prices', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /Quantity',qty,setQty,\{type:'number',min:'1',step:'1'\}/);
+  assert.match(operations, /Unit selling price \(KES\)',price,setPrice,\{type:'number',min:'1',step:'1'\}/);
+  assert.match(operations, /Quantity must be a whole number of at least 1/);
+  assert.match(operations, /Unit selling price must be at least KSh 1/);
+});
+
+test('quotation pricing shows rounded minimum, 1.8x warning and margin exception reason', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /Math\.ceil\(directCostPerPiece\*1\.3\)/);
+  assert.match(operations, /directCostPerPiece\*1\.8/);
+  assert.match(operations, /Below 1\.8× full-cost target/);
+  assert.match(operations, /Approved exception:/);
+  assert.match(operations, /Below 30% margin/);
+  assert.match(operations, /blank_cost_per_piece:effectiveBlankCost/);
+});
