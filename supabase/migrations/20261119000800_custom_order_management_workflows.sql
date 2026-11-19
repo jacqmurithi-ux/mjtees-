@@ -67,7 +67,7 @@ begin
   if not found then raise exception using errcode='P0002',message='Production job not found'; end if;
   v_actor:=private.assert_active_owner(v_job.business_id);
   if p_request_id is null
-    or p_storage_path is null or p_storage_path !~ '^https://(drive|docs)\\.google\\.com/'
+    or p_storage_path is null or p_storage_path !~ '^https://(drive|docs)[.]google[.]com/'
     or length(btrim(coalesce(p_file_name,''))) not between 1 and 255
     or length(coalesce(p_notes,''))>1000 then
     raise exception using errcode='22023',message='Provide a Google Drive artwork link, file name and valid notes';
