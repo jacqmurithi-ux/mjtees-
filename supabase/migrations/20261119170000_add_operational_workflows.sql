@@ -88,8 +88,8 @@ revoke insert,update,delete on public.stock_movements from authenticated;
 grant select on public.stock_movements to authenticated;
 revoke update,delete on public.payments,public.payment_allocations,public.audit_events from authenticated;
 grant select,insert on public.payments,public.payment_allocations,public.audit_events to authenticated;
-revoke delete on public.production_job_materials from authenticated;
-grant select,insert,update on public.production_job_materials to authenticated;
+revoke update,delete on public.production_job_materials from authenticated;
+grant select,insert on public.production_job_materials to authenticated;
 
 create or replace function private.apply_stock_movement(
  p_business_id uuid,p_stock_item_id uuid,p_quantity numeric,p_unit_cost numeric,p_movement_type text
@@ -326,10 +326,10 @@ returns void language plpgsql security invoker set search_path=public,pg_temp as
 declare m public.production_job_materials%rowtype; s public.stock_items%rowtype; v_user uuid;
 begin
  v_user:=auth.uid();
- select * into m from public.production_job_materials where id=p_job_material_id for update;
+ select * into m from public.production_job_materials where id=p_job_material_id;
  if not found or not exists(select 1 from public.business_memberships where business_id=m.business_id and user_id=v_user and role='owner') then raise exception 'Job material not found'; end if;
  if p_quantity<=0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Issue quantity exceeds planned balance'; end if;
- select * into s from public.stock_items where id=m.stock_item_id and business_id=m.business_id for update;
+ select * into s from public.stock_items where id=m.stock_item_id and business_id=m.business_id;
  if s.quantity_on_hand<p_quantity then raise exception 'Insufficient stock'; end if;
  perform private.apply_stock_movement(m.business_id,s.id,-p_quantity,s.average_unit_cost,'job_issue');
  perform private.update_job_material_issue(m.business_id,m.id,p_quantity,p_quantity*s.average_unit_cost);
@@ -339,7 +339,7 @@ create or replace function public.owner_set_production_stage(p_job_id uuid,p_sta
 returns void language plpgsql security invoker set search_path=public,pg_temp as $$
 declare v_business uuid; v_old text;
 begin
- select business_id,stage into v_business,v_old from public.production_jobs where id=p_job_id for update;
+ select business_id,stage into v_business,v_old from public.production_jobs where id=p_job_id;
  if v_business is null or not exists(select 1 from public.business_memberships where business_id=v_business and user_id=auth.uid() and role='owner') then raise exception 'Production job not found'; end if;
  if p_stage not in('awaiting_artwork','artwork_proof','screens_prepared','printing','finishing','quality_check','ready','delivered','cancelled') then raise exception 'Invalid production stage'; end if;
  if v_old in('delivered','cancelled') then raise exception 'Closed jobs cannot be changed'; end if;
@@ -352,7 +352,7 @@ create or replace function public.owner_record_payment(
 declare i public.sales_invoices%rowtype; v_payment uuid; v_user uuid;
 begin
  v_user:=auth.uid();
- select * into i from public.sales_invoices where id=p_invoice_id for update;
+ select * into i from public.sales_invoices where id=p_invoice_id;
  if not found or not exists(select 1 from public.business_memberships where business_id=i.business_id and user_id=v_user and role='owner') then raise exception 'Invoice not found'; end if;
  if p_method not in('cash','mpesa_paybill') or p_amount<=0 or p_amount>i.balance then raise exception 'Invalid payment method or amount exceeds invoice balance'; end if;
  insert into public.payments(business_id,customer_id,payment_number,method,amount,reference_code,received_by)
@@ -467,11 +467,11 @@ returns void language plpgsql security invoker set search_path=public,pg_temp as
 declare l public.purchase_order_lines%rowtype; po public.purchase_orders%rowtype; s public.stock_items%rowtype;
  v_landed numeric(14,4); v_new_qty numeric(14,3); v_received numeric(14,3);
 begin
- select * into l from public.purchase_order_lines where id=p_line_id for update;
+ select * into l from public.purchase_order_lines where id=p_line_id;
  if not found or not exists(select 1 from public.business_memberships where business_id=l.business_id and user_id=auth.uid() and role='owner') then raise exception 'Purchase line not found'; end if;
- select * into po from public.purchase_orders where id=l.purchase_order_id for update;
+ select * into po from public.purchase_orders where id=l.purchase_order_id;
  if po.status in('cancelled','received') or p_received_quantity<=0 or l.received_quantity+p_received_quantity>l.quantity then raise exception 'Invalid or excess goods receipt'; end if;
- select * into s from public.stock_items where id=l.stock_item_id and business_id=l.business_id for update;
+ select * into s from public.stock_items where id=l.stock_item_id and business_id=l.business_id;
  if not found then raise exception 'Stock item not found'; end if;
  v_landed:=l.unit_cost+case when po.total>0 then (po.transport_cost*(l.quantity*l.unit_cost/po.total))/l.quantity else 0 end;
  perform private.apply_stock_movement(l.business_id,s.id,p_received_quantity,v_landed,'purchase');
