@@ -198,3 +198,32 @@ test('quotation conversion continues to allocate deposits through the existing o
   assert.match(operations, /payment ledger remains append-only/);
   assert.doesNotMatch(operations, /reverse_payment|payment_reversal/i);
 });
+
+
+test('costing profiles use multiple per-piece components with separate blank-item and production categories', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /costComponents/);
+  assert.match(operations, /category:'blank_item'/);
+  assert.match(operations, /category:'production'/);
+  assert.match(operations, /basis:'per_piece'/);
+  assert.match(operations, /profileCostTotal/);
+  assert.match(operations, /Minimum price · 30% margin/);
+  assert.match(operations, /Full-cost target · 1.8×/);
+});
+
+test('customer-supplied items exclude blank-item cost but retain production costs from the active profile', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /activeBlankProfileCost/);
+  assert.match(operations, /activeProductionCost/);
+  assert.match(operations, /customerSupplied\?0:.*activeBlankProfileCost/);
+  assert.match(operations, /effectiveBlankCost\+activeProductionCost/);
+  assert.match(operations, /components\)\.eq\('is_active',true\)/);
+});
+
+test('cost profile history displays component breakdown and retains immutable version activation', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /p\.components\.map/);
+  assert.match(operations, /owner_create_costing_profile/);
+  assert.match(operations, /owner_activate_costing_profile/);
+  assert.match(operations, /older versions remain in the audit history|Earlier versions and quotations keep their recorded costs/);
+});
