@@ -68,13 +68,14 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
 
   useEffect(()=>{
-    if(!supabase)return;
-    const channel=supabase.channel("quote-workflow-"+businessId)
+    const client=supabase;
+    if(!client)return;
+    const channel=client.channel("quote-workflow-"+businessId)
       .on("postgres_changes",{event:"*",schema:"public",table:"quotations",filter:"business_id=eq."+businessId},()=>{void load();})
       .on("postgres_changes",{event:"*",schema:"public",table:"orders",filter:"business_id=eq."+businessId},()=>{void load();})
       .on("postgres_changes",{event:"*",schema:"public",table:"sales_invoices",filter:"business_id=eq."+businessId},()=>{void load();})
       .subscribe();
-    return ()=>{void supabase.removeChannel(channel);};
+    return ()=>{void client.removeChannel(channel);};
   },[businessId,load]);
 
   async function createCostProfile(e:FormEvent){
