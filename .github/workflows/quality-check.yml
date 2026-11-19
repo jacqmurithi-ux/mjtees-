@@ -31,3 +31,5 @@ jobs:
         run: npm run test:sales-schema
       - name: Test custom order management safeguards
         run: npm run test:custom-orders
+      - name: Test customer-supplied printing and Realtime workflows
+        run: npm run test:service-only-printing
