@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(46);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values
@@ -110,8 +110,25 @@ insert into public.order_items(
   true,'blank'
 );
 
+-- Simulate legacy receiving accounts that predate the Cash/M-Pesa-only policy.
+-- The test temporarily disables only the new-account guard while seeding fixtures.
+alter table public.sales_payment_accounts disable trigger sales_payment_accounts_new_method_guard;
+insert into public.sales_payment_accounts(
+  id,business_id,account_name,account_type,account_reference,bank_name,created_by
+) values
+('d1000000-0000-4000-8000-000000000001','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ 'Legacy Main Bank','bank','Account ending 4567','Test Bank','11111111-1111-4111-8111-111111111111'),
+('d1000000-0000-4000-8000-000000000002','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ 'Legacy Cheque Clearing','cheque_clearing',null,null,'11111111-1111-4111-8111-111111111111');
+alter table public.sales_payment_accounts enable trigger sales_payment_accounts_new_method_guard;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
+select is(
+  (select count(*) from public.sales_payment_accounts
+   where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+     and account_type in ('bank','cheque_clearing')),
+  2::bigint,'Legacy bank and cheque receiving accounts remain preserved for history');
 
 select is(
   (select count(*) from public.sales_price_tiers where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
@@ -248,14 +265,16 @@ select is((public.owner_upsert_sales_payment_account(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'M-Pesa Paybill','mpesa_paybill','Paybill 123456',null,true,
   '71000000-0000-4000-8000-000000000002')->>'created')::boolean,
   true,'Owner can create a manual M-Pesa Paybill receiving account');
-select is((public.owner_upsert_sales_payment_account(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Main Bank','bank','Account ending 4567','Test Bank',true,
-  '71000000-0000-4000-8000-000000000003')->>'created')::boolean,
-  true,'Owner can create a bank receiving account');
-select is((public.owner_upsert_sales_payment_account(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Cheque Clearing','cheque_clearing',null,null,true,
-  '71000000-0000-4000-8000-000000000004')->>'created')::boolean,
-  true,'Owner can create a cheque-clearing account');
+select throws_ok(
+  $select public.owner_upsert_sales_payment_account(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'New Bank','bank','Account ending 4567','Test Bank',true,
+    '71000000-0000-4000-8000-000000000003')$,
+  '22023',null,'New bank receiving accounts are blocked');
+select throws_ok(
+  $select public.owner_upsert_sales_payment_account(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'New Cheque','cheque_clearing',null,null,true,
+    '71000000-0000-4000-8000-000000000004')$,
+  '22023',null,'New cheque-clearing accounts are blocked');
 
 -- One manually entered cash payment can be split across invoices; excess is
 -- retained as customer credit and the invoices remain partially paid.
@@ -323,24 +342,27 @@ select is((select count(*) from public.sales_payment_reconciliations
   where payment_id=(select id from public.payments where idempotency_key='72000000-0000-4000-8000-000000000001')),
   1::bigint,'Manual reconciliation is retained as an auditable record');
 
-select is((public.owner_record_sales_payment(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  (select id from public.sales_payment_accounts where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and account_name='Main Bank'),
-  'bank_transfer',50,now()-interval '5 minutes','BANK-REF-001',
-  jsonb_build_array(jsonb_build_object('invoice_id',(select id from public.sales_invoices where quotation_id='a2000000-0000-4000-8000-000000000002'),'amount',50)),
-  'Manual bank transfer entry','72000000-0000-4000-8000-000000000005')->>'status'),
-  'posted','Bank transfers can be manually recorded and allocated');
-select is((select method from public.payments where idempotency_key='72000000-0000-4000-8000-000000000005'),
-  'bank_transfer','Bank transfer method is preserved in the central payment ledger');
+select throws_ok(
+  $pt$select public.owner_record_sales_payment(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'd1000000-0000-4000-8000-000000000001',
+    'bank_transfer',50,now()-interval '5 minutes','BANK-REF-001','[]'::jsonb,
+    'Legacy bank payment attempt','72000000-0000-4000-8000-000000000005'
+  )$pt$,
+  '22023',null,'Legacy bank accounts remain readable but cannot receive new payments');
+select is((select count(*) from public.payments where idempotency_key='72000000-0000-4000-8000-000000000005'),
+  0::bigint,'Rejected bank payment does not create a payment record');
 
-select is((public.owner_record_sales_payment(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  (select id from public.sales_payment_accounts where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and account_name='Cheque Clearing'),
-  'cheque',25,now()-interval '5 minutes','CHEQUE-001','[]'::jsonb,
-  'Manual cheque entry','72000000-0000-4000-8000-000000000006')->>'status'),
-  'posted','Cheque receipts can be manually recorded');
-select is((select method from public.payments where idempotency_key='72000000-0000-4000-8000-000000000006'),
-  'cheque','Cheque method is preserved in the central payment ledger');
+select throws_ok(
+  $pt$select public.owner_record_sales_payment(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'd1000000-0000-4000-8000-000000000002',
+    'cheque',25,now()-interval '5 minutes','CHEQUE-001','[]'::jsonb,
+    'Legacy cheque payment attempt','72000000-0000-4000-8000-000000000006'
+  )$pt$,
+  '22023',null,'Legacy cheque accounts remain readable but cannot receive new payments');
+select is((select count(*) from public.payments where idempotency_key='72000000-0000-4000-8000-000000000006'),
+  0::bigint,'Rejected cheque payment does not create a payment record');
 
 select throws_ok(
   $pt$select public.owner_record_sales_payment(
