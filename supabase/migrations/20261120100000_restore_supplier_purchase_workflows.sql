@@ -116,8 +116,8 @@ begin
   end if;
   if length(btrim(coalesce(p_po_number, ''))) < 2
      or p_transport_cost is null or p_transport_cost < 0
-     or jsonb_typeof(p_lines) <> 'array'
-     or jsonb_array_length(p_lines) = 0 then
+     or coalesce(jsonb_typeof(p_lines), '') <> 'array'
+     or coalesce(jsonb_array_length(p_lines), 0) = 0 then
     raise exception 'Enter a purchase number, non-negative transport cost and at least one purchase line';
   end if;
   if exists (
@@ -403,25 +403,20 @@ begin
 
   with ranked as (
     select po.supplier_id, s.supplier_name,
-      coalesce(pol.stock_item_id, si.id) as stock_item_id,
+      pol.stock_item_id as stock_item_id,
       pol.id as line_id, pol.unit_cost, po.created_at,
-      coalesce(si.item_name, pol.item_description) as item_name,
+      si.item_name as item_name,
       row_number() over (
-        partition by po.supplier_id, coalesce(pol.stock_item_id, si.id)
+        partition by po.supplier_id, pol.stock_item_id
         order by po.created_at desc, po.po_number desc, pol.id desc
       ) as rn
     from public.purchase_order_lines pol
     join public.purchase_orders po on po.id = pol.purchase_order_id
     join public.suppliers s on s.id = po.supplier_id
-    left join public.stock_items si on si.id = pol.stock_item_id
+    join public.stock_items si on si.id = pol.stock_item_id
       and si.business_id = po.business_id
     where po.business_id = v_business
       and po.status <> 'cancelled'
-      and (pol.stock_item_id is not null or (
-        select count(*) from public.stock_items sx
-        where sx.business_id = po.business_id
-          and lower(btrim(sx.item_name)) = lower(btrim(pol.item_description))
-      ) = 1)
   ), pairs as (
     select a.supplier_id, a.supplier_name, a.stock_item_id, a.item_name,
       b.line_id as previous_line_id, a.line_id as latest_line_id,
@@ -489,18 +484,8 @@ begin
       and pb.supplier_id = p_supplier_id
       and pa.business_id = v_business
       and pb.business_id = v_business
-      and coalesce(a.stock_item_id, (
-        select si.id from public.stock_items si
-        where si.business_id = v_business
-          and lower(btrim(si.item_name)) = lower(btrim(a.item_description))
-        limit 1
-      )) = p_stock_item_id
-      and coalesce(b.stock_item_id, (
-        select si.id from public.stock_items si
-        where si.business_id = v_business
-          and lower(btrim(si.item_name)) = lower(btrim(b.item_description))
-        limit 1
-      )) = p_stock_item_id
+      and a.stock_item_id = p_stock_item_id
+      and b.stock_item_id = p_stock_item_id
   ) then
     raise exception 'Price change record not found';
   end if;
