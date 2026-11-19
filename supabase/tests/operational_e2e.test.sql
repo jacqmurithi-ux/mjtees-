@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(21);
+select extensions.plan(22);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -16,6 +16,19 @@ select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111'
 set local role authenticated;
 
 select extensions.is(public.owner_bootstrap_workspace()->>'business_name','MJ Printing & Branding','existing owner can bootstrap the new workspace');
+select extensions.ok(
+ not has_table_privilege('authenticated','public.costing_profiles','INSERT') and
+ not has_table_privilege('authenticated','public.quotations','INSERT') and
+ not has_table_privilege('authenticated','public.quotation_lines','INSERT') and
+ not has_table_privilege('authenticated','public.sales_invoices','INSERT') and
+ not has_table_privilege('authenticated','public.sales_invoice_items','INSERT') and
+ not has_table_privilege('authenticated','public.production_jobs','INSERT') and
+ not has_table_privilege('authenticated','public.purchase_orders','INSERT') and
+ not has_table_privilege('authenticated','public.payments','INSERT') and
+ not has_table_privilege('authenticated','public.payment_allocations','INSERT') and
+ not has_table_privilege('authenticated','public.expenses','INSERT') and
+ not has_table_privilege('authenticated','public.audit_events','INSERT'),
+ 'direct inserts into financial and audit tables are blocked');
 
 insert into public.customers(business_id,customer_name,customer_type,created_by)
 select (public.owner_bootstrap_workspace()->>'business_id')::uuid,'Baraka Uniform Supplies','school',auth.uid();
