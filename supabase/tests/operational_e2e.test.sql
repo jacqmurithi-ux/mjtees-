@@ -127,6 +127,7 @@ select extensions.is((select balance from public.sales_invoices where id=current
 select extensions.is((select sum(pa.amount) from public.payment_allocations pa join public.payments p on p.id=pa.payment_id where pa.invoice_id=current_setting('test.invoice_id')::uuid and p.payment_number='QD-DEP-TEST-001'),200::numeric,'quote deposit creates an allocated append-only payment record');
 select extensions.ok((select customer_supplied_items from public.production_jobs where id=current_setting('test.job_id')::uuid),'production job records customer-supplied garments');
 select extensions.is((select direct_cost from public.sales_invoice_items where invoice_id=current_setting('test.invoice_id')::uuid),600::numeric,'invoice retains the original quotation cost snapshot');
+select extensions.ok(exists(select 1 from public.sales_invoice_items ii join public.quotation_lines ql on ql.quotation_id=current_setting('test.quote_id')::uuid and ql.business_id=ii.business_id where ii.invoice_id=current_setting('test.invoice_id')::uuid and ii.cost_snapshot=ql.details->'cost_snapshot'),'invoice line carries the exact component breakdown snapshot from its quotation line');
 
 select set_config('test.mixed_profile_id',public.owner_create_costing_profile(
  'Mixed basis production',
