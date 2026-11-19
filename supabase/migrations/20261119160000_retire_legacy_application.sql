@@ -13,6 +13,7 @@ do $$ declare r record; begin
   for r in select p.oid::regprocedure as signature from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname='public' and p.prokind in('f','p')
     and not exists(select 1 from pg_depend d where d.classid='pg_proc'::regclass and d.objid=p.oid and d.refclassid='pg_extension'::regclass and d.deptype='e')
+    and not exists(select 1 from pg_depend d join pg_class auth_rel on auth_rel.oid=d.refobjid join pg_namespace auth_ns on auth_ns.oid=auth_rel.relnamespace where d.classid='pg_proc'::regclass and d.objid=p.oid and auth_ns.nspname='auth')
   loop execute format('drop routine if exists %s cascade',r.signature); end loop;
   for r in select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='public' and c.relkind='S'
