@@ -163,12 +163,12 @@ test('quotation form uses whole quantities and integer KSh selling prices', asyn
 
 test('quotation pricing shows rounded minimum, 1.8x warning and margin exception reason', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
-  assert.match(operations, /Math\.ceil\(directCostPerPiece\*1\.3\)/);
+  assert.match(operations, /Math\.ceil\(directCostPerPiece\/0\.7\)/);
   assert.match(operations, /directCostPerPiece\*1\.8/);
   assert.match(operations, /Below 1\.8× full-cost target/);
   assert.match(operations, /Approved exception:/);
   assert.match(operations, /Below 30% margin/);
-  assert.match(operations, /blank_cost_per_piece:effectiveBlankCost/);
+  assert.match(operations, /blank_cost_per_piece:blankCostPerPiece\.trim\(\)===''\?null:Number\(blankCostPerPiece\)/);
 });
 
 
@@ -216,7 +216,7 @@ test('customer-supplied items exclude blank-item cost but retain production cost
   assert.match(operations, /activeBlankProfileCost/);
   assert.match(operations, /activeProductionCost/);
   assert.match(operations, /customerSupplied\?0:.*activeBlankProfileCost/);
-  assert.match(operations, /effectiveBlankCost\+activeProductionCost/);
+  assert.match(operations, /activeProductionPerPiece\*quantity\+activeProductionPerJob/);
   assert.match(operations, /direct_cost,is_active,components'\)\.eq\('is_active',true\)/);
 });
 
@@ -324,4 +324,22 @@ test('Supplier purchasing migration preserves stock history and protects owner R
   assert.match(migration, /revoke all on function public\.owner_create_purchase_order/);
   assert.match(migration, /grant execute on function public\.owner_create_purchase_order/);
   assert.match(migration, /owner_supplier_price_alerts/);
+});
+
+
+test('pricing uses the 30 percent gross-margin denominator and an optional owner-set unit ceiling', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /directCostPerPiece\/0\.7/);
+  assert.match(operations, /\(\(total-cost\)\/total\)\*100/);
+  assert.match(operations, /owner_update_max_unit_selling_price/);
+  assert.match(operations, /max_unit_selling_price/);
+  assert.match(operations, /savedMaxUnitPrice!==null&&Number\(price\)>savedMaxUnitPrice/);
+});
+
+test('costing profiles preserve per-piece and per-job component bases in new immutable versions', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /basis:c\.basis/);
+  assert.match(operations, /value="per_job">Once per job/);
+  assert.match(operations, /value="per_piece">Per finished item/);
+  assert.match(operations, /c\.basis\|\|'per_piece'/);
 });
