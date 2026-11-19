@@ -5,6 +5,7 @@ import VinylStickerCalculator from "./VinylStickerCalculator";
 
 type Category = { id: string; name: string };
 type ProductionMethod = { id: string; name: string; code: string };
+type StockLocation = { id:string; name:string; code:string };
 type StockItem = { id: string; sku: string; name: string; base_unit: string; stock_kind:string; is_active: boolean; current_average_unit_cost:number; roll_width_mm:number|null; usable_width_mm:number|null };
 type CatalogueItem = {id:string;name:string;category_id:string|null;item_type:"product"|"service"};
 type CostComponentForm = { componentType:string; stockItemId:string; unit:string; driverType:string; factor:string; waste:string; fixedCost:string };
@@ -21,6 +22,8 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const [categories,setCategories]=useState<Category[]>([]);
   const [productionMethods,setProductionMethods]=useState<ProductionMethod[]>([]);
   const [stockItems,setStockItems]=useState<StockItem[]>([]);
+  const [stockLocations,setStockLocations]=useState<StockLocation[]>([]);
+  const [stockLocationId,setStockLocationId]=useState("");
   const [catalogueItems,setCatalogueItems]=useState<CatalogueItem[]>([]);
   const [quotes,setQuotes]=useState<Quote[]>([]);
   const [orders,setOrders]=useState<Order[]>([]);
@@ -49,17 +52,18 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
 
   const load=useCallback(async()=>{
     if(!supabase)return;
-    const [cat,q,o,stock,catalogue,methods,invoices]=await Promise.all([
+    const [cat,q,o,stock,catalogue,methods,invoices,locations]=await Promise.all([
       supabase.from("service_categories").select("id,name").eq("business_id",businessId).eq("is_active",true).order("name"),
       supabase.from("quotations").select("id,quote_number,customer_id,status,revision_of,subtotal_amount,discount_amount,total_amount,created_at,expires_at").eq("business_id",businessId).order("created_at",{ascending:false}).limit(100),
       supabase.from("orders").select("id,order_number,customer_id,status,total_amount,received_at,required_by,promised_turnaround_hours").eq("business_id",businessId).order("received_at",{ascending:false}).limit(100),
       supabase.from("stock_items").select("id,sku,name,base_unit,stock_kind,is_active,current_average_unit_cost,roll_width_mm,usable_width_mm").eq("business_id",businessId).eq("is_active",true).order("name").limit(500),
       supabase.from("catalogue_items").select("id,name,category_id,item_type").eq("business_id",businessId).eq("is_active",true).order("name").limit(500),
       supabase.from("production_methods").select("id,name,code").eq("is_active",true).order("name"),
-      supabase.from("sales_invoices").select("id,quotation_id,invoice_number,status").eq("business_id",businessId).order("issue_date",{ascending:false}).limit(200)
+      supabase.from("sales_invoices").select("id,quotation_id,invoice_number,status").eq("business_id",businessId).order("issue_date",{ascending:false}).limit(200),
+      supabase.from("inventory_locations").select("id,name,code").eq("business_id",businessId).eq("is_active",true).order("name")
     ]);
-    if(cat.error||q.error||o.error||stock.error||catalogue.error||methods.error||invoices.error)throw cat.error||q.error||o.error||stock.error||catalogue.error||methods.error||invoices.error;
-    setCategories(cat.data??[]);setProductionMethods((methods.data??[]) as ProductionMethod[]);setStockItems((stock.data??[]) as StockItem[]);setCatalogueItems((catalogue.data??[]) as CatalogueItem[]);setQuotes((q.data??[]) as Quote[]);setOrders((o.data??[]) as Order[]);setSalesInvoices((invoices.data??[]) as SalesInvoice[]);
+    if(cat.error||q.error||o.error||stock.error||catalogue.error||methods.error||invoices.error||locations.error)throw cat.error||q.error||o.error||stock.error||catalogue.error||methods.error||invoices.error||locations.error;
+    setCategories(cat.data??[]);setStockLocations((locations.data??[]) as StockLocation[]);setStockLocationId(current=>current&&locations.data?.some(location=>location.id===current)?current:(locations.data?.[0]?.id??""));setProductionMethods((methods.data??[]) as ProductionMethod[]);setStockItems((stock.data??[]) as StockItem[]);setCatalogueItems((catalogue.data??[]) as CatalogueItem[]);setQuotes((q.data??[]) as Quote[]);setOrders((o.data??[]) as Order[]);setSalesInvoices((invoices.data??[]) as SalesInvoice[]);
   },[businessId]);
   useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
 
@@ -123,7 +127,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     setBusy(true);setError("");setNotice("");
     const args={
       p_business_id:businessId,p_quotation_id:q.id,p_payment_terms:"due_on_receipt",
-      p_due_date:null,p_customer_contact_id:null,p_allow_oversell:false,
+      p_due_date:null,p_stock_location_id:stockLocationId||null,p_allow_oversell:false,
       p_oversell_reason:null,p_request_id:rid()
     };
     let result=await supabase.rpc("owner_convert_accepted_quote_to_invoice",args);
@@ -182,6 +186,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const customerName=(id:string)=>customers.find(c=>c.id===id)?.display_name??"Customer";
   return <section className="connected-panel quote-workflow">
     <div className="panel-toolbar"><div><h2>Quotations and orders</h2><p>Live records and costing tools. Prices are in KES; tax is excluded.</p></div><button className="secondary-action" onClick={()=>void load()}>Refresh records</button></div>
+    <div className="stock-location-picker"><label>Stock location for blank-garment sales<select value={stockLocationId} onChange={event=>setStockLocationId(event.target.value)}><option value="">Choose stock location</option>{stockLocations.map(location=><option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label><small>Required only when an invoice issues MJ Tees stock. Customer-supplied items do not use shop stock.</small></div>
     <div className="workflow-tabs"><button className={tab==="quotes"?"active":""} onClick={()=>setTab("quotes")}>Quotations</button><button className={tab==="costing"?"active":""} onClick={()=>setTab("costing")}>Costing profiles</button><button className={tab==="orders"?"active":""} onClick={()=>setTab("orders")}>Orders</button><button className={tab==="vinyl"?"active":""} onClick={()=>setTab("vinyl")}>Vinyl calculator</button></div>
     {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}{acceptanceLink&&<div className="acceptance-link"><input readOnly value={acceptanceLink}/><button className="secondary-action" onClick={()=>void navigator.clipboard.writeText(acceptanceLink)}>Copy customer link</button></div>}
     {tab==="vinyl"&&<VinylStickerCalculator businessId={businessId} stockItems={stockItems} categories={categories} methods={productionMethods} onMessage={(message,isError)=>{setNotice(isError?"":message);setError(isError?message:"");}} onApply={line=>{setQuoteLines(v=>{const blank=v.length===1&&!v[0].description.trim()&&!v[0].categoryId;const next={...v[0],catalogueItemId:"",categoryId:line.categoryId,description:line.description,quantity:line.quantity,unit:"piece",unitPrice:line.unitPrice,discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:line.productionMethodId,linearMetres:line.linearMetres,areaSquareMetres:"",machineMinutes:line.machineMinutes,labourHours:line.labourHours,stickerSpecification:line.specification};return blank?[next]:[...v,next];});setTab("quotes");setNotice("Vinyl sticker price and production specification added to the quotation. Inventory will be deducted when material is issued to its production job.");}}/>}

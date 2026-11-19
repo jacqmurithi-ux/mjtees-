@@ -6,6 +6,7 @@ type CustomerOption = { id: string; display_name: string };
 type OrderRow = { id: string; order_number: string; customer_id: string };
 type Invoice = { id: string; invoice_number: string; status: string; total_amount: number; due_date: string | null; order_id: string; customer_id: string; order_number: string };
 type AccountType = "cash" | "mpesa_paybill" | "bank" | "cheque_clearing";
+type NewAccountType = "cash" | "mpesa_paybill";
 type Method = "cash" | "mpesa_manual" | "bank_transfer" | "cheque";
 type Account = { id: string; account_name: string; account_type: AccountType; account_reference: string | null; bank_name: string | null; is_active: boolean };
 type Payment = { id: string; payment_number: string; method: Method; status: string; amount: number; received_at: string; mpesa_reference: string | null; external_reference: string | null; receiving_account_id: string | null; notes: string | null; duplicate_reference_warning: boolean };
@@ -32,8 +33,8 @@ const accountTypeForMethod: Record<Method, AccountType[]> = {
 const methodLabel: Record<Method, string> = {
   cash: "Cash",
   mpesa_manual: "M-Pesa Paybill",
-  bank_transfer: "Bank transfer",
-  cheque: "Cheque",
+  bank_transfer: "Bank transfer (legacy)",
+  cheque: "Cheque (legacy)",
 };
 
 export default function PaymentWorkflow({ businessId, customers, onChanged }: { businessId: string; customers: CustomerOption[]; onChanged: () => void }) {
@@ -66,9 +67,8 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
   const [notes, setNotes] = useState("");
   const [allocationDrafts, setAllocationDrafts] = useState<AllocationDraft[]>([]);
   const [accountName, setAccountName] = useState("");
-  const [accountType, setAccountType] = useState<AccountType>("cash");
+  const [accountType, setAccountType] = useState<NewAccountType>("cash");
   const [accountReference, setAccountReference] = useState("");
-  const [bankName, setBankName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -143,13 +143,13 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
     const { error: rpcError } = await supabase.rpc("owner_upsert_sales_payment_account", {
       p_business_id: businessId, p_account_id: null, p_account_name: accountName.trim(),
       p_account_type: accountType, p_account_reference: accountReference.trim() || null,
-      p_bank_name: accountType === "bank" ? bankName.trim() || null : null,
+      p_bank_name: null,
       p_is_active: true, p_request_id: requestId(),
     });
     if (rpcError) setError(rpcError.message);
     else {
       setNotice("Receiving account saved.");
-      setAccountName(""); setAccountReference(""); setBankName("");
+      setAccountName(""); setAccountReference("");
       await load(); onChanged();
     }
     setBusy(false);
@@ -162,7 +162,7 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
     if (!customerId || !accountId || !Number.isSafeInteger(amountValue) || amountValue <= 0) {
       setError("Choose a customer and receiving account, then enter a positive whole-KES amount."); return;
     }
-    if (method !== "cash" && !reference.trim()) { setError("Enter the transaction or cheque reference."); return; }
+    if (method === "mpesa_manual" && !reference.trim()) { setError("Enter the M-Pesa Paybill transaction code."); return; }
     if (allocationDrafts.some(item => !item.invoice_id || !Number.isSafeInteger(Number(item.amount)) || Number(item.amount) <= 0)) {
       setError("Complete or remove each invoice allocation row."); return;
     }
@@ -286,12 +286,11 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
 
     <div className="payment-section">
       <h3>Receiving accounts</h3>
-      <p>Set up the shop cash drawer, M-Pesa Paybill, bank accounts and cheque-clearing account. Account types cannot be changed after payments have been recorded.</p>
+      <p>Set up the shop cash drawer and M-Pesa Paybill. Account types cannot be changed after payments have been recorded.</p>
       <form className="record-form" onSubmit={createAccount}>
         <label>Account name *<input required maxLength={100} value={accountName} onChange={event => setAccountName(event.target.value)} placeholder="e.g. Shop cash drawer" /></label>
-        <label>Account type<select value={accountType} onChange={event => setAccountType(event.target.value as AccountType)}><option value="cash">Cash</option><option value="mpesa_paybill">M-Pesa Paybill</option><option value="bank">Bank</option><option value="cheque_clearing">Cheque clearing</option></select></label>
+        <label>Account type<select value={accountType} onChange={event => setAccountType(event.target.value as NewAccountType)}><option value="cash">Cash</option><option value="mpesa_paybill">M-Pesa Paybill</option></select></label>
         <label>Account / Paybill reference<input maxLength={160} value={accountReference} onChange={event => setAccountReference(event.target.value)} placeholder="Account number or Paybill number" /></label>
-        {accountType === "bank" && <label>Bank name *<input required maxLength={120} value={bankName} onChange={event => setBankName(event.target.value)} /></label>}
         <div className="form-actions"><button className="primary-action compact" disabled={busy || !accountName.trim()}>{busy ? "Saving…" : "＋ Add receiving account"}</button></div>
       </form>
       <div className="record-list">{accountTotals.map(account => <article className="record-row" key={account.id}><div><b>{account.account_name}</b><small>{account.account_type.replace("_", " ")}{account.account_reference ? " · " + account.account_reference : ""}{account.bank_name ? " · " + account.bank_name : ""}</small></div><div><b>{money(account.total)}</b><small>{money(account.reconciled)} reconciled · {money(account.unreconciled)} unreconciled · {account.count} payments</small></div></article>)}{!accounts.length && <p className="empty-records">Add a receiving account before recording payments.</p>}</div>
@@ -301,11 +300,11 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
       <h3>Record a manual payment</h3>
       <form className="record-form" onSubmit={recordPayment}>
         <label>Customer *<select required value={customerId} onChange={event => { setCustomerId(event.target.value); setAllocationDrafts([]); }}><option value="">Choose customer</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.display_name}</option>)}</select></label>
-        <label>Payment method<select value={method} onChange={event => { setMethod(event.target.value as Method); setReference(""); }}><option value="cash">Cash</option><option value="mpesa_manual">M-Pesa Paybill</option><option value="bank_transfer">Bank transfer</option><option value="cheque">Cheque</option></select></label>
+        <label>Payment method<select value={method} onChange={event => { setMethod(event.target.value as Method); setReference(""); }}><option value="cash">Cash</option><option value="mpesa_manual">M-Pesa Paybill</option></select></label>
         <label>Receiving account *<select required value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">Choose account</option>{validAccounts.map(account => <option key={account.id} value={account.id}>{account.account_name}</option>)}</select></label>
         <label>Amount received (KES) *<input required type="number" min="1" step="1" value={amount} onChange={event => setAmount(event.target.value)} /></label>
         <label>Payment date and time *<input required type="datetime-local" value={receivedAt} onChange={event => setReceivedAt(event.target.value)} /></label>
-        {method !== "cash" && <label>{method === "mpesa_manual" ? "M-Pesa transaction code *" : method === "bank_transfer" ? "Bank transaction reference *" : "Cheque number *"}<input required maxLength={160} minLength={method === "mpesa_manual" ? 6 : 1} value={reference} onChange={event => setReference(event.target.value.toUpperCase())} /></label>}
+        {method === "mpesa_manual" && <label>M-Pesa Paybill transaction code *<input required maxLength={160} minLength={6} value={reference} onChange={event => setReference(event.target.value.toUpperCase())} /></label>}
         <label className="wide-field">Notes<textarea maxLength={4000} value={notes} onChange={event => setNotes(event.target.value)} /></label>
         <div className="wide-field">
           <div className="panel-toolbar"><div><h3>Invoice allocations</h3><p>Allocate all or part of this payment. Any unallocated balance becomes customer credit.</p></div><button type="button" className="secondary-action" disabled={!customerInvoices.length} onClick={() => setAllocationDrafts(current => [...current, { invoice_id: "", amount: "" }])}>＋ Add invoice</button></div>

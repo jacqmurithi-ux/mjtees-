@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(65);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values
@@ -110,8 +110,25 @@ insert into public.order_items(
   true,'blank'
 );
 
+-- Simulate legacy receiving accounts that predate the Cash/M-Pesa-only policy.
+-- The test temporarily disables only the new-account guard while seeding fixtures.
+alter table public.sales_payment_accounts disable trigger sales_payment_accounts_new_method_guard;
+insert into public.sales_payment_accounts(
+  id,business_id,account_name,account_type,account_reference,bank_name,created_by
+) values
+('d1000000-0000-4000-8000-000000000001','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ 'Legacy Main Bank','bank','Account ending 4567','Test Bank','11111111-1111-4111-8111-111111111111'),
+('d1000000-0000-4000-8000-000000000002','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ 'Legacy Cheque Clearing','cheque_clearing',null,null,'11111111-1111-4111-8111-111111111111');
+alter table public.sales_payment_accounts enable trigger sales_payment_accounts_new_method_guard;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
+select is(
+  (select count(*) from public.sales_payment_accounts
+   where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+     and account_type in ('bank','cheque_clearing')),
+  2::bigint,'Legacy bank and cheque receiving accounts remain preserved for history');
 
 select is(
   (select count(*) from public.sales_price_tiers where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
@@ -248,14 +265,16 @@ select is((public.owner_upsert_sales_payment_account(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'M-Pesa Paybill','mpesa_paybill','Paybill 123456',null,true,
   '71000000-0000-4000-8000-000000000002')->>'created')::boolean,
   true,'Owner can create a manual M-Pesa Paybill receiving account');
-select is((public.owner_upsert_sales_payment_account(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Main Bank','bank','Account ending 4567','Test Bank',true,
-  '71000000-0000-4000-8000-000000000003')->>'created')::boolean,
-  true,'Owner can create a bank receiving account');
-select is((public.owner_upsert_sales_payment_account(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'Cheque Clearing','cheque_clearing',null,null,true,
-  '71000000-0000-4000-8000-000000000004')->>'created')::boolean,
-  true,'Owner can create a cheque-clearing account');
+select throws_ok(
+  $pt$select public.owner_upsert_sales_payment_account(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'New Bank','bank','Account ending 4567','Test Bank',true,
+    '71000000-0000-4000-8000-000000000003')$pt$,
+  '22023',null,'New bank receiving accounts are blocked');
+select throws_ok(
+  $pt$select public.owner_upsert_sales_payment_account(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'New Cheque','cheque_clearing',null,null,true,
+    '71000000-0000-4000-8000-000000000004')$pt$,
+  '22023',null,'New cheque-clearing accounts are blocked');
 
 -- One manually entered cash payment can be split across invoices; excess is
 -- retained as customer credit and the invoices remain partially paid.
@@ -278,6 +297,9 @@ select is((select status from public.sales_invoices where quotation_id='a1000000
   'partially_paid','First invoice balance changes after partial allocation');
 select is((select status from public.sales_invoices where quotation_id='a2000000-0000-4000-8000-000000000002'),
   'partially_paid','Second invoice balance changes after partial allocation');
+select is((select sum(amount) from public.sales_invoice_payment_allocations
+  where invoice_id=(select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001')),
+  200::numeric,'The first cash receipt satisfies the required invoice deposit');
 select is((select sum(amount) from public.sales_customer_credit_entries
   where payment_id=(select id from public.payments where idempotency_key='72000000-0000-4000-8000-000000000001')),
   200::numeric,'Payment excess is posted to the customer credit ledger');
@@ -315,6 +337,18 @@ select is((select duplicate_reference_warning from public.payments
   where idempotency_key='72000000-0000-4000-8000-000000000003'),
   true,'Duplicate reference warning is stored on the payment record');
 
+-- A separately entered Paybill receipt can make a partial allocation without
+-- marking the invoice paid.
+select is((public.owner_record_sales_payment(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  (select id from public.sales_payment_accounts where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and account_name='M-Pesa Paybill'),
+  'mpesa_manual',50,now(),'MPESA-PART-001',
+  jsonb_build_array(jsonb_build_object('invoice_id',(select id from public.sales_invoices where quotation_id='a2000000-0000-4000-8000-000000000002'),'amount',50)),
+  'Partial Paybill receipt','72000000-0000-4000-8000-000000000009')->>'status'),
+  'posted','Partial M-Pesa Paybill receipt is posted manually');
+select is((select status from public.sales_invoices where quotation_id='a2000000-0000-4000-8000-000000000002'),
+  'partially_paid','Partial M-Pesa allocation leaves the invoice partially paid');
+
 select is((public.owner_reconcile_sales_payment(
   (select id from public.payments where idempotency_key='72000000-0000-4000-8000-000000000001'),
   current_date,null,'Matched to the physical cash record','72000000-0000-4000-8000-000000000004')->>'reconciliation_status'),
@@ -323,24 +357,27 @@ select is((select count(*) from public.sales_payment_reconciliations
   where payment_id=(select id from public.payments where idempotency_key='72000000-0000-4000-8000-000000000001')),
   1::bigint,'Manual reconciliation is retained as an auditable record');
 
-select is((public.owner_record_sales_payment(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  (select id from public.sales_payment_accounts where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and account_name='Main Bank'),
-  'bank_transfer',50,now()-interval '5 minutes','BANK-REF-001',
-  jsonb_build_array(jsonb_build_object('invoice_id',(select id from public.sales_invoices where quotation_id='a2000000-0000-4000-8000-000000000002'),'amount',50)),
-  'Manual bank transfer entry','72000000-0000-4000-8000-000000000005')->>'status'),
-  'posted','Bank transfers can be manually recorded and allocated');
-select is((select method from public.payments where idempotency_key='72000000-0000-4000-8000-000000000005'),
-  'bank_transfer','Bank transfer method is preserved in the central payment ledger');
+select throws_ok(
+  $pt$select public.owner_record_sales_payment(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'd1000000-0000-4000-8000-000000000001',
+    'bank_transfer',50,now()-interval '5 minutes','BANK-REF-001','[]'::jsonb,
+    'Legacy bank payment attempt','72000000-0000-4000-8000-000000000005'
+  )$pt$,
+  '22023',null,'Legacy bank accounts remain readable but cannot receive new payments');
+select is((select count(*) from public.payments where idempotency_key='72000000-0000-4000-8000-000000000005'),
+  0::bigint,'Rejected bank payment does not create a payment record');
 
-select is((public.owner_record_sales_payment(
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  (select id from public.sales_payment_accounts where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and account_name='Cheque Clearing'),
-  'cheque',25,now()-interval '5 minutes','CHEQUE-001','[]'::jsonb,
-  'Manual cheque entry','72000000-0000-4000-8000-000000000006')->>'status'),
-  'posted','Cheque receipts can be manually recorded');
-select is((select method from public.payments where idempotency_key='72000000-0000-4000-8000-000000000006'),
-  'cheque','Cheque method is preserved in the central payment ledger');
+select throws_ok(
+  $pt$select public.owner_record_sales_payment(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'd1000000-0000-4000-8000-000000000002',
+    'cheque',25,now()-interval '5 minutes','CHEQUE-001','[]'::jsonb,
+    'Legacy cheque payment attempt','72000000-0000-4000-8000-000000000006'
+  )$pt$,
+  '22023',null,'Legacy cheque accounts remain readable but cannot receive new payments');
+select is((select count(*) from public.payments where idempotency_key='72000000-0000-4000-8000-000000000006'),
+  0::bigint,'Rejected cheque payment does not create a payment record');
 
 select throws_ok(
   $pt$select public.owner_record_sales_payment(
@@ -360,13 +397,114 @@ select is((public.owner_apply_sales_customer_credit(
   100::bigint,'Owner can apply customer credit to an issued invoice');
 select is((select sum(amount) from public.sales_customer_credit_entries
   where customer_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
-  175::numeric,'Customer credit balance falls after applying credit');
+  150::numeric,'Customer credit balance reflects only accepted Cash and M-Pesa entries after applying credit');
 select is((select status from public.sales_invoices
   where quotation_id='a1000000-0000-4000-8000-000000000001'),
   'partially_paid','Applied customer credit updates the invoice status');
 
+-- A credit note against a paid invoice becomes customer credit; it never
+-- reverses or deletes the original payment or invoice.
+select set_config('mj.test.paid_credit_note_result',
+  public.owner_issue_sales_credit_note(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+    'Customer return on paid invoice',
+    jsonb_build_array(jsonb_build_object(
+      'invoice_item_id',(select id from public.sales_invoice_items
+        where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
+      'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
+    )),
+    0,'74000000-0000-4000-8000-000000000001'
+  )::text,true);
+select set_config('mj.test.paid_credit_note_id',
+  current_setting('mj.test.paid_credit_note_result')::jsonb->>'credit_note_id',true);
+
+select is((select status from public.sales_credit_notes where id=current_setting('mj.test.paid_credit_note_id')::uuid),
+  'issued','Owner can issue a credit note against a paid invoice');
+select is((select credit_note_number from public.sales_credit_notes where id=current_setting('mj.test.paid_credit_note_id')::uuid),
+  'CN-0001','Credit note number is generated from the CN sequence');
+select is((select total_amount from public.sales_credit_notes where id=current_setting('mj.test.paid_credit_note_id')::uuid),
+  100::bigint,'Credit note stores its whole-KES total');
+select is(current_setting('mj.test.paid_credit_note_result')::jsonb->>'amount_applied_to_invoice',
+  '0','A paid invoice credit note is not applied against the already-paid invoice');
+select is((select status from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+  'paid','Paid invoice remains paid after a credit note');
+select is((select sum(amount) from public.sales_customer_credit_entries
+  where customer_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+  250::numeric,'Paid invoice credit note becomes customer credit');
+select is((public.owner_issue_sales_credit_note(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+  'Customer return on paid invoice',
+  jsonb_build_array(jsonb_build_object(
+    'invoice_item_id',(select id from public.sales_invoice_items
+      where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
+    'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
+  )),0,'74000000-0000-4000-8000-000000000001')->>'credit_note_id'),
+  current_setting('mj.test.paid_credit_note_id'),
+  'Retrying a credit note issue request returns the original credit note');
+select is((select count(*) from public.sales_customer_credit_entries
+  where credit_note_id=current_setting('mj.test.paid_credit_note_id')::uuid),
+  1::bigint,'Idempotent credit note retry does not duplicate its customer credit entry');
+
+-- A credit note against an unpaid invoice is first applied to its outstanding
+-- balance; it cannot create a second payment or reverse an existing receipt.
+select set_config('mj.test.unpaid_credit_note_result',
+  public.owner_issue_sales_credit_note(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
+    'Partial order credit',
+    jsonb_build_array(jsonb_build_object(
+      'invoice_item_id',(select id from public.sales_invoice_items
+        where invoice_id=(select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001')),
+      'description','Partial garment credit','quantity',1,'unit_price',100,'amount',100
+    )),
+    0,'74000000-0000-4000-8000-000000000002'
+  )::text,true);
+select is((current_setting('mj.test.unpaid_credit_note_result')::jsonb->>'amount_applied_to_invoice')::bigint,
+  100::bigint,'Credit note reduces the unpaid invoice balance first');
+select is((current_setting('mj.test.unpaid_credit_note_result')::jsonb->>'invoice_balance')::bigint,
+  200::bigint,'Credit note returns the correct remaining invoice balance');
+select is((select status from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
+  'partially_paid','Credit note application preserves the partially-paid invoice status');
+select is((select sum(amount) from public.sales_customer_credit_entries
+  where customer_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+  250::numeric,'Applied credit note does not leave excess customer credit');
+
+-- The final balance can be entered later as another manual Paybill receipt.
+select is((public.owner_record_sales_payment(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  (select id from public.sales_payment_accounts where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and account_name='M-Pesa Paybill'),
+  'mpesa_manual',200,now(),'MPESA-BAL-001',
+  jsonb_build_array(jsonb_build_object('invoice_id',(select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),'amount',200)),
+  'Final balance after deposit and adjustments','72000000-0000-4000-8000-000000000010')->>'status'),
+  'posted','Final invoice balance is recorded as a separate manual M-Pesa payment');
+select is((select status from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
+  'paid','Invoice becomes paid after the remaining balance is received');
+
+select throws_ok(
+  $pt$select public.owner_issue_sales_credit_note(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
+    'Over-credit attempt',
+    jsonb_build_array(jsonb_build_object(
+      'invoice_item_id',(select id from public.sales_invoice_items
+        where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
+      'description','Over-credit','quantity',1,'unit_price',1,'amount',1
+    )),0,'74000000-0000-4000-8000-000000000003'
+  )$pt$,
+  '22023',null,'Credit notes cannot exceed the original invoice value');
 
 select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
+select throws_ok(
+  $pt$select public.owner_issue_sales_credit_note(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
+    'Non-owner credit attempt',
+    jsonb_build_array(jsonb_build_object('description','Test line','quantity',1,'unit_price',1,'amount',1)),
+    0,'74000000-0000-4000-8000-000000000004'
+  )$pt$,
+  '42501',null,'Non-owner cannot issue a Sales credit note');
 select throws_ok(
   $pt$select public.owner_record_sales_payment(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',

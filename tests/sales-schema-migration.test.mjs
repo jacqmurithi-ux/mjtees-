@@ -5,6 +5,9 @@ import { readFileSync } from "node:fs";
 const sql = readFileSync(new URL("../supabase/migrations/20261119000400_sales_foundation_schema.sql", import.meta.url), "utf8");
 const manualPaymentsSql = readFileSync(new URL("../supabase/migrations/20261119000600_sales_manual_payment_ledger.sql", import.meta.url), "utf8");
 const salesCreditSql = readFileSync(new URL("../supabase/migrations/20261119000700_sales_customer_credit_application.sql", import.meta.url), "utf8");
+const paymentPolicySql = readFileSync(new URL("../supabase/migrations/20261119092752_sales_manual_payment_method_restrictions.sql", import.meta.url), "utf8");
+const creditNoteSql = readFileSync(new URL("../supabase/migrations/20261119093825_sales_credit_note_issue_workflow.sql", import.meta.url), "utf8");
+const reversalShutdownSql = readFileSync(new URL("../supabase/migrations/20261119110000_disable_payment_allocation_reversal.sql", import.meta.url), "utf8");
 
 test("Sales foundation reuses existing customer, quotation, order, payment, stock and production records", () => {
   assert.match(sql, /alter table public\.customers[\s\S]*sales_price_tier_id/);
@@ -24,8 +27,14 @@ test("Invoice and credit records retain tenant-scoped relationships and KES-only
   assert.doesNotMatch(sql, /\bvat_(rate|amount|inclusive)\b|tax_(rate|amount)/i);
 });
 
-test("Payments support the requested manually entered channels", () => {
-  assert.match(sql, /method in \('cash','mpesa_manual','bank_transfer','cheque'\)/);
+test("Payment UI offers only cash and M-Pesa Paybill for new manual entries", () => {
+  const ui = readFileSync(new URL("../src/PaymentWorkflow.tsx", import.meta.url), "utf8");
+  assert.match(ui, /<option value=\"cash\">Cash<\/option><option value=\"mpesa_manual\">M-Pesa Paybill<\/option>/);
+  assert.doesNotMatch(ui, /<option value=\"bank_transfer\"|<option value=\"cheque\"/);
+});
+
+test("Payments retain legacy methods in the database until safely migrated", () => {
+  assert.match(sql, /method in \('cash','mpesa_manual','bank_transfer','cheque'\)/); // Legacy rows remain readable; new-entry restriction is covered by the follow-up migration.
   assert.match(sql, /external_reference/);
 });
 
@@ -117,4 +126,40 @@ test("Customer credit can be applied without payment reversal functionality", ()
   assert.doesNotMatch(salesCreditSql, /owner_reverse|payment_reversed|reversal|reversed/i);
   assert.doesNotMatch(readFileSync(new URL("../src/PaymentWorkflow.tsx", import.meta.url), "utf8"), /reverse payment|reverse legacy|owner_reverse_payment/i);
   assert.match(manualPaymentsSql, /entry_type='apply_to_invoice'/);
+});
+
+test("Invoice conversion sends the exact RPC stock-location argument", () => {
+  const ui = readFileSync(new URL("../src/QuoteWorkflow.tsx", import.meta.url), "utf8");
+  assert.match(ui, /p_stock_location_id:stockLocationId\|\|null/);
+  assert.doesNotMatch(ui, /p_customer_contact_id/);
+});
+
+
+test("Database rejects new non-Cash and non-M-Pesa payments while preserving legacy rows", () => {
+  assert.match(paymentPolicySql, /create trigger payments_sales_new_method_guard\s+before insert on public\.payments/);
+  assert.match(paymentPolicySql, /new\.method not in \('cash','mpesa_manual'\)/);
+  assert.match(paymentPolicySql, /create trigger sales_payment_accounts_new_method_guard\s+before insert or update of account_type on public\.sales_payment_accounts/);
+  assert.match(paymentPolicySql, /new\.account_type not in \('cash','mpesa_paybill'\)/);
+  assert.match(sql, /method in \('cash','mpesa_manual','bank_transfer','cheque'\)/);
+  assert.match(manualPaymentsSql, /account_type in \('cash','mpesa_paybill','bank','cheque_clearing'\)/);
+});
+
+
+test("Credit note issuance preserves paid invoices and applies value to outstanding balances", () => {
+  assert.match(creditNoteSql, /create or replace function public\.owner_issue_sales_credit_note/);
+  assert.match(creditNoteSql, /v_customer_id,'credit_note',v_total/);
+  assert.match(creditNoteSql, /v_customer_id,'apply_to_invoice',-v_apply_amount/);
+  assert.match(creditNoteSql, /sales\.credit_note_issued/);
+  assert.match(creditNoteSql, /private\.assert_active_owner/);
+  assert.match(creditNoteSql, /private\.begin_idempotent_request/);
+  assert.match(creditNoteSql, /v_requested_item_credit/);
+  assert.match(creditNoteSql, /Combined credit note lines exceed the remaining value/);
+  assert.doesNotMatch(creditNoteSql, /owner_reverse_payment|payment_reversed|reversal/i);
+});
+
+
+test("All payment reversal RPCs are removed while legacy audit records are retained", () => {
+  assert.match(reversalShutdownSql, /drop function if exists public\.owner_reverse_payment_allocation/);
+  assert.match(reversalShutdownSql, /drop function if exists private\.owner_reverse_payment_allocation/);
+  assert.doesNotMatch(reversalShutdownSql, /drop table|truncate|delete from/i);
 });
