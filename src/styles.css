@@ -57,3 +57,6 @@ td{font-size:13px}
 .rules{padding-left:20px;line-height:1.8;font-size:13px}
 @media(min-width:600px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}.dashboard-grid{grid-template-columns:1fr 1fr}.content{padding-top:20px}}
 @media(max-width:520px){.pagehead{align-items:flex-start;flex-direction:column}.pagehead>.primary{width:100%}.brandline b{font-size:14px}.stats{gap:8px}.stat strong{font-size:18px}.alertrow{grid-template-columns:1fr}.alertrow small{text-align:left}.tabbar{padding-left:10px;padding-right:10px}}
+
+/* Converted quotation navigation actions */
+.op-actions .converted-label{display:inline-flex;align-items:center;min-height:36px;padding:7px 10px;border-radius:8px;background:#edf2f7;color:#425466;font-size:12px;font-weight:800;letter-spacing:.2px}.op-actions .view-invoice,.op-actions .view-job{min-height:42px;padding:9px 13px;border:0;border-radius:9px;color:#fff;font-size:12px;font-weight:800;box-shadow:0 2px 5px #17212b1a}.op-actions .view-invoice{background:#1565c0}.op-actions .view-job{background:#0e7a3e}.op-actions .view-invoice:hover,.op-actions .view-job:hover{filter:brightness(.92)}@media(max-width:680px){.op-actions .view-invoice,.op-actions .view-job{flex:1;min-width:150px;min-height:46px}}
