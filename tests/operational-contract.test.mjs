@@ -29,7 +29,9 @@ test('accepted quotation conversion creates an invoice and a production job atom
 
 test('customer-supplied goods do not create automatic MJ stock issues', () => {
   assert.match(sql, /coalesce\(\(details->>'customer_supplied_items'\)::boolean,false\)/);
-  assert.doesNotMatch(sql, /owner_convert_quote_to_invoice[\s\S]*?insert into public\.stock_movements/);
+  const conversion = sql.match(/create or replace function public\.owner_convert_quote_to_invoice[\s\S]*?end \$\$;/)?.[0] || '';
+  assert.ok(conversion.length > 0, 'conversion RPC exists');
+  assert.doesNotMatch(conversion, /insert into public\.stock_movements/);
 });
 
 test('stock issues are owner-authorized, quantity-limited and recorded as movements', () => {
