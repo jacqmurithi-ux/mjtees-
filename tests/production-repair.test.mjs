@@ -282,3 +282,46 @@ test('Inventory adjustments require a reason, reject zero changes and prevent ne
   assert.match(operations, /owner_adjust_inventory/);
   assert.match(operations, /Inventory adjustment recorded with an audit reason/);
 });
+
+
+test('Purchasing supports supplier contact details, multi-line orders and partial goods receipts', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /p_email:supplierEmail/);
+  assert.match(operations, /p_notes:supplierNotes/);
+  assert.match(operations, /purchaseLines\.map/);
+  assert.match(operations, /p_lines:lines/);
+  assert.match(operations, /owner_create_purchase_order/);
+  assert.match(operations, /Receive quantity/);
+  assert.match(operations, /p_received_quantity:received/);
+  assert.match(operations, /Goods received and the stock ledger updated/);
+});
+
+test('Supplier payments are limited to the actual supplier or selected purchase-order balance', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /const supplierBalance=/);
+  assert.match(operations, /const purchaseOrderBalance=/);
+  assert.match(operations, /const selectedSupplierPayable=/);
+  assert.match(operations, /Supplier payment cannot exceed the outstanding balance/);
+  assert.match(operations, /p_purchase_order_id:supplierPayOrder\|\|null/);
+});
+
+test('Purchasing preserves the append-only supplier payment ledger and displays price review context', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /Supplier payments are append-only/);
+  assert.match(operations, /Review costing profiles and future quotations using this material/);
+  assert.match(operations, /owner_review_supplier_price_change/);
+  assert.doesNotMatch(operations, /delete\(['"]supplier_payments/);
+});
+
+
+test('Supplier purchasing migration preserves stock history and protects owner RPCs', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/20261120100000_restore_supplier_purchase_workflows.sql', import.meta.url), 'utf8');
+  assert.match(migration, /add column if not exists stock_item_id uuid/);
+  assert.match(migration, /having count\(\*\) = 1/);
+  assert.match(migration, /private\.apply_stock_movement/);
+  assert.match(migration, /purchasing\.goods_received/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /revoke all on function public\.owner_create_purchase_order/);
+  assert.match(migration, /grant execute on function public\.owner_create_purchase_order/);
+  assert.match(migration, /owner_supplier_price_alerts/);
+});
