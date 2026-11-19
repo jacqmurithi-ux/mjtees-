@@ -425,7 +425,7 @@ select is((public.owner_issue_sales_credit_note(
     'invoice_item_id',(select id from public.sales_invoice_items
       where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
     'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
-  )),0,'74000000-0000-4000-8000-000000000001')->>'credit_note_id',
+  )),0,'74000000-0000-4000-8000-000000000001')->>'credit_note_id'),
   current_setting('mj.test.paid_credit_note_id'),
   'Retrying a credit note issue request returns the original credit note');
 select is((select count(*) from public.sales_customer_credit_entries
