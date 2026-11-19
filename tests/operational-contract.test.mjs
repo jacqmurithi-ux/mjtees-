@@ -99,6 +99,14 @@ test('production stages follow a controlled sequence with a rework path', () => 
   assert.match(sql, /Invalid production stage transition/);
 });
 
+test('transaction inserts are routed through private owner-checked implementations', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/20261119171000_lock_transaction_writes.sql', import.meta.url), 'utf8');
+  assert.match(migration, /revoke insert on public\.costing_profiles,[\s\S]*?from authenticated/);
+  assert.match(migration, /create or replace function private\.owner_create_quotation_impl[\s\S]*?security definer/);
+  assert.match(migration, /create or replace function public\.owner_create_quotation[\s\S]*?security invoker/);
+  assert.match(migration, /grant execute on function private\.owner_record_payment_impl/);
+});
+
 test('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
   for (const fn of ['owner_create_quotation','owner_convert_quote_to_invoice','owner_issue_job_material','owner_record_payment','owner_record_expense','owner_operational_report']) {
     assert.match(sql, new RegExp('revoke all on function public\\.' + fn));
