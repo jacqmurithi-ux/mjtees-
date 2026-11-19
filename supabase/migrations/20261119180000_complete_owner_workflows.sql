@@ -160,7 +160,7 @@ begin
 end $fn$;
 
 create or replace function public.owner_supplier_price_alerts()
-returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $fn$$
+returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $fn$
 declare v_business uuid; v_result jsonb;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -184,7 +184,7 @@ begin
 end $fn$;
 
 create or replace function public.owner_job_report()
-returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $fn$$
+returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $fn$
 declare v_business uuid; v_result jsonb;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
