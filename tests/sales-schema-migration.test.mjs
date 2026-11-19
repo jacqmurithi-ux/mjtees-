@@ -7,6 +7,7 @@ const manualPaymentsSql = readFileSync(new URL("../supabase/migrations/202611190
 const salesCreditSql = readFileSync(new URL("../supabase/migrations/20261119000700_sales_customer_credit_application.sql", import.meta.url), "utf8");
 const paymentPolicySql = readFileSync(new URL("../supabase/migrations/20261119092752_sales_manual_payment_method_restrictions.sql", import.meta.url), "utf8");
 const creditNoteSql = readFileSync(new URL("../supabase/migrations/20261119093825_sales_credit_note_issue_workflow.sql", import.meta.url), "utf8");
+const reversalShutdownSql = readFileSync(new URL("../supabase/migrations/20261119110000_disable_payment_allocation_reversal.sql", import.meta.url), "utf8");
 
 test("Sales foundation reuses existing customer, quotation, order, payment, stock and production records", () => {
   assert.match(sql, /alter table public\.customers[\s\S]*sales_price_tier_id/);
@@ -154,4 +155,11 @@ test("Credit note issuance preserves paid invoices and applies value to outstand
   assert.match(creditNoteSql, /v_requested_item_credit/);
   assert.match(creditNoteSql, /Combined credit note lines exceed the remaining value/);
   assert.doesNotMatch(creditNoteSql, /owner_reverse_payment|payment_reversed|reversal/i);
+});
+
+
+test("All payment reversal RPCs are removed while legacy audit records are retained", () => {
+  assert.match(reversalShutdownSql, /drop function if exists public\.owner_reverse_payment_allocation/);
+  assert.match(reversalShutdownSql, /drop function if exists private\.owner_reverse_payment_allocation/);
+  assert.doesNotMatch(reversalShutdownSql, /drop table|truncate|delete from/i);
 });
