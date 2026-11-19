@@ -39,7 +39,7 @@ select (public.owner_bootstrap_workspace()->>'business_id')::uuid,'Example Custo
 
 select set_config('test.stock_id',public.owner_create_stock_item('shop_1','Generic test stock item','General','piece',10,2,10,'E2E-STOCK')::text,true);
 select extensions.throws_ok(
- $select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$assert$$,
+ $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$$,
  'P0001','An active versioned costing profile is required before pricing this quotation',
  'refuses to price without an active versioned costing profile');
 
@@ -59,7 +59,7 @@ select extensions.is((select direct_cost from public.quotation_lines where quota
 select extensions.is((select round(((q.total-l.direct_cost)/l.direct_cost)*100,2) from public.quotations q join public.quotation_lines l on l.quotation_id=q.id where q.id=current_setting('test.cost_override_quote')::uuid),40.00::numeric,'contribution divided by direct cost produces the expected 40 percent margin');
 
 select extensions.throws_ok(
- $$assert$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":2,"unit_price":100,"direct_cost":0,"details":{}}]'::jsonb,false,null)$assert$$,
+ $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":2,"unit_price":100,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
  'P0001','Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.',
  'blocks quotations below the 30 percent floor without an exception');
 
