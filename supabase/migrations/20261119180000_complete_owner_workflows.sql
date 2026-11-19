@@ -73,14 +73,19 @@ grant select on public.supplier_price_reviews to authenticated;
 create or replace function public.owner_record_supplier_payment(
  p_supplier_id uuid,p_purchase_order_id uuid,p_payment_number text,p_method text,p_amount numeric,p_reference_code text default null
 ) returns uuid language plpgsql security definer set search_path=public,pg_temp as $fn$
-declare v_business uuid; v_due numeric(14,2); v_id uuid;
+declare v_business uuid; v_due numeric(14,2); v_order_due numeric(14,2); v_id uuid;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
  if v_business is null or not exists(select 1 from public.suppliers where id=p_supplier_id and business_id=v_business) then raise exception 'Supplier not found'; end if;
  if p_method not in('cash','mpesa_paybill') or p_amount<=0 or length(btrim(coalesce(p_payment_number,'')))=0 then raise exception 'Invalid supplier payment'; end if;
  if p_purchase_order_id is not null and not exists(select 1 from public.purchase_orders where id=p_purchase_order_id and supplier_id=p_supplier_id and business_id=v_business) then raise exception 'Purchase order does not belong to this supplier'; end if;
- select coalesce(sum(po.total+po.transport_cost),0)-coalesce((select sum(sp.amount) from public.supplier_payments sp where sp.business_id=v_business and sp.supplier_id=p_supplier_id and (p_purchase_order_id is null or sp.purchase_order_id=p_purchase_order_id)),0)
- into v_due from public.purchase_orders po where po.business_id=v_business and po.supplier_id=p_supplier_id and po.status<>'cancelled' and (p_purchase_order_id is null or po.id=p_purchase_order_id);
+ select coalesce(sum(po.total+po.transport_cost),0)-coalesce((select sum(sp.amount) from public.supplier_payments sp where sp.business_id=v_business and sp.supplier_id=p_supplier_id),0)
+ into v_due from public.purchase_orders po where po.business_id=v_business and po.supplier_id=p_supplier_id and po.status<>'cancelled';
+ if p_purchase_order_id is not null then
+  select coalesce(sum(total+transport_cost),0) into v_order_due from public.purchase_orders where id=p_purchase_order_id and business_id=v_business and supplier_id=p_supplier_id and status<>'cancelled';
+  select v_order_due-coalesce(sum(amount),0) into v_order_due from public.supplier_payments where business_id=v_business and supplier_id=p_supplier_id and purchase_order_id=p_purchase_order_id;
+  v_due:=least(v_due,v_order_due);
+ end if;
  if p_amount>v_due then raise exception 'Supplier payment exceeds outstanding balance'; end if;
  insert into public.supplier_payments(business_id,supplier_id,purchase_order_id,payment_number,method,amount,reference_code,paid_by)
  values(v_business,p_supplier_id,p_purchase_order_id,btrim(p_payment_number),p_method,p_amount,nullif(btrim(p_reference_code),''),auth.uid()) returning id into v_id;
