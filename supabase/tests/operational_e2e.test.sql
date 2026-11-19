@@ -119,7 +119,7 @@ select extensions.is((select issued_quantity from public.production_job_material
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),8::numeric,'full material issue leaves the correct stock balance');
 select extensions.is((select actual_direct_cost from public.production_jobs where id=current_setting('test.job_id')::uuid),20::numeric,'issued material cost is added to actual production direct cost');
 select extensions.is((select count(*)::integer from public.stock_movements where stock_item_id=current_setting('test.stock_id')::uuid and movement_type='job_issue' and quantity=-1),2,'each partial issue creates its own append-only stock movement');
-select extensions.is((select count(*)::integer from public.audit_events where entity_type='production_job_material' and entity_id=current_setting('test.material_id')::uuid and event_type in('production.material_planned','production.material_issued')),2,'material planning and issuing both create audit events');
+select extensions.is((select count(*)::integer from public.audit_events where entity_type='production_job_material' and entity_id=current_setting('test.material_id')::uuid and event_type in('production.material_planned','production.material_issued')),2,'material planning and both partial issues create audit events');
 select set_config('test.insufficient_material_id',public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,20)::text,true);
 select extensions.throws_ok(
  $assert$select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,9)$assert$,
