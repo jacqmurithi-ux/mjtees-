@@ -217,7 +217,7 @@ test('customer-supplied items exclude blank-item cost but retain production cost
   assert.match(operations, /activeProductionCost/);
   assert.match(operations, /customerSupplied\?0:.*activeBlankProfileCost/);
   assert.match(operations, /effectiveBlankCost\+activeProductionCost/);
-  assert.match(operations, /components\)\.eq\('is_active',true\)/);
+  assert.match(operations, /direct_cost,is_active,components'\)\.eq\('is_active',true\)/);
 });
 
 test('cost profile history displays component breakdown and retains immutable version activation', async () => {
