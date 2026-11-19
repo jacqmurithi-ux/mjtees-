@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(20);
+select extensions.plan(21);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -74,6 +74,7 @@ select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'q
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'ready');
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'delivered');
 select extensions.ok((select delivered_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production delivery is timestamped');
+select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
 select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-BARAKA-E2E','mpesa_paybill',1500,'E2E-TEST-REF');
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),0::numeric,'payment clears invoice balance');
