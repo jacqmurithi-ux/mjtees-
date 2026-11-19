@@ -281,3 +281,24 @@ end
 $fn$;
 
 notify pgrst,'reload schema';
+
+
+create or replace function public.owner_get_max_unit_selling_price()
+returns numeric(14,2)
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $fn$
+declare v_business uuid; v_price numeric(14,2);
+begin
+ select business_id into v_business from public.business_memberships
+ where user_id=auth.uid() and role='owner' limit 1;
+ if v_business is null then raise exception 'Owner workspace required'; end if;
+ select max_unit_selling_price into v_price
+ from public.business_settings where business_id=v_business;
+ return v_price;
+end
+$fn$;
+revoke all on function public.owner_get_max_unit_selling_price() from public,anon;
+grant execute on function public.owner_get_max_unit_selling_price() to authenticated;
