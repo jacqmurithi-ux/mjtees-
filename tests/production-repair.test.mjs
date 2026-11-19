@@ -106,12 +106,12 @@ test('quotation margin exception audit columns are restored additively and owner
 const quotationStatusMigration = await readFile(new URL('../supabase/migrations/20261119210000_restore_quotation_status_rpc.sql', import.meta.url), 'utf8');
 
 test('quotation status RPC is owner-scoped, transition-checked, audited and callable by authenticated owners', () => {
-  assert.match(quotationStatusMigration, /create or replace function public\\.owner_set_quotation_status\\(\\s*p_quote_id uuid,\\s*p_status text/);
+  assert.match(quotationStatusMigration, /create or replace function public\.owner_set_quotation_status\(\s*p_quote_id uuid,\s*p_status text/);
   assert.match(quotationStatusMigration, /security definer/);
   assert.match(quotationStatusMigration, /role='owner'/);
   assert.match(quotationStatusMigration, /v_old_status='draft' and p_status='sent'/);
   assert.match(quotationStatusMigration, /v_old_status='sent' and p_status='accepted'/);
   assert.match(quotationStatusMigration, /Invalid quotation status transition/);
-  assert.match(quotationStatusMigration, /quotation\\.status_changed/);
-  assert.match(quotationStatusMigration, /grant execute on function public\\.owner_set_quotation_status\\(uuid,text\\) to authenticated/);
+  assert.match(quotationStatusMigration, /quotation\.status_changed/);
+  assert.match(quotationStatusMigration, /grant execute on function public\.owner_set_quotation_status\(uuid,text\) to authenticated/);
 });
