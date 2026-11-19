@@ -132,7 +132,7 @@ test('Production page explains missing stock items and missing material requirem
   assert.match(operations, /Add the real materials and their opening quantities in Inventory first/);
   assert.match(operations, /onNavigate\?\.\('inventory'\)/);
   assert.match(operations, /No material requirements planned yet/);
-  assert.match(operations, /Issue remaining planned material/);
+  assert.match(operations, /Issue selected quantity/);
 });
 
 
@@ -148,7 +148,7 @@ test('Production planning supports multiple material requirements on one job and
   assert.match(operations, /const jobMaterials=invoices\.filter\(m=>m\.job_id===selectedJob\)/);
   assert.match(operations, /jobMaterials\.map\(m=>/);
   assert.match(operations, /previous requirements remain listed below/);
-  assert.match(operations, /material\.job_id!==selectedJob/);
+  assert.match(operations, /jobMaterials\.find\(x=>x\.id===selectedMaterial\)/);
   assert.match(operations, /owner_add_job_material/);
 });
 
