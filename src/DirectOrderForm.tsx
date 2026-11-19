@@ -45,15 +45,21 @@ export default function DirectOrderForm({businessId,customer,addresses,contacts,
   if(rpcError){setError(rpcError.message);setBusy(false);return;}
   const orderNumber=String(data?.order_number||"");
   let scheduleWarning="";
-  if(orderNumber&&(requiredBy||hours!==null)){
+  if(orderNumber&&(requiredBy||hours!==null||addressId)){
    const {data:order,error:lookupError}=await supabase.from("orders").select("id").eq("business_id",businessId).eq("order_number",orderNumber).maybeSingle();
-   if(lookupError||!order?.id)scheduleWarning="The order was created, but its schedule could not be verified. Open the order and set its required date and turnaround.";
+   if(lookupError||!order?.id)scheduleWarning="The order was created, but its saved delivery address or schedule could not be verified. Review it before fulfilment.";
    else {
-    const {error:scheduleError}=await supabase.rpc("owner_update_order_schedule",{p_order_id:order.id,p_required_by:requiredBy||null,p_promised_turnaround_hours:hours,p_request_id:rid()});
-    if(scheduleError)scheduleWarning="The order was created, but its turnaround schedule was not saved: "+scheduleError.message;
+    if(addressId){
+     const {error:addressError}=await supabase.rpc("owner_set_order_delivery_address",{p_order_id:order.id,p_customer_address_id:addressId,p_request_id:rid()});
+     if(addressError)scheduleWarning="The order was created, but its saved delivery address was not linked: "+addressError.message;
+    }
+    if(requiredBy||hours!==null){
+     const {error:scheduleError}=await supabase.rpc("owner_update_order_schedule",{p_order_id:order.id,p_required_by:requiredBy||null,p_promised_turnaround_hours:hours,p_request_id:rid()});
+     if(scheduleError)scheduleWarning+=(scheduleWarning?" ":"")+"Its turnaround schedule was not saved: "+scheduleError.message;
+    }
    }
   }
-  setNotice("Order "+(orderNumber||"created")+" for "+customer.display_name+" is confirmed. "+(scheduleWarning?scheduleWarning+" ":"")+"Contact and delivery-address selections are saved as internal order-intake references; confirm the final handover details in Delivery & Collection.");
+  setNotice("Order "+(orderNumber||"created")+" for "+customer.display_name+" is confirmed. "+(scheduleWarning?scheduleWarning+" ":"")+(addressId&&!scheduleWarning?"The saved delivery address is linked to the order. ":"")+"Confirm the final handover details in Delivery & Collection.");
   setBusy(false);onCreated();
  }
  return <form className="record-form direct-customer-order" onSubmit={submit}>
