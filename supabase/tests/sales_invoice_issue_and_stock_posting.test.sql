@@ -266,14 +266,14 @@ select is((public.owner_upsert_sales_payment_account(
   '71000000-0000-4000-8000-000000000002')->>'created')::boolean,
   true,'Owner can create a manual M-Pesa Paybill receiving account');
 select throws_ok(
-  $select public.owner_upsert_sales_payment_account(
+  $pt$select public.owner_upsert_sales_payment_account(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'New Bank','bank','Account ending 4567','Test Bank',true,
-    '71000000-0000-4000-8000-000000000003')$,
+    '71000000-0000-4000-8000-000000000003')$pt$,
   '22023',null,'New bank receiving accounts are blocked');
 select throws_ok(
-  $select public.owner_upsert_sales_payment_account(
+  $pt$select public.owner_upsert_sales_payment_account(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,'New Cheque','cheque_clearing',null,null,true,
-    '71000000-0000-4000-8000-000000000004')$,
+    '71000000-0000-4000-8000-000000000004')$pt$,
   '22023',null,'New cheque-clearing accounts are blocked');
 
 -- One manually entered cash payment can be split across invoices; excess is
