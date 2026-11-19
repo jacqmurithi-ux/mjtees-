@@ -32,6 +32,7 @@ test('material planning and issuing RPCs are owner-authorized privileged transac
 
 test('material issue checks the plan and available stock, then uses the stock ledger', () => {
   assert.match(migration, /Issue quantity exceeds planned balance/);
+  assert.match(migration, /Cannot issue material for a closed production job/);
   assert.match(migration, /Insufficient stock/);
   assert.match(migration, /private\.apply_stock_movement\([\s\S]*?'job_issue'\s*\)/);
   assert.match(migration, /actual_direct_cost=actual_direct_cost\+v_cost/);
