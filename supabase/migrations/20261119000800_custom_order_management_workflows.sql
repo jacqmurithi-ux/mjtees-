@@ -114,10 +114,14 @@ begin
   select * into v_artwork from public.sales_job_artworks where id=p_artwork_id for update;
   if not found then raise exception using errcode='P0002',message='Artwork proof not found'; end if;
   v_actor:=private.assert_active_owner(v_artwork.business_id);
-  if p_request_id is null or p_proof_status not in ('sent','approved','rejected')
+  if p_request_id is null or p_proof_status is null or p_proof_status not in ('sent','approved','rejected')
     or length(coalesce(p_notes,''))>1000 then
     raise exception using errcode='22023',message='Choose a valid proof status and request id';
   end if;
+  v_payload:=jsonb_build_object('artwork_id',p_artwork_id,'proof_status',p_proof_status,
+    'approved_by_contact_id',p_approved_by_contact_id,'notes',nullif(btrim(p_notes),''));
+  v_cached:=private.begin_idempotent_request(v_artwork.business_id,'set_job_artwork_status',p_request_id,v_payload);
+  if v_cached is not null then return v_cached; end if;
   if p_proof_status='sent' and v_artwork.proof_status not in ('pending') then
     raise exception using errcode='55000',message='Only a pending proof can be marked as sent; create a new version after rejection';
   end if;
@@ -130,10 +134,6 @@ begin
   ) then
     raise exception using errcode='22023',message='Approval contact does not belong to this business';
   end if;
-  v_payload:=jsonb_build_object('artwork_id',p_artwork_id,'proof_status',p_proof_status,
-    'approved_by_contact_id',p_approved_by_contact_id,'notes',nullif(btrim(p_notes),''));
-  v_cached:=private.begin_idempotent_request(v_artwork.business_id,'set_job_artwork_status',p_request_id,v_payload);
-  if v_cached is not null then return v_cached; end if;
   update public.sales_job_artworks
     set proof_status=p_proof_status,
       sent_at=case when p_proof_status='sent' then coalesce(sent_at,now()) else sent_at end,
