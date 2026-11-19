@@ -74,7 +74,7 @@ select public.owner_update_max_unit_selling_price(450);
 select extensions.is(public.owner_get_max_unit_selling_price(),450::numeric,'owner can read the configured maximum price through the protected RPC');
 select extensions.is((select max_unit_selling_price from public.business_settings where business_id=current_setting('test.business_id')::uuid),450::numeric,'owner can set a maximum selling price per finished item');
 select extensions.throws_ok(
- $select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-CEILING',current_date+7,'[{"description":"Ceiling test","quantity":1,"unit_price":500,"details":{}}]'::jsonb,false,null)$,
+ $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-CEILING',current_date+7,'[{"description":"Ceiling test","quantity":1,"unit_price":500,"details":{}}]'::jsonb,false,null)$$,
  'P0001','Unit selling price exceeds the owner-set maximum price of KSh 450.00',
  'server rejects a unit selling price above the owner-set ceiling');
 select public.owner_update_max_unit_selling_price(null);
