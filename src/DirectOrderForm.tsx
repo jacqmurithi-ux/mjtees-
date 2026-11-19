@@ -4,6 +4,7 @@ import { supabase } from "./lib/supabase";
 
 type Customer={id:string;display_name:string;customer_status:string};
 type Address={id:string;label:string|null;recipient_name:string|null;phone:string|null;address_text:string;locality:string|null;is_default:boolean};
+type Contact={id:string;full_name:string;position_title:string|null;phone:string|null;email:string|null;is_primary:boolean};
 type Category={id:string;name:string};
 type Catalogue={id:string;name:string;category_id:string|null;item_type:"product"|"service"};
 type Stock={id:string;sku:string;name:string;base_unit:string;stock_kind:string};
@@ -13,9 +14,9 @@ const rid=()=>crypto.randomUUID();
 const blank=():Line=>({catalogueItemId:"",categoryId:"",description:"",quantity:"1",unit:"piece",unitPrice:"",discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:"",printPosition:"",garmentType:"",artworkReference:"",instructions:""});
 const kes=(n:number)=>new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:0}).format(n);
 
-export default function DirectOrderForm({businessId,customer,addresses,onCreated,onCancel}:{businessId:string;customer:Customer;addresses:Address[];onCreated:()=>void;onCancel:()=>void}){
+export default function DirectOrderForm({businessId,customer,addresses,onCreated,onCancel}:{businessId:string;customer:Customer;addresses:Address[];contacts:Contact[];onCreated:()=>void;onCancel:()=>void}){
  const [categories,setCategories]=useState<Category[]>([]),[catalogue,setCatalogue]=useState<Catalogue[]>([]),[stock,setStock]=useState<Stock[]>([]),[methods,setMethods]=useState<Method[]>([]);
- const [lines,setLines]=useState<Line[]>([blank()]),[discount,setDiscount]=useState("0"),[customerNotes,setCustomerNotes]=useState(""),[internalNotes,setInternalNotes]=useState(""),[requiredBy,setRequiredBy]=useState(""),[turnaround,setTurnaround]=useState(""),[addressId,setAddressId]=useState(addresses.find(a=>a.is_default)?.id||"");
+ const [lines,setLines]=useState<Line[]>([blank()]),[discount,setDiscount]=useState("0"),[customerNotes,setCustomerNotes]=useState(""),[internalNotes,setInternalNotes]=useState(""),[requiredBy,setRequiredBy]=useState(""),[turnaround,setTurnaround]=useState(""),[addressId,setAddressId]=useState(addresses.find(a=>a.is_default)?.id||""),[contactId,setContactId]=useState(contacts.find(c=>c.is_primary)?.id||"");
  const [marginReason,setMarginReason]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState("");
  useEffect(()=>{if(!supabase)return;let live=true;void Promise.all([
   supabase.from("service_categories").select("id,name").eq("business_id",businessId).eq("is_active",true).order("name"),
@@ -35,7 +36,7 @@ export default function DirectOrderForm({businessId,customer,addresses,onCreated
   const hours=turnaround.trim()?Number(turnaround):null;if(hours!==null&&(!Number.isInteger(hours)||hours<1||hours>8760)){setError("Turnaround must be between 1 and 8,760 hours.");return;}
   setBusy(true);setError("");setNotice("");
   const payload=lines.map(l=>({catalogue_item_id:l.catalogueItemId||null,category_id:l.categoryId,stock_item_id:l.customerSupplies?null:(l.stockItemId||null),description:l.description.trim(),quantity:Number(l.quantity),unit:l.unit.trim(),unit_price:l.unitPrice.trim()?Number(l.unitPrice):null,line_discount:Number(l.discount),sale_mode:l.saleMode,customer_supplies_item:l.customerSupplies,production_method_id:l.saleMode==="blank"?null:(l.productionMethodId||null),production_specification:{print_position:l.printPosition.trim()||null,garment_type:l.garmentType.trim()||null,artwork_reference:l.artworkReference.trim()||null,artwork_instructions:l.instructions.trim()||null}}));
-  const {data,error:rpcError}=await supabase.rpc("owner_create_direct_order",{p_business_id:businessId,p_customer_id:customer.id,p_enquiry_id:null,p_lines:payload,p_order_discount:Number(discount),p_customer_notes:customerNotes.trim()||null,p_internal_notes:internalNotes.trim()||null,p_request_id:rid(),p_margin_exception_reason:marginReason.trim()||null});
+  const selectedAddress=addresses.find(a=>a.id===addressId);const selectedContact=contacts.find(c=>c.id===contactId);\n  const orderInternalNotes=[internalNotes.trim(),selectedContact?"Order contact: "+selectedContact.full_name+" · "+[selectedContact.position_title,selectedContact.phone,selectedContact.email].filter(Boolean).join(" · "):"",selectedAddress?"Delivery address reference: "+[selectedAddress.label,selectedAddress.recipient_name,selectedAddress.phone,selectedAddress.address_text,selectedAddress.locality].filter(Boolean).join(", "):""].filter(Boolean).join("\\n\\n");\n  const {data,error:rpcError}=await supabase.rpc("owner_create_direct_order",{p_business_id:businessId,p_customer_id:customer.id,p_enquiry_id:null,p_lines:payload,p_order_discount:Number(discount),p_customer_notes:customerNotes.trim()||null,p_internal_notes:orderInternalNotes||null,p_request_id:rid(),p_margin_exception_reason:marginReason.trim()||null});
   if(rpcError){setError(rpcError.message);setBusy(false);return;}
   const orderNumber=String(data?.order_number||"");
   if(orderNumber){
@@ -75,7 +76,7 @@ export default function DirectOrderForm({businessId,customer,addresses,onCreated
   </div>)}<button type="button" className="secondary-action" onClick={()=>setLines(v=>[...v,blank()])}>＋ Add another item</button></div>
   <label>Order discount (KES)<input type="number" min="0" step="1" value={discount} onChange={e=>setDiscount(e.target.value)}/></label>
   <div className="purchase-totals"><div><span>Indicative line total</span><b>{kes(subtotal)}</b></div><div className="purchase-grand-total"><span>Before order discount</span><strong>{kes(subtotal)}</strong></div></div>
-  <label className="wide-field">Delivery address<select value={addressId} onChange={e=>setAddressId(e.target.value)}><option value="">Choose later in Delivery & Collection</option>{addresses.map(a=><option key={a.id} value={a.id}>{a.label||"Address"} · {a.address_text}{a.is_default?" · Default":""}</option>)}</select><small>Address selection is a handover reference; final delivery details are confirmed in Delivery & Collection.</small></label>
+  <label>Order contact<select value={contactId} onChange={e=>setContactId(e.target.value)}><option value="">Use main customer contact</option>{contacts.map(c=><option key={c.id} value={c.id}>{c.full_name}{c.is_primary?" · Primary":""} · {c.phone||c.email||"No details"}</option>)}</select></label>\n  <label className="wide-field">Saved delivery address<select value={addressId} onChange={e=>setAddressId(e.target.value)}><option value="">Choose later in Delivery & Collection</option>{addresses.map(a=><option key={a.id} value={a.id}>{a.label||"Address"} · {a.address_text}{a.is_default?" · Default":""}</option>)}</select><small>Address selection is a handover reference; final delivery details are confirmed in Delivery & Collection.</small></label>
   <label className="wide-field">Customer notes<textarea value={customerNotes} onChange={e=>setCustomerNotes(e.target.value)}/></label>
   <label className="wide-field">Internal notes (not shown to customer)<textarea value={internalNotes} onChange={e=>setInternalNotes(e.target.value)}/></label>
   <label className="wide-field">Owner margin exception reason (only if required)<textarea maxLength={1000} value={marginReason} onChange={e=>setMarginReason(e.target.value)} placeholder="Explain an approved exception to the 30% gross-margin floor, if applicable."/></label>
