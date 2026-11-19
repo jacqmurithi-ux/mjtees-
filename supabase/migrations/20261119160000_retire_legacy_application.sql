@@ -1,5 +1,5 @@
 -- DESTRUCTIVE: remove the former MJ application structures and business records.
--- Explicit preservation boundary: do not modify auth.users, auth.identities, auth.sessions, or Auth configuration.
+-- Preserve auth.users, auth.identities, auth.sessions and Auth configuration.
 do $$ declare r record; begin
   for r in select schemaname,viewname from pg_views where schemaname='public'
     and not exists(select 1 from pg_depend d where d.classid='pg_class'::regclass and d.objid=(quote_ident(schemaname)||'.'||quote_ident(viewname))::regclass and d.refclassid='pg_extension'::regclass and d.deptype='e')
@@ -22,16 +22,12 @@ do $$ declare r record; begin
     where n.nspname='public' and t.typtype in('e','d')
     and not exists(select 1 from pg_depend d where d.classid='pg_type'::regclass and d.objid=t.oid and d.refclassid='pg_extension'::regclass and d.deptype='e')
   loop execute format('drop type if exists public.%I cascade',r.typname); end loop;
- for r in select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='S'
-  and not exists(select 1 from pg_depend d where d.classid='pg_class'::regclass and d.objid=c.oid and d.refclassid='pg_extension'::regclass and d.deptype='e')
- loop execute format('drop sequence if exists public.%I cascade',r.relname);end loop;
- for r in select t.typname from pg_type t join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typtype in('e','d')
-  and not exists(select 1 from pg_depend d where d.classid='pg_type'::regclass and d.objid=t.oid and d.refclassid='pg_extension'::regclass and d.deptype='e')
- loop execute format('drop type if exists public.%I cascade',r.typname);end loop;
-end $;
--- The previous private schema was dedicated to the former MJ application.
+end $$;
+
+-- The old private schema belonged to the former MJ application.
 drop schema if exists private cascade;
 create schema private;
--- Delete the old app's private website uploads only.
+
+-- Remove the former app's website media and files; retain Supabase Storage itself.
 delete from storage.objects where bucket_id='website-media';
 delete from storage.buckets where id='website-media';
