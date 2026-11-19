@@ -57,6 +57,8 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
    .on("postgres_changes",{event:"*",schema:"public",table:"production_jobs",filter:"business_id=eq."+businessId},()=>{void load();})
    .on("postgres_changes",{event:"*",schema:"public",table:"production_cost_entries",filter:"business_id=eq."+businessId},()=>{void load();})
    .on("postgres_changes",{event:"*",schema:"public",table:"production_output_entries",filter:"business_id=eq."+businessId},()=>{void load();})
+   .on("postgres_changes",{event:"*",schema:"public",table:"quality_checks",filter:"business_id=eq."+businessId},()=>{void load();})
+   .on("postgres_changes",{event:"*",schema:"public",table:"rework_events",filter:"business_id=eq."+businessId},()=>{void load();})
    .subscribe();
   return ()=>{void client.removeChannel(channel);};
  },[businessId,load]);
