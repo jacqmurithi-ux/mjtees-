@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+
+test('dashboard uses quote revenue, invoice balances, defined production stages and supplier net payable', () => {
+  assert.match(app, /from\('quotations'\)/);
+  assert.match(app, /!\['declined','expired'\]\.includes\(x\.status\)/);
+  assert.match(app, /from\('sales_invoices'\)/);
+  assert.match(app, /\['screens_prepared','printing','finishing','quality_check'\]/);
+  assert.match(app, /purchases-supplierPaid/);
+});
+
+test('dashboard due jobs include customer, quantity/product, stage and due date', () => {
+  assert.match(app, /from\('production_jobs'\)/);
+  assert.match(app, /quotation_lines\(description,quantity\)/);
+  assert.match(app, /customer\?\.customer_name/);
+  assert.match(app, /Nothing late/);
+});
+
+test('dashboard stock and supplier price alert empty states match the approved wording', () => {
+  assert.match(app, /Stock is above reorder levels/);
+  assert.match(app, /No price changes waiting/);
+  assert.match(app, /owner_supplier_price_alerts/);
+  assert.match(app, /Mark reviewed/);
+});
