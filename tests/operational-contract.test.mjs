@@ -93,7 +93,12 @@ test('invoice snapshots direct cost and reports gross profit and gross margin di
   assert.match(sql, /'gross_margin_percent'/);
 });
 
-test('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
+test('production stages follow a controlled sequence with a rework path', () => {
+  assert.match(sql, /v_old='awaiting_artwork' and p_stage in\('artwork_proof','cancelled'\)/);
+  assert.match(sql, /v_old='quality_check' and p_stage in\('ready','printing','cancelled'\)/);
+  assert.match(sql, /Invalid production stage transition/);
+});
+\ntest('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
   for (const fn of ['owner_create_quotation','owner_convert_quote_to_invoice','owner_issue_job_material','owner_record_payment','owner_record_expense','owner_operational_report']) {
     assert.match(sql, new RegExp('revoke all on function public\\.' + fn));
     assert.match(sql, new RegExp('grant execute on function public\\.' + fn + '.*to authenticated'));
