@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(63);
+select extensions.plan(71);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -216,10 +216,10 @@ select set_config('test.po_multi',public.owner_create_purchase_order(
 select extensions.is((select count(*)::integer from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid),2,'purchase order accepts multiple distinct stock lines');
 select extensions.is((select count(*)::integer from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid and stock_item_id is not null),2,'every new purchase line retains an exact stock-item reference');
 select extensions.is((select total+transport_cost from public.purchase_orders where id=current_setting('test.po_multi')::uuid),106::numeric,'purchase order total includes item values and transport once');
-select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid order by item_description limit 1),2);
+select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid and stock_item_id=current_setting('test.stock_id')::uuid),2);
 select extensions.is((select status from public.purchase_orders where id=current_setting('test.po_multi')::uuid),'part_received','partial receipt leaves a multi-line order open');
-select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid order by item_description limit 1),2);
-select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid order by item_description desc limit 1),3);
+select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid and stock_item_id=current_setting('test.stock_id')::uuid),2);
+select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid and stock_item_id=current_setting('test.stock_two')::uuid),3);
 select extensions.is((select status from public.purchase_orders where id=current_setting('test.po_multi')::uuid),'received','order closes only after every ordered unit is received');
 select extensions.throws_ok(
  $assert$select public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_multi')::uuid,'SPAY-TEST-OVER','cash',107,null)$assert$,
