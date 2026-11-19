@@ -18,8 +18,11 @@ create table if not exists public.production_job_materials(
  created_at timestamptz not null default now()
 );
 alter table public.production_job_materials enable row level security;
-create policy production_job_materials_owner_all on public.production_job_materials
- for all to authenticated
+create policy production_job_materials_owner_read on public.production_job_materials for select to authenticated
+ using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy production_job_materials_owner_insert on public.production_job_materials for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy production_job_materials_owner_update on public.production_job_materials for update to authenticated
  using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'))
  with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
 
@@ -29,15 +32,58 @@ declare t text;
 begin
  foreach t in array array[
  'quotations','quotation_lines','sales_invoices','sales_invoice_items','production_jobs',
- 'stock_items','stock_movements','suppliers','purchase_orders','purchase_order_lines',
- 'payments','payment_allocations','refunds','expenses','audit_events'
+ 'suppliers','purchase_orders','purchase_order_lines','refunds','expenses'
  ] loop
   execute format(
    'create policy %I on public.%I for all to authenticated using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner'')) with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner''))',
    t||'_owner_write'
   );
  end loop;
-end $$;
+end $;
+
+-- Ledger rows are append-only. Inventory quantities can only change through the private stock movement helper.
+drop policy if exists stock_items_owner_access on public.stock_items;
+create policy stock_items_owner_insert on public.stock_items for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy payments_owner_insert on public.payments for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy payment_allocations_owner_insert on public.payment_allocations for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+create policy audit_events_owner_insert on public.audit_events for insert to authenticated
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+revoke update,delete on public.stock_items from authenticated;
+grant select,insert on public.stock_items to authenticated;
+revoke insert,update,delete on public.stock_movements from authenticated;
+grant select on public.stock_movements to authenticated;
+revoke update,delete on public.payments,public.payment_allocations,public.audit_events from authenticated;
+grant select,insert on public.payments,public.payment_allocations,public.audit_events to authenticated;
+revoke delete on public.production_job_materials from authenticated;
+grant select,insert,update on public.production_job_materials to authenticated;
+
+create or replace function private.apply_stock_movement(
+ p_business_id uuid,p_stock_item_id uuid,p_quantity numeric,p_unit_cost numeric,p_movement_type text
+) returns void language plpgsql security definer set search_path=public,pg_temp as $
+declare s public.stock_items%rowtype; v_new_qty numeric(14,3); v_new_cost numeric(14,2);
+begin
+ if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then
+  raise exception 'Owner authorization required';
+ end if;
+ if p_quantity=0 or p_unit_cost<0 or p_movement_type not in('opening','purchase','job_issue','transfer_in','transfer_out','adjustment','offcut_return') then raise exception 'Invalid stock movement'; end if;
+ select * into s from public.stock_items where id=p_stock_item_id and business_id=p_business_id for update;
+ if not found then raise exception 'Stock item not found'; end if;
+ v_new_qty:=s.quantity_on_hand+p_quantity;
+ if v_new_qty<0 then raise exception 'Insufficient stock'; end if;
+ v_new_cost:=s.average_unit_cost;
+ if p_quantity>0 then
+  v_new_cost:=case when v_new_qty>0 then ((s.quantity_on_hand*s.average_unit_cost)+(p_quantity*p_unit_cost))/v_new_qty else p_unit_cost end;
+ end if;
+ update public.stock_items set quantity_on_hand=v_new_qty,average_unit_cost=v_new_cost where id=s.id;
+ insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
+ values(p_business_id,p_stock_item_id,p_movement_type,p_quantity,p_unit_cost,auth.uid());
+end $;
+revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) from public,anon;
+grant usage on schema private to authenticated;
+grant execute on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) to authenticated;
 
 create or replace function public.owner_create_stock_item(
  p_location_code text,p_item_name text,p_category text,p_unit text default 'piece',
@@ -52,11 +98,10 @@ begin
  select id into v_location from public.inventory_locations where business_id=v_business and location_code=p_location_code;
  if v_location is null then raise exception 'Inventory location not found'; end if;
  insert into public.stock_items(business_id,location_id,sku,item_name,category,unit,quantity_on_hand,reorder_level,average_unit_cost)
- values(v_business,v_location,nullif(btrim(p_sku),''),btrim(p_item_name),btrim(p_category),coalesce(nullif(btrim(p_unit),''),'piece'),p_opening_quantity,p_reorder_level,p_unit_cost)
+ values(v_business,v_location,nullif(btrim(p_sku),''),btrim(p_item_name),btrim(p_category),coalesce(nullif(btrim(p_unit),''),'piece'),0,p_reorder_level,p_unit_cost)
  returning id into v_item;
  if p_opening_quantity>0 then
-  insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
-  values(v_business,v_item,'opening',p_opening_quantity,p_unit_cost,v_user);
+  perform private.apply_stock_movement(v_business,v_item,p_opening_quantity,p_unit_cost,'opening');
  end if;
  return v_item;
 end $$;
@@ -162,10 +207,8 @@ begin
  if p_quantity<=0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Issue quantity exceeds planned balance'; end if;
  select * into s from public.stock_items where id=m.stock_item_id and business_id=m.business_id for update;
  if s.quantity_on_hand<p_quantity then raise exception 'Insufficient stock'; end if;
- update public.stock_items set quantity_on_hand=quantity_on_hand-p_quantity where id=s.id;
+ perform private.apply_stock_movement(m.business_id,s.id,-p_quantity,s.average_unit_cost,'job_issue');
  update public.production_job_materials set issued_quantity=issued_quantity+p_quantity where id=m.id;
- insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
- values(m.business_id,s.id,'job_issue',-p_quantity,s.average_unit_cost,v_user);
  update public.production_jobs set actual_direct_cost=actual_direct_cost+(p_quantity*s.average_unit_cost) where id=m.job_id;
 end $$;
 
@@ -304,12 +347,8 @@ begin
  select * into s from public.stock_items where id=l.stock_item_id and business_id=l.business_id for update;
  if not found then raise exception 'Stock item not found'; end if;
  v_landed:=l.unit_cost+case when po.total>0 then (po.transport_cost*(l.quantity*l.unit_cost/po.total))/l.quantity else 0 end;
- v_new_qty:=s.quantity_on_hand+p_received_quantity;
- update public.stock_items set average_unit_cost=case when v_new_qty>0 then ((s.quantity_on_hand*s.average_unit_cost)+(p_received_quantity*v_landed))/v_new_qty else v_landed end,
- quantity_on_hand=v_new_qty where id=s.id;
+ perform private.apply_stock_movement(l.business_id,s.id,p_received_quantity,v_landed,'purchase');
  update public.purchase_order_lines set received_quantity=received_quantity+p_received_quantity where id=l.id;
- insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
- values(l.business_id,s.id,'purchase',p_received_quantity,v_landed,auth.uid());
  select coalesce(sum(received_quantity),0) into v_received from public.purchase_order_lines where purchase_order_id=po.id;
  update public.purchase_orders set status=case when v_received>= (select sum(quantity) from public.purchase_order_lines where purchase_order_id=po.id) then 'received' else 'part_received' end where id=po.id;
 end $$;
