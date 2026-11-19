@@ -22,6 +22,16 @@ This is a clean replacement for the former MJ Printing & Branding application. T
 - The 30% floor is checked against direct cost; a written owner exception is required below the floor.
 - The 1.8× full-cost target is a warning only.
 
+## Owner workflows
+- Supplier balances are calculated from non-cancelled purchase orders and append-only supplier payments; supplier payments cannot exceed the outstanding balance.
+- Supplier price alerts compare the two latest purchase prices for the same supplier and stock item; reviewed alerts retain an audit record.
+- Deposits are recorded against sent or accepted quotations and allocated to the invoice when the accepted quote is converted.
+- Refund requests are recorded separately and can be posted without changing or reversing the original payment.
+- Inventory adjustments require a reason and create a stock movement plus an adjustment audit record.
+- Per-job reports show revenue, direct cost, gross profit, contribution margin, amount paid, balance and turnaround time.
+- Production, purchase, supplier-payment, refund and inventory ledgers are written through owner-checked RPCs; the browser has read-only access to ledger tables.
+- The production workspace is not seeded with demo transactions. Disposable fixtures are used only in rolled-back automated tests.
+
 ## Deployment
 The workflow is manual and checks out `main`. It requires a public Supabase URL and publishable key. Never place a service-role or secret key in a browser build.
 
