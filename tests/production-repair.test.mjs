@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261119192000_restore_production_material_workflow.sql', import.meta.url), 'utf8');
+const quotationMigration = await readFile(new URL('../supabase/migrations/20261119191500_restore_public_quotation_rpc.sql', import.meta.url), 'utf8');
 
 test('production materials are business-scoped and reference jobs and stock within the same business', () => {
   assert.match(migration, /business_id uuid not null references public\.businesses\(id\)/);
@@ -86,8 +87,8 @@ test('Production screen queries the restored schema, calls the matching RPCs, an
 });
 
 test('quotation creation is exposed through the PostgREST public RPC with the exact frontend argument names', () => {
-  assert.match(migration, /create or replace function public\.owner_create_quotation\([\s\S]*?p_customer_id uuid[\s\S]*?p_costing_profile_id uuid[\s\S]*?p_quote_number text[\s\S]*?p_valid_until date[\s\S]*?p_lines jsonb[\s\S]*?p_allow_below_floor boolean default false[\s\S]*?p_exception_reason text default null[\s\S]*?\) returns uuid/);
-  assert.match(migration, /select private\.owner_create_quotation_impl\([\s\S]*?p_allow_below_floor,p_exception_reason/);
-  assert.match(migration, /grant execute on function public\.owner_create_quotation\(uuid,uuid,text,date,jsonb,boolean,text\) to authenticated/);
-  assert.match(migration, /notify pgrst, 'reload schema'/);
+  assert.match(quotationMigration, /create or replace function public\.owner_create_quotation\([\s\S]*?p_customer_id uuid[\s\S]*?p_costing_profile_id uuid[\s\S]*?p_quote_number text[\s\S]*?p_valid_until date[\s\S]*?p_lines jsonb[\s\S]*?p_allow_below_floor boolean default false[\s\S]*?p_exception_reason text default null[\s\S]*?\) returns uuid/);
+  assert.match(quotationMigration, /select private\.owner_create_quotation_impl\([\s\S]*?p_allow_below_floor,p_exception_reason/);
+  assert.match(quotationMigration, /grant execute on function public\.owner_create_quotation\(uuid,uuid,text,date,jsonb,boolean,text\) to authenticated/);
+  assert.match(quotationMigration, /notify pgrst, 'reload schema'/);
 });
