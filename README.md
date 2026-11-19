@@ -14,7 +14,15 @@ This is a clean replacement for the former MJ Printing & Branding application. T
 - Shop 1: apparel, vinyl and stickers.
 - Shop 2: inks, screens, emulsion and printing consumables.
 
-## Quote pricing\n- Revenue = unit price × quantity.\n- Direct cost = blank cost per piece × quantity + other direct costs.\n- Contribution = revenue − direct cost.\n- Margin = contribution ÷ direct cost.\n- The 30% floor is checked against direct cost; a written owner exception is required below the floor.\n- The 1.8× full-cost target is a warning only.\n\n## Deployment
+## Quote pricing
+- Revenue = unit price × quantity.
+- Direct cost = blank cost per piece × quantity + other direct costs.
+- Contribution = revenue − direct cost.
+- Margin = contribution ÷ direct cost.
+- The 30% floor is checked against direct cost; a written owner exception is required below the floor.
+- The 1.8× full-cost target is a warning only.
+
+## Deployment
 The workflow is manual and checks out `main`. It requires a public Supabase URL and publishable key. Never place a service-role or secret key in a browser build.
 
 ## Database replacement
