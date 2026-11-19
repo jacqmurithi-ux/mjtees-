@@ -135,7 +135,7 @@ begin
     or v_category not in('blank_item','production') then
    raise exception 'Costing profile contains an invalid component or cost basis';
   end if;
-  if v_category='blank_item' and (v_customer_supplied or v_blank_override is not null) then
+  if v_category='blank_item' and (v_customer_supplied or (v_blank_override is not null and v_basis='per_piece')) then
    continue;
   end if;
   v_component_total:=case when v_basis='per_job' then v_component_cost else v_component_cost*v_qty end;
