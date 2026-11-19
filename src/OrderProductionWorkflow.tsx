@@ -48,6 +48,21 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
   setOrders((o.data??[]) as Order[]);setItems((i.data??[]) as Item[]);setMethods((m.data??[]) as Method[]);setJobs((j.data??[]) as Job[]);setChecks((q.data??[]) as Check[]);setReworks((rw.data??[]) as Rework[]);setCosts((ce.data??[]) as CostEntry[]);setStock((s.data??[]) as Stock[]);setLocations((l.data??[]) as Location[]);setOutputEntries((out.data??[]) as OutputEntry[]);setOutputSummary((summary.data??{}) as OutputSummary);const {data:userData}=await client.auth.getUser();setCurrentUserId(userData.user?.id||"");
  },[businessId,reportDate]);
  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
+ useEffect(()=>{
+  const client=supabase;
+  if(!client)return;
+  const channel=client.channel("order-production-"+businessId)
+   .on("postgres_changes",{event:"*",schema:"public",table:"orders",filter:"business_id=eq."+businessId},()=>{void load();})
+   .on("postgres_changes",{event:"*",schema:"public",table:"order_items",filter:"business_id=eq."+businessId},()=>{void load();})
+   .on("postgres_changes",{event:"*",schema:"public",table:"production_jobs",filter:"business_id=eq."+businessId},()=>{void load();})
+   .on("postgres_changes",{event:"*",schema:"public",table:"production_cost_entries",filter:"business_id=eq."+businessId},()=>{void load();})
+   .on("postgres_changes",{event:"*",schema:"public",table:"production_output_entries",filter:"business_id=eq."+businessId},()=>{void load();})
+   .on("postgres_changes",{event:"*",schema:"public",table:"quality_checks",filter:"business_id=eq."+businessId},()=>{void load();})
+   .on("postgres_changes",{event:"*",schema:"public",table:"rework_events",filter:"business_id=eq."+businessId},()=>{void load();})
+   .subscribe();
+  return ()=>{void client.removeChannel(channel);};
+ },[businessId,load]);
+
  const call=async(name:string,args:Record<string,unknown>,success:string)=>{
   if(!supabase)return;setBusy(true);setError("");setNotice("");
   const {error:rpcError}=await supabase.rpc(name,args);
@@ -137,7 +152,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
       {job&&<div className="job-card"><div className="enquiry-top"><b>Production job · {job.status.replaceAll("_"," ")}</b><small>{job.due_at?new Date(job.due_at).toLocaleString("en-KE"):"No job due date"}</small></div>
        <CustomOrderDetails businessId={businessId} jobId={job.id}/>
        <div className="output-entry-panel">
-        <div className="panel-toolbar"><div><b>Record actual printing</b><small>Planned {job.planned_quantity} · Accepted so far {outputEntries.filter(e=>e.job_id===job.id).reduce((n,e)=>n+Number(e.quantity_accepted),0)}</small></div></div>
+                <div className="panel-toolbar"><div><b>Record actual printing</b><small>Planned {job.planned_quantity} · Accepted so far {outputEntries.filter(e=>e.job_id===job.id).reduce((n,e)=>n+Number(e.quantity_accepted),0)}</small></div><button type="button" className="secondary-action" onClick={()=>setOutputForms(x=>({...x,[job.id]:{...(x[job.id]||{printed:"",rejected:"0",reworked:"0",workerType:"owner" as const,workerName:"",labourCost:"0",occurredAt:localDateTime(),notes:""}),workerType:"temporary",workerName:"Outsourced printer",labourCost:"200",occurredAt:localDateTime()}}))}>Use Baraka outsourced labour example · KES 200</button></div>
         {(()=>{const v=outputForms[job.id]||{printed:"",rejected:"0",reworked:"0",workerType:"owner" as const,workerName:"",labourCost:"0",occurredAt:localDateTime(),notes:""};return <div className="inline-controls">
          <label>Pieces printed<input type="number" min="0.001" step="0.001" value={v.printed} onChange={e=>setOutputForms(x=>({...x,[job.id]:{...v,printed:e.target.value}}))}/></label>
          <label>Rejected pieces<input type="number" min="0" step="0.001" value={v.rejected} onChange={e=>setOutputForms(x=>({...x,[job.id]:{...v,rejected:e.target.value}}))}/></label>
@@ -162,7 +177,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
     })}
     {!lines.length&&<p className="empty-records">No order lines found.</p>}
     {order.status==="confirmed"&&!lines.some(i=>i.sale_mode==="value_added"&&i.production_method_id)&&<div className="handover-panel"><p>No production job is required for these order lines.</p><button className="primary-action compact" disabled={busy} onClick={()=>void call("owner_mark_order_ready",{p_order_id:order.id,p_reason:"Owner confirmed that no production work is required.",p_request_id:rid()},"Order marked ready for customer handover.")}>Mark ready for handover</button></div>}
-    {order.status==="ready"&&<div className="handover-panel"><h3>Customer handover</h3><div className="inline-controls"><select value={hand.method} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,method:e.target.value as "collection"|"courier"}}))}><option value="collection">Customer collection</option><option value="courier">Courier delivery</option></select><input placeholder="Recipient name" value={hand.recipient} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,recipient:e.target.value}}))}/>{hand.method==="courier"&&<input placeholder="Parcel carrier" value={hand.carrier} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,carrier:e.target.value}}))}/>}<input placeholder="Tracking reference" value={hand.tracking} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,tracking:e.target.value}}))}/><input type="number" min="0" step="1" placeholder="Actual carrier charge (KES)" value={hand.charge} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,charge:e.target.value}}))}/><input placeholder="Payment exception reason (owner approval)" value={hand.exception} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,exception:e.target.value}}))}/><button className="primary-action compact" disabled={busy} onClick={()=>handoverOrder(order)}>Confirm handover</button></div><p className="small-note">Full payment is required. Enter the actual courier charge paid by the customer (collection is KES 0). Only enter a reason when the owner is approving a payment exception.</p></div>}
+    {order.status==="ready"&&<div className="handover-panel"><h3>Customer handover</h3><div className="inline-controls"><select value={hand.method} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,method:e.target.value as "collection"|"courier"}}))}><option value="collection">Customer collection</option><option value="courier">Courier delivery</option></select><input placeholder="Recipient name" value={hand.recipient} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,recipient:e.target.value}}))}/>{hand.method==="courier"&&<input placeholder="Parcel carrier" value={hand.carrier} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,carrier:e.target.value}}))}/>}<input placeholder="Tracking reference" value={hand.tracking} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,tracking:e.target.value}}))}/><input type="number" min="0" step="1" placeholder="Actual carrier charge (KES)" value={hand.charge} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,charge:e.target.value}}))}/><input placeholder="Payment exception reason (owner approval)" value={hand.exception} onChange={e=>setHandover(v=>({...v,[order.id]:{...hand,exception:e.target.value}}))}/><button className="primary-action compact" disabled={busy} onClick={()=>handoverOrder(order)}>Confirm handover</button></div><p className="small-note">Payment is not required to record an approved credit-term handover. If Baraka or another customer will pay later, enter the agreed credit reason; the invoice remains outstanding until a payment is posted. Enter only the actual courier charge (collection is KES 0).</p></div>}
    </article>;
   })}{!orders.length&&<p className="empty-records">No orders yet. Accepted quotations will appear here automatically.</p>}</div>
  </section>;

@@ -110,6 +110,19 @@ export default function PaymentWorkflow({ businessId, customers, onChanged }: { 
 
   useEffect(() => { void load().catch(e => setError(e instanceof Error ? e.message : "Could not load payments.")); }, [load]);
 
+  useEffect(() => {
+    const client = supabase;
+    if (!client) return;
+    const channel = client.channel("payment-workflow-" + businessId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales_invoices", filter: "business_id=eq." + businessId }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments", filter: "business_id=eq." + businessId }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales_invoice_payment_allocations", filter: "business_id=eq." + businessId }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales_customer_credit_entries", filter: "business_id=eq." + businessId }, () => { void load(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "receipts", filter: "business_id=eq." + businessId }, () => { void load(); })
+      .subscribe();
+    return () => { void client.removeChannel(channel); };
+  }, [businessId, load]);
+
   const validAccounts = useMemo(() => accounts.filter(account => account.is_active && accountTypeForMethod[method].includes(account.account_type)), [accounts, method]);
   useEffect(() => {
     if (!validAccounts.some(account => account.id === accountId)) setAccountId(validAccounts[0]?.id ?? "");
