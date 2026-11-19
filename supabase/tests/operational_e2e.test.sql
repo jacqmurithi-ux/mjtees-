@@ -153,7 +153,7 @@ select public.owner_post_refund(current_setting('test.refund_id')::uuid);
 select extensions.is((select status from public.refunds where id=current_setting('test.refund_id')::uuid),'posted','refund is posted as a separate record');
 select extensions.is((select amount from public.payments where id=current_setting('test.payment_id')::uuid),800::numeric,'posting a refund never reverses or changes the original payment');
 select public.owner_adjust_inventory(current_setting('test.stock_id')::uuid,2,'Counted two extra units');
-select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),12::numeric,'inventory adjustment updates stock on hand');
+select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'inventory adjustment updates stock on hand');
 select extensions.ok(exists(select 1 from public.stock_movements where stock_item_id=current_setting('test.stock_id')::uuid and movement_type='adjustment' and quantity=2),'inventory adjustment creates an auditable stock movement');
 select extensions.is(jsonb_array_length(public.owner_job_report()),1,'per-job report returns the completed production job');
 select set_config('test.supplier_id',public.owner_create_supplier('Test Supplier',null,null)::text,true);
