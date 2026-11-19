@@ -7,6 +7,8 @@ alter table public.production_jobs
   add column if not exists actual_direct_cost numeric(14,2) not null default 0 check(actual_direct_cost>=0);
 alter table public.purchase_order_lines
   add column if not exists stock_item_id uuid references public.stock_items(id);
+alter table public.sales_invoice_items
+  add column if not exists direct_cost numeric(14,2) not null default 0 check(direct_cost>=0);
 
 create table if not exists public.production_job_materials(
  id uuid primary key default gen_random_uuid(),
@@ -291,8 +293,8 @@ begin
  insert into public.sales_invoices(business_id,customer_id,invoice_number,status,due_date,total,amount_paid,balance,created_by)
  values(q.business_id,q.customer_id,btrim(p_invoice_number),'sent',p_due_date,q.total,0,q.total,v_user)
  returning id into v_invoice;
- insert into public.sales_invoice_items(business_id,invoice_id,description,quantity,unit_price,line_total,item_type)
- select q.business_id,v_invoice,l.description,l.quantity,l.unit_price,l.line_total,
+ insert into public.sales_invoice_items(business_id,invoice_id,description,quantity,unit_price,line_total,direct_cost,item_type)
+ select q.business_id,v_invoice,l.description,l.quantity,l.unit_price,l.line_total,l.direct_cost,
   case when l.details->>'item_type' in('blank_product','printing_service','custom_production','other') then l.details->>'item_type' else 'other' end
  from public.quotation_lines l where l.quotation_id=q.id and l.business_id=q.business_id;
  select coalesce(bool_or(coalesce((details->>'customer_supplied_items')::boolean,false)),false)
@@ -387,6 +389,9 @@ begin
  if v_business is null then raise exception 'Owner workspace required'; end if;
  select jsonb_build_object(
   'invoiced_sales',coalesce((select sum(total) from public.sales_invoices where business_id=v_business and status not in('draft','void')),0),
+  'direct_production_cost',coalesce((select sum(ii.direct_cost) from public.sales_invoice_items ii join public.sales_invoices i on i.id=ii.invoice_id where ii.business_id=v_business and i.status not in('draft','void')),0),
+  'gross_profit',coalesce((select sum(i.total) from public.sales_invoices i where i.business_id=v_business and i.status not in('draft','void')),0)-coalesce((select sum(ii.direct_cost) from public.sales_invoice_items ii join public.sales_invoices i on i.id=ii.invoice_id where ii.business_id=v_business and i.status not in('draft','void')),0),
+  'gross_margin_percent',case when coalesce((select sum(i.total) from public.sales_invoices i where i.business_id=v_business and i.status not in('draft','void')),0)>0 then round(((coalesce((select sum(i.total) from public.sales_invoices i where i.business_id=v_business and i.status not in('draft','void')),0)-coalesce((select sum(ii.direct_cost) from public.sales_invoice_items ii join public.sales_invoices i on i.id=ii.invoice_id where ii.business_id=v_business and i.status not in('draft','void')),0))/coalesce((select sum(i.total) from public.sales_invoices i where i.business_id=v_business and i.status not in('draft','void')),0))*100,2) else null end,
   'payments_received',coalesce((select sum(amount) from public.payments where business_id=v_business),0),
   'outstanding_receivables',coalesce((select sum(balance) from public.sales_invoices where business_id=v_business and status not in('draft','void')),0),
   'active_jobs',(select count(*) from public.production_jobs where business_id=v_business and stage not in('delivered','cancelled')),
