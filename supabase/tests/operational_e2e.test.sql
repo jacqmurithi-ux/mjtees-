@@ -35,51 +35,51 @@ select extensions.ok(
  'direct inserts into financial and audit tables are blocked');
 
 insert into public.customers(business_id,customer_name,customer_type,created_by)
-select (public.owner_bootstrap_workspace()->>'business_id')::uuid,'Baraka Uniform Supplies','school',auth.uid();
+select (public.owner_bootstrap_workspace()->>'business_id')::uuid,'Example Customer','individual',auth.uid();
 
-select set_config('test.stock_id',public.owner_create_stock_item('shop_1','Blank school T-shirts','Apparel','piece',10,2,0,'BARAKA-BLANK-TEE')::text,true);
+select set_config('test.stock_id',public.owner_create_stock_item('shop_1','Generic test stock item','General','piece',10,2,0,'E2E-STOCK')::text,true);
 select extensions.throws_ok(
- $$select public.owner_create_quotation((select id from public.customers where customer_name='Baraka Uniform Supplies'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$$,
+ $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$$,
  'P0001','An active versioned costing profile is required before pricing this quotation',
  'refuses to price without an active versioned costing profile');
 
 select set_config('test.profile_id',public.owner_create_costing_profile(
- 'Screen printing — customer supplied garments',
- '[{"name":"Outsourced printing labour","cost":200,"basis":"per_job"}]'::jsonb,
- 200,true
+ 'Generic production service',
+ '[{"name":"Outsourced printing labour","cost":600,"basis":"per_job"}]'::jsonb,
+ 600,true
 )::text,true);
-select extensions.ok((select is_active and version=1 and direct_cost=200 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');
+select extensions.ok((select is_active and version=1 and direct_cost=600 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');
 
 select extensions.throws_ok(
- $$select public.owner_create_quotation((select id from public.customers where customer_name='Baraka Uniform Supplies'),current_setting('test.profile_id')::uuid,'Q-BARAKA-LOW',current_date+7,'[{"description":"Low price test","quantity":50,"unit_price":5,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
+ $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":50,"unit_price":5,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
  'P0001','Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.',
  'blocks quotations below the 30 percent floor without an exception');
 
 select set_config('test.exception_quote_id',public.owner_create_quotation(
- (select id from public.customers where customer_name='Baraka Uniform Supplies'),current_setting('test.profile_id')::uuid,
- 'Q-BARAKA-EXCEPTION',current_date+7,
+ (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,
+ 'Q-TEST-EXCEPTION',current_date+7,
  '[{"description":"Approved below-floor test","quantity":50,"unit_price":5,"direct_cost":0,"details":{}}]'::jsonb,
  true,'Approved contract exception'
 )::text,true);
 select extensions.ok((select below_floor_approved_by=auth.uid() and below_floor_exception_reason='Approved contract exception' from public.quotations where id=current_setting('test.exception_quote_id')::uuid),'below-floor exception records owner approver and reason');
 
 select set_config('test.quote_id',public.owner_create_quotation(
- (select id from public.customers where customer_name='Baraka Uniform Supplies'),current_setting('test.profile_id')::uuid,
- 'Q-BARAKA-E2E',current_date+7,
- '[{"description":"Screen printing on customer-supplied school T-shirts","quantity":50,"unit_price":30,"direct_cost":0,"details":{"item_type":"printing_service","customer_supplied_items":true}}]'::jsonb,
+ (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,
+ 'Q-TEST-E2E',current_date+7,
+ '[{"description":"Generic production service for customer-supplied items","quantity":50,"unit_price":30,"direct_cost":0,"details":{"item_type":"printing_service","customer_supplied_items":true}}]'::jsonb,
  false,null
 )::text,true);
 
-select extensions.is((select total from public.quotations where id=current_setting('test.quote_id')::uuid),1500::numeric,'Baraka quotation total is KES 1,500');
-select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),86.67::numeric,'Baraka gross margin is 86.67 percent');
+select extensions.is((select total from public.quotations where id=current_setting('test.quote_id')::uuid),1000::numeric,'test quotation total is KES 1,000');
+select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),40.00::numeric,'test gross margin is 40 percent');
 
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'sent');
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'accepted');
-select set_config('test.converted',public.owner_convert_quote_to_invoice(current_setting('test.quote_id')::uuid,'INV-BARAKA-E2E','JOB-BARAKA-E2E',current_date+14)::text,true);
+select set_config('test.converted',public.owner_convert_quote_to_invoice(current_setting('test.quote_id')::uuid,'INV-TEST-E2E','JOB-TEST-E2E',current_date+14)::text,true);
 select set_config('test.invoice_id',(current_setting('test.converted')::jsonb->>'invoice_id'),true);
 select set_config('test.job_id',(current_setting('test.converted')::jsonb->>'job_id'),true);
 
-select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),1500::numeric,'credit invoice remains fully outstanding before payment');
+select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),1000::numeric,'credit invoice remains fully outstanding before payment');
 select extensions.ok((select customer_supplied_items from public.production_jobs where id=current_setting('test.job_id')::uuid),'production job records customer-supplied garments');
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer garments do not reduce MJ apparel stock');
 
@@ -93,15 +93,15 @@ select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'d
 select extensions.ok((select delivered_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production delivery is timestamped');
 select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
-select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-BARAKA-E2E','mpesa_paybill',1500,'E2E-TEST-REF');
+select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',1000,'E2E-TEST-REF');
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),0::numeric,'payment clears invoice balance');
 select extensions.is((select status from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),'paid','invoice status changes to paid');
 
-select extensions.is((public.owner_operational_report()->>'invoiced_sales')::numeric,1500::numeric,'report includes invoiced sales');
-select extensions.is((public.owner_operational_report()->>'payments_received')::numeric,1500::numeric,'report includes received payment');
-select extensions.is((public.owner_operational_report()->>'direct_production_cost')::numeric,200::numeric,'report carries costing profile direct cost into invoice');
-select extensions.is((public.owner_operational_report()->>'gross_profit')::numeric,1300::numeric,'Baraka gross profit before other direct costs is KES 1,300');
-select extensions.is((public.owner_operational_report()->>'gross_margin_percent')::numeric,86.67::numeric,'report calculates gross margin from recorded invoice costs');
+select extensions.is((public.owner_operational_report()->>'invoiced_sales')::numeric,1000::numeric,'report includes invoiced sales');
+select extensions.is((public.owner_operational_report()->>'payments_received')::numeric,1000::numeric,'report includes received payment');
+select extensions.is((public.owner_operational_report()->>'direct_production_cost')::numeric,600::numeric,'report carries costing profile direct cost into invoice');
+select extensions.is((public.owner_operational_report()->>'gross_profit')::numeric,400::numeric,'gross profit before other direct costs is KES 400');
+select extensions.is((public.owner_operational_report()->>'gross_margin_percent')::numeric,40.00::numeric,'report calculates gross margin from recorded invoice costs');
 select extensions.is((public.owner_operational_report()->>'outstanding_receivables')::numeric,0::numeric,'report clears paid receivable');
 select extensions.is((public.owner_operational_report()->>'delivered_jobs')::integer,1,'report includes delivered production job');
 
