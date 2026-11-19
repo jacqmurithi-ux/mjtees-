@@ -19,10 +19,11 @@ insert into public.order_items(id,business_id,order_id,description,quantity,unit
  sale_mode,customer_supplies_item)
 values('ffffffff-ffff-4fff-8fff-ffffffffffff','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','Custom printed team jerseys',10,'piece',100,0,1000,'value_added',true);
+insert into public.production_methods(id,code,name,configuration,is_active)
+values('22222222-2222-4222-8222-222222222222','custom_order_test','Custom order test','{}'::jsonb,true);
 insert into public.production_jobs(id,business_id,order_item_id,production_method_id,status,planned_quantity)
-select '11111111-1111-4111-8111-111111111111','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
- 'ffffffff-ffff-4fff-8fff-ffffffffffff',id,'planned',10
-from public.production_methods where is_active order by code limit 1;
+values('11111111-1111-4111-8111-111111111111','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+ 'ffffffff-ffff-4fff-8fff-ffffffffffff','22222222-2222-4222-8222-222222222222','planned',10);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','33333333-3333-4333-8333-333333333333',true);
