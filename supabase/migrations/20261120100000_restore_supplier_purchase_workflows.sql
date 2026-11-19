@@ -3,6 +3,22 @@
 alter table public.purchase_order_lines
   add column if not exists stock_item_id uuid;
 
+-- Production may predate the earlier migration that supplied this column's FK.
+-- Add it only when absent; clean migration replay already has the same constraint.
+do $block$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.purchase_order_lines'::regclass
+      and conname = 'purchase_order_lines_stock_item_id_fkey'
+  ) then
+    alter table public.purchase_order_lines
+      add constraint purchase_order_lines_stock_item_id_fkey
+      foreign key (stock_item_id) references public.stock_items(id);
+  end if;
+end
+$block$;
+
 -- Backfill only unambiguous historical item-name matches. Ambiguous or unmatched
 -- historical rows remain unlinked rather than guessing which stock item they mean.
 update public.purchase_order_lines pol
