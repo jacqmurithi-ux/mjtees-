@@ -1,4 +1,5 @@
 -- Owner-controlled custom-order detail workflows.
+-- DEPENDS ON 20261119000400_sales_foundation_schema.sql, which creates the three sales_job_* tables.
 -- Adds transactional RPCs for job sizes, artwork proof versions and colour separations.
 begin;
 
