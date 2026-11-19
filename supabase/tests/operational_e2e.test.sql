@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(28);
+select extensions.plan(40);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -83,11 +83,15 @@ select extensions.is((select round(((total-(select sum(direct_cost) from public.
 
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'sent');
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'accepted');
+select set_config('test.deposit_id',public.owner_record_quote_deposit(current_setting('test.quote_id')::uuid,'DEP-TEST-001','mpesa_paybill',200,'DEP-REF-001')::text,true);
+select extensions.is((select amount from public.quotation_deposits where id=current_setting('test.deposit_id')::uuid),200::numeric,'quotation deposit is recorded before invoicing');
 select set_config('test.converted',public.owner_convert_quote_to_invoice(current_setting('test.quote_id')::uuid,'INV-TEST-E2E','JOB-TEST-E2E',current_date+14)::text,true);
 select set_config('test.invoice_id',(current_setting('test.converted')::jsonb->>'invoice_id'),true);
 select set_config('test.job_id',(current_setting('test.converted')::jsonb->>'job_id'),true);
 
-select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),1000::numeric,'credit invoice remains fully outstanding before payment');
+select extensions.is((select amount_paid from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),200::numeric,'quote deposit is carried into invoice paid amount');
+select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),800::numeric,'invoice balance is reduced by the quote deposit');
+select extensions.is((select sum(pa.amount) from public.payment_allocations pa join public.payments p on p.id=pa.payment_id where pa.invoice_id=current_setting('test.invoice_id')::uuid and p.payment_number='QD-DEP-TEST-001'),200::numeric,'quote deposit creates an allocated append-only payment record');
 select extensions.ok((select customer_supplied_items from public.production_jobs where id=current_setting('test.job_id')::uuid),'production job records customer-supplied garments');
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer-owned items do not reduce MJ stock');
 
@@ -102,12 +106,30 @@ select extensions.ok((select delivered_at is not null from public.production_job
 select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
 select extensions.throws_ok(
- $select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',1001,null)$,
+ $select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',801,null)$,
  'P0001','Invalid payment method or amount exceeds invoice balance',
  'rejects a customer payment greater than the outstanding invoice balance');
-select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',1000,'E2E-TEST-REF');
+select set_config('test.payment_id',public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',800,'E2E-TEST-REF')::text,true);
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),0::numeric,'payment clears invoice balance');
 select extensions.is((select status from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),'paid','invoice status changes to paid');
+select set_config('test.refund_id',public.owner_record_refund(current_setting('test.payment_id')::uuid,100,'Customer returned part of the completed order')::text,true);
+select extensions.is((select status from public.refunds where id=current_setting('test.refund_id')::uuid),'pending','refund request is separate and starts pending');
+select public.owner_post_refund(current_setting('test.refund_id')::uuid);
+select extensions.is((select status from public.refunds where id=current_setting('test.refund_id')::uuid),'posted','refund is posted as a separate record');
+select extensions.is((select amount from public.payments where id=current_setting('test.payment_id')::uuid),800::numeric,'posting a refund never reverses or changes the original payment');
+select public.owner_adjust_inventory(current_setting('test.stock_id')::uuid,2,'Counted two extra units');
+select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),12::numeric,'inventory adjustment updates stock on hand');
+select extensions.is((select movement_type from public.stock_movements where stock_item_id=current_setting('test.stock_id')::uuid order by created_at desc limit 1),'adjustment','inventory adjustment creates an auditable stock movement');
+select extensions.is(jsonb_array_length(public.owner_job_report()),1,'per-job report returns the completed production job');
+select set_config('test.supplier_id',public.owner_create_supplier('Test Supplier',null,null)::text,true);
+select set_config('test.po_one',public.owner_create_purchase_order(current_setting('test.supplier_id')::uuid,'PO-TEST-001',10,jsonb_build_array(jsonb_build_object('stock_item_id',current_setting('test.stock_id')::uuid,'quantity',10,'unit_cost',10)))::text,true);
+select set_config('test.po_two',public.owner_create_purchase_order(current_setting('test.supplier_id')::uuid,'PO-TEST-002',0,jsonb_build_array(jsonb_build_object('stock_item_id',current_setting('test.stock_id')::uuid,'quantity',10,'unit_cost',12)))::text,true);
+select set_config('test.supplier_payment',public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_one')::uuid,'SPAY-TEST-001','cash',50,null)::text,true);
+select extensions.is((select amount from public.supplier_payments where id=current_setting('test.supplier_payment')::uuid),50::numeric,'supplier payment is recorded in its own ledger');
+select extensions.is((select sum(po.total+po.transport_cost) from public.purchase_orders po where po.supplier_id=current_setting('test.supplier_id')::uuid)-(select sum(sp.amount) from public.supplier_payments sp where sp.supplier_id=current_setting('test.supplier_id')::uuid),180::numeric,'supplier balance reflects purchase orders less payments');
+select extensions.is(jsonb_array_length(public.owner_supplier_price_alerts()),1,'supplier price change alert detects a new purchase price');
+select public.owner_review_supplier_price_change(current_setting('test.supplier_id')::uuid,current_setting('test.stock_id')::uuid,(select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_one')::uuid),(select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_two')::uuid));
+select extensions.ok((public.owner_supplier_price_alerts()->0->>'reviewed')::boolean,'supplier price alert can be marked reviewed');
 
 select extensions.is((public.owner_operational_report()->>'invoiced_sales')::numeric,1000::numeric,'report includes invoiced sales');
 select extensions.is((public.owner_operational_report()->>'payments_received')::numeric,1000::numeric,'report includes received payment');
