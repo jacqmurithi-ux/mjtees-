@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(60);
+select plan(65);
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values
@@ -297,6 +297,9 @@ select is((select status from public.sales_invoices where quotation_id='a1000000
   'partially_paid','First invoice balance changes after partial allocation');
 select is((select status from public.sales_invoices where quotation_id='a2000000-0000-4000-8000-000000000002'),
   'partially_paid','Second invoice balance changes after partial allocation');
+select is((select sum(amount) from public.sales_invoice_payment_allocations
+  where invoice_id=(select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001')),
+  200::numeric,'The first cash receipt satisfies the required invoice deposit');
 select is((select sum(amount) from public.sales_customer_credit_entries
   where payment_id=(select id from public.payments where idempotency_key='72000000-0000-4000-8000-000000000001')),
   200::numeric,'Payment excess is posted to the customer credit ledger');
@@ -333,6 +336,18 @@ select is((public.owner_record_sales_payment(
 select is((select duplicate_reference_warning from public.payments
   where idempotency_key='72000000-0000-4000-8000-000000000003'),
   true,'Duplicate reference warning is stored on the payment record');
+
+-- A separately entered Paybill receipt can make a partial allocation without
+-- marking the invoice paid.
+select is((public.owner_record_sales_payment(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  (select id from public.sales_payment_accounts where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and account_name='M-Pesa Paybill'),
+  'mpesa_manual',50,now(),'MPESA-PART-001',
+  jsonb_build_array(jsonb_build_object('invoice_id',(select id from public.sales_invoices where quotation_id='a2000000-0000-4000-8000-000000000002'),'amount',50)),
+  'Partial Paybill receipt','72000000-0000-4000-8000-000000000009')->>'status'),
+  'posted','Partial M-Pesa Paybill receipt is posted manually');
+select is((select status from public.sales_invoices where quotation_id='a2000000-0000-4000-8000-000000000002'),
+  'partially_paid','Partial M-Pesa allocation leaves the invoice partially paid');
 
 select is((public.owner_reconcile_sales_payment(
   (select id from public.payments where idempotency_key='72000000-0000-4000-8000-000000000001'),
@@ -455,6 +470,17 @@ select is((select status from public.sales_invoices where quotation_id='a1000000
 select is((select sum(amount) from public.sales_customer_credit_entries
   where customer_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
   250::numeric,'Applied credit note does not leave excess customer credit');
+
+-- The final balance can be entered later as another manual Paybill receipt.
+select is((public.owner_record_sales_payment(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  (select id from public.sales_payment_accounts where business_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and account_name='M-Pesa Paybill'),
+  'mpesa_manual',200,now(),'MPESA-BAL-001',
+  jsonb_build_array(jsonb_build_object('invoice_id',(select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),'amount',200)),
+  'Final balance after deposit and adjustments','72000000-0000-4000-8000-000000000010')->>'status'),
+  'posted','Final invoice balance is recorded as a separate manual M-Pesa payment');
+select is((select status from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
+  'paid','Invoice becomes paid after the remaining balance is received');
 
 select throws_ok(
   $pt$select public.owner_issue_sales_credit_note(
