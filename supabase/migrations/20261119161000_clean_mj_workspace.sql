@@ -159,10 +159,11 @@ do $$ declare t text;begin
  foreach t in array array['businesses','business_memberships','business_settings','customers','customer_contacts','customer_addresses','costing_profiles','quotations','quotation_lines','sales_invoices','sales_invoice_items','production_jobs','inventory_locations','stock_items','stock_movements','suppliers','purchase_orders','purchase_order_lines','payments','payment_allocations','refunds','expenses','audit_events']
  loop execute format('alter table public.%I enable row level security',t);end loop;
 end $$;
+create policy businesses_read_creator on public.businesses for select to authenticated using(created_by=(select auth.uid()));
 create policy businesses_read_member on public.businesses for select to authenticated using(exists(select 1 from public.business_memberships m where m.business_id=id and m.user_id=(select auth.uid())));
 create policy businesses_bootstrap_insert on public.businesses for insert to authenticated with check(created_by=(select auth.uid()) and not exists(select 1 from public.business_memberships));
 create policy memberships_read_self on public.business_memberships for select to authenticated using(user_id=(select auth.uid()));
-create policy memberships_bootstrap_insert on public.business_memberships for insert to authenticated with check(user_id=(select auth.uid()) and role='owner' and not exists(select 1 from public.business_memberships));
+create policy memberships_bootstrap_insert on public.business_memberships for insert to authenticated with check(user_id=(select auth.uid()) and role='owner' and exists(select 1 from public.businesses b where b.id=business_id and b.created_by=(select auth.uid())) and not exists(select 1 from public.business_memberships m where m.business_id=business_id));
 do $$ declare t text;begin
  foreach t in array array['business_settings','customers','customer_contacts','customer_addresses','costing_profiles','inventory_locations']
  loop execute format('create policy %I on public.%I for all to authenticated using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner'')) with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner''))',t||'_owner_access',t);end loop;
@@ -201,10 +202,4 @@ $$;
 revoke all on function public.owner_dashboard_summary() from public,anon;
 grant execute on function public.owner_dashboard_summary() to authenticated;
 
-insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
-values('mj-job-artwork','mj-job-artwork',false,52428800,array['image/png','image/jpeg','image/webp','application/pdf','image/svg+xml'])
-on conflict(id) do update set public=false,file_size_limit=52428800,allowed_mime_types=excluded.allowed_mime_types;
-create policy mj_artwork_read on storage.objects for select to authenticated using(bucket_id='mj-job-artwork' and split_part(name,'/',1) in(select business_id::text from public.business_memberships where user_id=(select auth.uid())));
-create policy mj_artwork_insert on storage.objects for insert to authenticated with check(bucket_id='mj-job-artwork' and split_part(name,'/',1) in(select business_id::text from public.business_memberships where user_id=(select auth.uid())));
-create policy mj_artwork_update on storage.objects for update to authenticated using(bucket_id='mj-job-artwork' and split_part(name,'/',1) in(select business_id::text from public.business_memberships where user_id=(select auth.uid()))) with check(bucket_id='mj-job-artwork' and split_part(name,'/',1) in(select business_id::text from public.business_memberships where user_id=(select auth.uid())));
-create policy mj_artwork_delete on storage.objects for delete to authenticated using(bucket_id='mj-job-artwork' and split_part(name,'/',1) in(select business_id::text from public.business_memberships where user_id=(select auth.uid())));
+-- Artwork bucket is provisioned separately through the Supabase Storage API before enabling uploads.
