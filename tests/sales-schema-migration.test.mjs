@@ -6,6 +6,7 @@ const sql = readFileSync(new URL("../supabase/migrations/20261119000400_sales_fo
 const manualPaymentsSql = readFileSync(new URL("../supabase/migrations/20261119000600_sales_manual_payment_ledger.sql", import.meta.url), "utf8");
 const salesCreditSql = readFileSync(new URL("../supabase/migrations/20261119000700_sales_customer_credit_application.sql", import.meta.url), "utf8");
 const paymentPolicySql = readFileSync(new URL("../supabase/migrations/20261119092752_sales_manual_payment_method_restrictions.sql", import.meta.url), "utf8");
+const creditNoteSql = readFileSync(new URL("../supabase/migrations/20261119093825_sales_credit_note_issue_workflow.sql", import.meta.url), "utf8");
 
 test("Sales foundation reuses existing customer, quotation, order, payment, stock and production records", () => {
   assert.match(sql, /alter table public\.customers[\s\S]*sales_price_tier_id/);
@@ -140,4 +141,15 @@ test("Database rejects new non-Cash and non-M-Pesa payments while preserving leg
   assert.match(paymentPolicySql, /new\.account_type not in \('cash','mpesa_paybill'\)/);
   assert.match(sql, /method in \('cash','mpesa_manual','bank_transfer','cheque'\)/);
   assert.match(manualPaymentsSql, /account_type in \('cash','mpesa_paybill','bank','cheque_clearing'\)/);
+});
+
+
+test("Credit note issuance preserves paid invoices and applies value to outstanding balances", () => {
+  assert.match(creditNoteSql, /create or replace function public\.owner_issue_sales_credit_note/);
+  assert.match(creditNoteSql, /entry_type='credit_note'/);
+  assert.match(creditNoteSql, /entry_type='apply_to_invoice'/);
+  assert.match(creditNoteSql, /sales\.credit_note_issued/);
+  assert.match(creditNoteSql, /private\.assert_active_owner/);
+  assert.match(creditNoteSql, /private\.begin_idempotent_request/);
+  assert.doesNotMatch(creditNoteSql, /owner_reverse_payment|payment_reversed|reversal/i);
 });
