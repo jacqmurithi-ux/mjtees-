@@ -200,5 +200,34 @@ select extensions.is((public.owner_operational_report()->>'gross_margin_percent'
 select extensions.is((public.owner_operational_report()->>'outstanding_receivables')::numeric,0::numeric,'report clears paid receivable');
 select extensions.is((public.owner_operational_report()->>'delivered_jobs')::integer,1,'report includes delivered production job');
 
+select set_config('test.supplier_notes_id',public.owner_create_supplier('Supplier With Notes',null,'notes@example.test','inks and vinyl')::text,true);
+select extensions.is((select notes from public.suppliers where id=current_setting('test.supplier_notes_id')::uuid),'inks and vinyl','owner can save supplier items supplied and notes');
+select extensions.ok(has_function_privilege('authenticated','public.owner_create_supplier(text,text,text,text)','EXECUTE'),'authenticated owner workflow exposes the supplier details RPC');
+select extensions.ok(has_function_privilege('authenticated','public.owner_create_purchase_order(uuid,text,numeric,jsonb)','EXECUTE'),'authenticated owner workflow exposes purchase order creation');
+select extensions.ok(not has_function_privilege('anon','public.owner_create_supplier(text,text,text,text)','EXECUTE') and not has_function_privilege('anon','public.owner_create_purchase_order(uuid,text,numeric,jsonb)','EXECUTE'),'anonymous users cannot create suppliers or purchase orders');
+select set_config('test.stock_two',public.owner_create_stock_item('shop_2','E2E purchase test ink','Printing consumable','kg',0,0,3)::text,true);
+select set_config('test.po_multi',public.owner_create_purchase_order(
+ current_setting('test.supplier_id')::uuid,'PO-TEST-MULTI',6,
+ jsonb_build_array(
+  jsonb_build_object('stock_item_id',current_setting('test.stock_id')::uuid,'quantity',4,'unit_cost',10),
+  jsonb_build_object('stock_item_id',current_setting('test.stock_two')::uuid,'quantity',3,'unit_cost',20)
+ )
+)::text,true);
+select extensions.is((select count(*)::integer from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid),2,'purchase order accepts multiple distinct stock lines');
+select extensions.is((select count(*)::integer from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid and stock_item_id is not null),2,'every new purchase line retains an exact stock-item reference');
+select extensions.is((select total+transport_cost from public.purchase_orders where id=current_setting('test.po_multi')::uuid),106::numeric,'purchase order total includes item values and transport once');
+select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid order by item_description limit 1),2);
+select extensions.is((select status from public.purchase_orders where id=current_setting('test.po_multi')::uuid),'part_received','partial receipt leaves a multi-line order open');
+select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid order by item_description limit 1),2);
+select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid order by item_description desc limit 1),3);
+select extensions.is((select status from public.purchase_orders where id=current_setting('test.po_multi')::uuid),'received','order closes only after every ordered unit is received');
+select extensions.throws_ok(
+ $assert$select public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_multi')::uuid,'SPAY-TEST-OVER','cash',107,null)$assert$,
+ 'P0001','Supplier payment exceeds outstanding balance',
+ 'rejects supplier payment above the selected purchase order balance');
+select set_config('test.supplier_payment_multi',public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_multi')::uuid,'SPAY-TEST-MULTI','mpesa_paybill',20,'SUPPLIER-REF-02')::text,true);
+select extensions.is((select amount from public.supplier_payments where id=current_setting('test.supplier_payment_multi')::uuid),20::numeric,'partial supplier payment is recorded without changing purchase or stock movements');
+select extensions.is((select count(*)::integer from public.stock_movements where movement_type='purchase' and stock_item_id=current_setting('test.stock_two')::uuid and quantity=3),1,'goods receipt creates a separate append-only stock movement for each received stock line');
+
 select * from extensions.finish();
 rollback;
