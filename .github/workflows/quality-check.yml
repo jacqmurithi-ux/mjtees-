@@ -2,11 +2,14 @@ name: Quality checks
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, release/e2e-operational-workflows]
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,3 +20,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 3.2.0
+      - name: Start local Supabase stack
+        run: supabase start
+      - name: Apply migrations to a clean local database
+        run: supabase db reset
+      - name: Run database end-to-end tests
+        run: supabase test db
