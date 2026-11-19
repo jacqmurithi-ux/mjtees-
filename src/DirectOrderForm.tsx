@@ -50,7 +50,6 @@ export default function DirectOrderForm({businessId,customer,addresses,contacts,
    }
   }
   setNotice("Order "+(orderNumber||"created")+" for "+customer.display_name+" is confirmed. Contact and delivery-address selections are saved as internal order-intake references; confirm the final handover details in Delivery & Collection.");
-  setNotice("Order "+(orderNumber||"created")+" for "+customer.display_name+" is confirmed. "+(address?"Selected delivery address: "+[address.label,address.address_text,address.locality].filter(Boolean).join(", ")+". Add/confirm it in Delivery & Collection when arranging handover.":""));
   setBusy(false);onCreated();
  }
  return <form className="record-form direct-customer-order" onSubmit={submit}>
