@@ -39,7 +39,7 @@ select (public.owner_bootstrap_workspace()->>'business_id')::uuid,'Example Custo
 
 select set_config('test.stock_id',public.owner_create_stock_item('shop_1','Generic test stock item','General','piece',10,2,10,'E2E-STOCK')::text,true);
 select extensions.throws_ok(
- $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$$,
+ $$assert$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),null,'Q-NO-PROFILE',current_date+7,'[{"description":"No profile","quantity":1,"unit_price":100,"direct_cost":10,"details":{}}]'::jsonb,false,null)$assert$$,
  'P0001','An active versioned costing profile is required before pricing this quotation',
  'refuses to price without an active versioned costing profile');
 
@@ -59,7 +59,7 @@ select extensions.is((select direct_cost from public.quotation_lines where quota
 select extensions.is((select round(((q.total-l.direct_cost)/l.direct_cost)*100,2) from public.quotations q join public.quotation_lines l on l.quotation_id=q.id where q.id=current_setting('test.cost_override_quote')::uuid),40.00::numeric,'contribution divided by direct cost produces the expected 40 percent margin');
 
 select extensions.throws_ok(
- $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":2,"unit_price":100,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
+ $$assert$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":2,"unit_price":100,"direct_cost":0,"details":{}}]'::jsonb,false,null)$assert$$,
  'P0001','Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.',
  'blocks quotations below the 30 percent floor without an exception');
 
@@ -100,18 +100,18 @@ select extensions.ok(not has_function_privilege('authenticated','private.apply_s
 select set_config('test.material_id',public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,2)::text,true);
 select extensions.is((select planned_quantity from public.production_job_materials where id=current_setting('test.material_id')::uuid),2::numeric,'owner can plan a positive quantity of same-business stock for a production job');
 select extensions.throws_ok(
- $select public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,0)$,
+ $assert$select public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,0)$assert$,
  'P0001','Planned quantity must be greater than zero',
  'rejects a zero production material plan');
 select extensions.throws_ok(
- $select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'printing')$,
+ $assert$select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'printing')$assert$,
  'P0001','Invalid production stage transition',
  'rejects skipping required production stages');
 select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1);
 select extensions.is((select issued_quantity from public.production_job_materials where id=current_setting('test.material_id')::uuid),1::numeric,'partial material issue is recorded against the plan');
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),9::numeric,'partial material issue reduces available stock through the ledger');
 select extensions.throws_ok(
- $select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1.01)$,
+ $assert$select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1.01)$assert$,
  'P0001','Issue quantity exceeds planned balance',
  'rejects issuing more than the remaining planned quantity');
 select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1);
@@ -122,7 +122,7 @@ select extensions.is((select count(*)::integer from public.stock_movements where
 select extensions.is((select count(*)::integer from public.audit_events where entity_type='production_job_material' and entity_id=current_setting('test.material_id')::uuid and event_type in('production.material_planned','production.material_issued')),2,'material planning and issuing both create audit events');
 select set_config('test.insufficient_material_id',public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,20)::text,true);
 select extensions.throws_ok(
- $select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,9)$,
+ $assert$select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,9)$assert$,
  'P0001','Insufficient stock',
  'rejects issuing material beyond available stock');
 
@@ -135,13 +135,13 @@ select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'r
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'delivered');
 select extensions.ok((select delivered_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production delivery is timestamped');
 select extensions.throws_ok(
- $select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,1)$,
+ $assert$select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,1)$assert$,
  'P0001','Cannot issue material for a closed production job',
  'prevents issuing material after a production job is closed');
 select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
 select extensions.throws_ok(
- $test$select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',801,null)$test$,
+ $test$assert$select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',801,null)$assert$test$,
  'P0001','Invalid payment method or amount exceeds invoice balance',
  'rejects a customer payment greater than the outstanding invoice balance');
 select set_config('test.payment_id',public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',800,'E2E-TEST-REF')::text,true);
