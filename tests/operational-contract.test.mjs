@@ -85,6 +85,14 @@ test('financial and stock quantities cannot be manually edited through table gra
   assert.match(sql, /revoke update,delete on public\.production_job_materials/);
 });
 
+test('invoice snapshots direct cost and reports gross profit and gross margin distinctly', () => {
+  assert.match(sql, /add column if not exists direct_cost numeric\(14,2\)/);
+  assert.match(sql, /l\.line_total,l\.direct_cost/);
+  assert.match(sql, /'direct_production_cost'/);
+  assert.match(sql, /'gross_profit'/);
+  assert.match(sql, /'gross_margin_percent'/);
+});
+
 test('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
   for (const fn of ['owner_create_quotation','owner_convert_quote_to_invoice','owner_issue_job_material','owner_record_payment','owner_record_expense','owner_operational_report']) {
     assert.match(sql, new RegExp('revoke all on function public\\.' + fn));
