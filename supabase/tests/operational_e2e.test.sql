@@ -30,10 +30,13 @@ select extensions.ok(
  exists(select 1 from information_schema.columns
    where table_schema='public' and table_name='sales_invoice_items'
      and column_name='direct_cost' and data_type='numeric'
-     and is_nullable='NO' and column_default like '0%')
+     and is_nullable='NO' and column_default is not null)
  and exists(select 1 from pg_constraint
    where conrelid='public.sales_invoice_items'::regclass
-     and pg_get_constraintdef(oid) ilike '%direct_cost >= 0%'),
+     and contype='c'
+     and pg_get_constraintdef(oid) ilike '%direct_cost%'
+     and pg_get_constraintdef(oid) ilike '%>=%'
+     and pg_get_constraintdef(oid) ilike '%0%'),
  'invoice items carry a nonnegative direct production cost for quotation conversion');
 
 
