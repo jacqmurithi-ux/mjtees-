@@ -115,3 +115,6 @@ td{font-size:13px}
   .production-issue-controls > button { grid-column: 1 / -1; width: 100%; }
   .production-issue-controls > small { grid-column: 1 / -1; }
 }
+
+/* Inventory controls: two shop locations, reorder status and mobile stock filters */
+.inventory-filters{display:grid;gap:12px;margin-bottom:12px}.inventory-filters input{min-height:46px;height:46px;border:1px solid #dce3ea;border-radius:10px;padding:0 12px;font-size:16px;width:100%}.inventory-record{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px}.inventory-record>div:first-child{grid-column:1;display:grid;gap:5px}.inventory-record>strong{grid-column:2;grid-row:1;align-self:center;white-space:nowrap}.inventory-record>.op-actions{grid-column:1/-1}.inventory-status{display:inline-flex;width:max-content;padding:4px 8px;border-radius:999px;background:#e8f5ed;color:#176b37;font-size:11px;font-weight:750}.inventory-status-low{background:#fff2d8;color:#8a5700}.inventory-record .op-actions button{min-width:52px}@media(min-width:600px){.inventory-record{grid-template-columns:minmax(0,1fr) auto auto;align-items:center}.inventory-record>.op-actions{grid-column:3;grid-row:1}.inventory-record>strong{grid-column:2;grid-row:1}}
