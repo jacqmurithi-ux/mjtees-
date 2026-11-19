@@ -49,34 +49,40 @@ export default function CustomOrderDetails({businessId,jobId}:{businessId:string
 
  useEffect(()=>{void load().catch(e=>setError(e instanceof Error?e.message:"Could not load custom order details."));},[load]);
 
- const run=async(name:string,args:Record<string,unknown>,message:string)=>{
-  if(!supabase)return;
+ const run=async(name:string,args:Record<string,unknown>,message:string):Promise<boolean>=>{
+  if(!supabase)return false;
   setBusy(true);setError("");setNotice("");
-  const {error:rpcError}=await supabase.rpc(name,args);
-  if(rpcError)setError(rpcError.message);
-  else{setNotice(message);await load();}
-  setBusy(false);
+  try{
+   const {error:rpcError}=await supabase.rpc(name,args);
+   if(rpcError){setError(rpcError.message);return false;}
+   setNotice(message);
+   await load();
+   return true;
+  }catch(e){
+   setError(e instanceof Error?e.message:"Could not save custom order details.");
+   return false;
+  }finally{setBusy(false);}
  };
 
  const addSize=async(e:FormEvent)=>{
   e.preventDefault();
   if(!personName.trim()||!size.trim()||!Number.isFinite(Number(quantity))||Number(quantity)<=0){setError("Enter the wearer name, size and a positive quantity.");return;}
-  await run("owner_add_job_size_breakdown",{
+  const saved=await run("owner_add_job_size_breakdown",{
    p_job_id:jobId,p_person_name:personName.trim(),p_jersey_number:jerseyNumber.trim()||null,
    p_size:size.trim(),p_colour:colour.trim()||null,p_quantity:Number(quantity),
    p_notes:sizeNotes.trim()||null,p_request_id:requestId()
   },"Garment size entry saved.");
-  setPersonName("");setJerseyNumber("");setColour("");setQuantity("1");setSizeNotes("");
+  if(saved){setPersonName("");setJerseyNumber("");setColour("");setQuantity("1");setSizeNotes("");}
  };
 
  const addArtwork=async(e:React.FormEvent)=>{
   e.preventDefault();
   if(!/^https:\/\/(drive|docs)\.google\.com\//i.test(driveLink.trim())||!fileName.trim()){setError("Enter a Google Drive link and the artwork file name.");return;}
-  await run("owner_add_job_artwork",{
+  const saved=await run("owner_add_job_artwork",{
    p_job_id:jobId,p_storage_path:driveLink.trim(),p_file_name:fileName.trim(),
    p_notes:artworkNotes.trim()||null,p_request_id:requestId()
   },"New artwork proof version recorded.");
-  setDriveLink("");setFileName("");setArtworkNotes("");
+  if(saved){setDriveLink("");setFileName("");setArtworkNotes("");}
  };
 
  const setProofStatus=(artwork:ArtworkRow,status:"sent"|"approved"|"rejected")=>void run(
@@ -89,13 +95,13 @@ export default function CustomOrderDetails({businessId,jobId}:{businessId:string
  const addSeparation=async(e:React.FormEvent)=>{
   e.preventDefault();
   if(!colourName.trim()||!Number.isInteger(Number(sequenceNo))||Number(sequenceNo)<1){setError("Enter a colour name and valid separation sequence.");return;}
-  await run("owner_add_job_colour_separation",{
+  const saved=await run("owner_add_job_colour_separation",{
    p_job_id:jobId,p_artwork_id:artworkId||null,p_colour_name:colourName.trim(),
    p_ink_reference:inkReference.trim()||null,p_screen_reference:screenReference.trim()||null,
    p_print_location:printLocation,p_sequence_no:Number(sequenceNo),
    p_notes:separationNotes.trim()||null,p_request_id:requestId()
   },"Colour separation saved.");
-  setColourName("");setInkReference("");setScreenReference("");setSeparationNotes("");
+  if(saved){setColourName("");setInkReference("");setScreenReference("");setSeparationNotes("");}
  };
 
  return <section className="connected-panel custom-order-details">
