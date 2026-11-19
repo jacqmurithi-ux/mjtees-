@@ -181,6 +181,15 @@ begin
  if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
  select stage into v_old from public.production_jobs where id=p_job_id and business_id=p_business_id for update;
  if not found or v_old in('delivered','cancelled') then raise exception 'Production job not found or already closed'; end if;
+ if not (
+  (v_old='awaiting_artwork' and p_stage in('artwork_proof','cancelled')) or
+  (v_old='artwork_proof' and p_stage in('screens_prepared','cancelled')) or
+  (v_old='screens_prepared' and p_stage in('printing','cancelled')) or
+  (v_old='printing' and p_stage in('finishing','cancelled')) or
+  (v_old='finishing' and p_stage in('quality_check','cancelled')) or
+  (v_old='quality_check' and p_stage in('ready','printing','cancelled')) or
+  (v_old='ready' and p_stage in('delivered','finishing','cancelled'))
+ ) then raise exception 'Invalid production stage transition'; end if;
  update public.production_jobs set stage=p_stage,delivered_at=case when p_stage='delivered' then now() else delivered_at end where id=p_job_id and business_id=p_business_id;
 end $$;
 
