@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(62);
+select extensions.plan(63);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -24,7 +24,21 @@ select extensions.ok(
  exists(select 1 from information_schema.columns where table_schema='public' and table_name='quotations' and column_name='below_floor_exception_reason' and data_type='text' and is_nullable='YES') and
  exists(select 1 from information_schema.columns where table_schema='public' and table_name='quotations' and column_name='below_floor_approved_by' and data_type='uuid' and is_nullable='YES') and
  exists(select 1 from pg_constraint c join pg_attribute a on a.attrelid=c.conrelid and a.attnum=any(c.conkey) where c.conrelid='public.quotations'::regclass and c.contype='f' and a.attname='below_floor_approved_by' and c.confrelid='auth.users'::regclass),
- 'quotation margin exception fields are nullable and approver is linked to Auth users');
+'quotation margin exception fields are nullable and approver is linked to Auth users');
+
+select extensions.ok(
+ exists(select 1 from information_schema.columns
+   where table_schema='public' and table_name='sales_invoice_items'
+     and column_name='direct_cost' and data_type='numeric'
+     and is_nullable='NO' and column_default is not null)
+ and exists(select 1 from pg_constraint
+   where conrelid='public.sales_invoice_items'::regclass
+     and contype='c'
+     and pg_get_constraintdef(oid) ilike '%direct_cost%'
+     and pg_get_constraintdef(oid) ilike '%>=%'
+     and pg_get_constraintdef(oid) ilike '%0%'),
+ 'invoice items carry a nonnegative direct production cost for quotation conversion');
+
 
 select extensions.ok(
  not has_table_privilege('authenticated','public.costing_profiles','INSERT') and
