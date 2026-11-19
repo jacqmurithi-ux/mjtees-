@@ -1,6 +1,10 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(10);
+select plan(13);
+
+select has_table('public','sales_job_size_breakdown','Sales foundation provides individual garment sizing records');
+select has_table('public','sales_job_artworks','Sales foundation provides versioned artwork proof records');
+select has_table('public','sales_job_colour_separations','Sales foundation provides colour separation records');
 
 insert into auth.users(id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values('33333333-3333-4333-8333-333333333333','authenticated','authenticated','mj-custom-order@example.invalid','',now(),
