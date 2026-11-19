@@ -253,3 +253,32 @@ test('Production UI labels all persisted stages including quality check and canc
   assert.match(operations, /cancelled:'Cancelled'/);
   assert.match(operations, /const nextStages:Record<string,string\[]>/);
 });
+
+
+test('Inventory supports both configured shop locations without changing stock ownership rules', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /Shop 1 — Apparel, vinyl & stickers/);
+  assert.match(operations, /Shop 2 — Inks, screens & consumables/);
+  assert.match(operations, /owner_create_stock_item/);
+  assert.match(operations, /Customer-supplied garments are not MJ stock/);
+});
+
+test('Inventory provides searchable stock, shop and reorder filters plus stock valuation', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /inventorySearch/);
+  assert.match(operations, /inventoryLocationFilter/);
+  assert.match(operations, /inventoryStockFilter/);
+  assert.match(operations, /inventoryLowStock/);
+  assert.match(operations, /inventoryStockValue/);
+  assert.match(operations, /Stock value at average cost/);
+  assert.match(operations, /Reorder needed/);
+});
+
+test('Inventory adjustments require a reason, reject zero changes and prevent negative stock before the owner RPC', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /Enter a non-zero quantity change/);
+  assert.match(operations, /Give a reason of at least 5 characters/);
+  assert.match(operations, /This adjustment would make stock negative/);
+  assert.match(operations, /owner_adjust_inventory/);
+  assert.match(operations, /Inventory adjustment recorded with an audit reason/);
+});
