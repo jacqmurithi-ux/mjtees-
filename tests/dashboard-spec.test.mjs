@@ -25,3 +25,16 @@ test('dashboard stock and supplier price alert empty states match the approved w
   assert.match(app, /owner_supplier_price_alerts/);
   assert.match(app, /Mark reviewed/);
 });
+
+
+test('customer directory shows categories, phone fallback, quote counts and customer profile history', () => {
+  assert.match(app, /quote_count\?:number/);
+  assert.match(app, /quoteCounts\.set\(quote\.customer_id/);
+  assert.match(app, /No phone recorded/);
+  assert.match(app, /category-pill/);
+  assert.match(app, /Trade · another uniform shop/);
+  assert.match(app, /customerDetail\.quotes/);
+  assert.match(app, /customerDetail\.payments/);
+  assert.match(app, /Outstanding balance/);
+  assert.match(app, /from\('payments'\).*customer_id/s);
+});
