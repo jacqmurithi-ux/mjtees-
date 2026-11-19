@@ -24,6 +24,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const [stockItems,setStockItems]=useState<StockItem[]>([]);
   const [stockLocations,setStockLocations]=useState<StockLocation[]>([]);
   const [stockLocationId,setStockLocationId]=useState("");
+  const [invoicePaymentTerms,setInvoicePaymentTerms]=useState<"due_on_receipt"|"net_7"|"net_14"|"net_30">("due_on_receipt");
   const [catalogueItems,setCatalogueItems]=useState<CatalogueItem[]>([]);
   const [quotes,setQuotes]=useState<Quote[]>([]);
   const [orders,setOrders]=useState<Order[]>([]);
@@ -145,7 +146,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
     if(!supabase)return;
     setBusy(true);setError("");setNotice("");
     const args={
-      p_business_id:businessId,p_quotation_id:q.id,p_payment_terms:"due_on_receipt",
+      p_business_id:businessId,p_quotation_id:q.id,p_payment_terms:invoicePaymentTerms,
       p_due_date:null,p_stock_location_id:stockLocationId||null,p_allow_oversell:false,
       p_oversell_reason:null,p_request_id:rid()
     };
@@ -205,7 +206,7 @@ export default function QuoteWorkflow({ businessId, customers, enquiries, onChan
   const customerName=(id:string)=>customers.find(c=>c.id===id)?.display_name??"Customer";
   return <section className="connected-panel quote-workflow">
     <div className="panel-toolbar"><div><h2>Quotations and orders</h2><p>Live records and costing tools. Prices are in KES; tax is excluded.</p></div><button className="secondary-action" onClick={()=>void load()}>Refresh records</button></div>
-    <div className="stock-location-picker"><label>Stock location for blank-garment sales<select value={stockLocationId} onChange={event=>setStockLocationId(event.target.value)}><option value="">Choose stock location</option>{stockLocations.map(location=><option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label><small>Required only when an invoice issues MJ Tees stock. Customer-supplied items do not use shop stock.</small></div>
+    <div className="stock-location-picker"><label>Stock location for blank-garment sales<select value={stockLocationId} onChange={event=>setStockLocationId(event.target.value)}><option value="">Choose stock location</option>{stockLocations.map(location=><option key={location.id} value={location.id}>{location.name} · {location.code}</option>)}</select></label><label>Invoice payment terms<select value={invoicePaymentTerms} onChange={event=>setInvoicePaymentTerms(event.target.value as typeof invoicePaymentTerms)}><option value="due_on_receipt">Due on receipt</option><option value="net_7">Net 7 days</option><option value="net_14">Net 14 days</option><option value="net_30">Net 30 days</option></select></label><small>Choose the agreed credit period before issuing an invoice. For Baraka, select the payment date agreed with the customer; the outstanding balance remains visible until payment is posted. Stock location is required only for MJ Tees stock; customer-supplied items do not use shop stock.</small></div>
     <div className="workflow-tabs"><button className={tab==="quotes"?"active":""} onClick={()=>setTab("quotes")}>Quotations</button><button className={tab==="costing"?"active":""} onClick={()=>setTab("costing")}>Costing profiles</button><button className={tab==="orders"?"active":""} onClick={()=>setTab("orders")}>Orders</button><button className={tab==="vinyl"?"active":""} onClick={()=>setTab("vinyl")}>Vinyl calculator</button></div>
     {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}{acceptanceLink&&<div className="acceptance-link"><input readOnly value={acceptanceLink}/><button className="secondary-action" onClick={()=>void navigator.clipboard.writeText(acceptanceLink)}>Copy customer link</button></div>}
     {tab==="vinyl"&&<VinylStickerCalculator businessId={businessId} stockItems={stockItems} categories={categories} methods={productionMethods} onMessage={(message,isError)=>{setNotice(isError?"":message);setError(isError?message:"");}} onApply={line=>{setQuoteLines(v=>{const blank=v.length===1&&!v[0].description.trim()&&!v[0].categoryId;const next={...v[0],catalogueItemId:"",categoryId:line.categoryId,description:line.description,quantity:line.quantity,unit:"piece",unitPrice:line.unitPrice,discount:"0",customerSupplies:false,stockItemId:"",saleMode:"value_added",productionMethodId:line.productionMethodId,linearMetres:line.linearMetres,areaSquareMetres:"",machineMinutes:line.machineMinutes,labourHours:line.labourHours,stickerSpecification:line.specification};return blank?[next]:[...v,next];});setTab("quotes");setNotice("Vinyl sticker price and production specification added to the quotation. Inventory will be deducted when material is issued to its production job.");}}/>}
