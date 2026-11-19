@@ -11,7 +11,7 @@ insert into public.business_memberships(business_id,user_id,role,status)
 values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','33333333-3333-4333-8333-333333333333','owner','active');
 insert into public.user_profiles(user_id) values('33333333-3333-4333-8333-333333333333');
 insert into public.customers(id,business_id,display_name,created_by)
-values('cccccccc-cccc-4ccc-8ccc-cccccccccccc','bbbbbbbb-bbbb-4bbb-8bbb-cccccccccccc','Custom Order Customer','33333333-3333-4333-8333-333333333333');
+values('cccccccc-cccc-4ccc-8ccc-cccccccccccc','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','Custom Order Customer','33333333-3333-4333-8333-333333333333');
 insert into public.orders(id,business_id,order_number,customer_id,status,subtotal_amount,discount_amount,total_amount,created_by)
 values('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','CO-ORDER-1',
  'cccccccc-cccc-4ccc-8ccc-cccccccccccc','confirmed',1000,0,1000,'33333333-3333-4333-8333-333333333333');
@@ -57,6 +57,11 @@ select is(
  public.owner_set_job_artwork_status(current_setting('mj.test.artwork_result')::uuid,'approved',null,'Customer approved',
   '80000000-0000-4000-8000-000000000004')->>'proof_status',
  'approved','Owner can record customer proof approval');
+
+select is(
+ public.owner_set_job_artwork_status(current_setting('mj.test.artwork_result')::uuid,'approved',null,'Customer approved',
+  '80000000-0000-4000-8000-000000000004')->>'proof_status',
+ 'approved','Retrying the same approval request is idempotent');
 
 select set_config('mj.test.artwork_v2',
  public.owner_add_job_artwork(
