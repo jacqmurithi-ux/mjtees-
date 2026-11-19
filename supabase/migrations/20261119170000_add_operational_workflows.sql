@@ -22,9 +22,7 @@ create policy production_job_materials_owner_read on public.production_job_mater
  using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
 create policy production_job_materials_owner_insert on public.production_job_materials for insert to authenticated
  with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
-create policy production_job_materials_owner_update on public.production_job_materials for update to authenticated
- using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'))
- with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+drop policy if exists production_job_materials_owner_update on public.production_job_materials;
 
 -- Operational tables remain owner-write; read access is still restricted to the same business.
 do $$
@@ -38,7 +36,7 @@ begin
    t||'_owner_write'
   );
  end loop;
-end $;
+end $$;
 
 -- Costing profiles are versioned and immutable; only the active pointer can be changed privately.
 drop policy if exists costing_profiles_owner_access on public.costing_profiles;
@@ -93,7 +91,7 @@ grant select,insert on public.production_job_materials to authenticated;
 
 create or replace function private.apply_stock_movement(
  p_business_id uuid,p_stock_item_id uuid,p_quantity numeric,p_unit_cost numeric,p_movement_type text
-) returns void language plpgsql security definer set search_path=public,pg_temp as $
+) returns void language plpgsql security definer set search_path=public,pg_temp as $$
 declare s public.stock_items%rowtype; v_new_qty numeric(14,3); v_new_cost numeric(14,2);
 begin
  if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then
@@ -111,13 +109,13 @@ begin
  update public.stock_items set quantity_on_hand=v_new_qty,average_unit_cost=v_new_cost where id=s.id;
  insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
  values(p_business_id,p_stock_item_id,p_movement_type,p_quantity,p_unit_cost,auth.uid());
-end $;
+end $$;
 revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) from public,anon;
 grant usage on schema private to authenticated;
 grant execute on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) to authenticated;
 
 create or replace function private.activate_costing_profile(p_business_id uuid,p_profile_id uuid)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
 declare v_name text;
 begin
  if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
@@ -125,13 +123,13 @@ begin
  if v_name is null then raise exception 'Costing profile not found'; end if;
  update public.costing_profiles set is_active=false where business_id=p_business_id and profile_name=v_name and is_active;
  update public.costing_profiles set is_active=true where id=p_profile_id and business_id=p_business_id;
-end $;
+end $$;
 revoke all on function private.activate_costing_profile(uuid,uuid) from public,anon;
 grant execute on function private.activate_costing_profile(uuid,uuid) to authenticated;
 
 create or replace function public.owner_create_costing_profile(
  p_profile_name text,p_components jsonb,p_direct_cost numeric,p_activate boolean default true
-) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $
+) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
 declare v_business uuid; v_version integer; v_id uuid;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -142,29 +140,29 @@ begin
  values(v_business,btrim(p_profile_name),v_version,false,p_components,p_direct_cost) returning id into v_id;
  if p_activate then perform private.activate_costing_profile(v_business,v_id); end if;
  return v_id;
-end $;
+end $$;
 
 create or replace function public.owner_activate_costing_profile(p_profile_id uuid)
-returns void language plpgsql security invoker set search_path=public,pg_temp as $
+returns void language plpgsql security invoker set search_path=public,pg_temp as $$
 declare v_business uuid;
 begin
  select business_id into v_business from public.costing_profiles where id=p_profile_id;
  if v_business is null then raise exception 'Costing profile not found'; end if;
  perform private.activate_costing_profile(v_business,p_profile_id);
-end $;
+end $$;
 
 create or replace function private.update_invoice_balance(p_business_id uuid,p_invoice_id uuid,p_amount numeric)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
 declare i public.sales_invoices%rowtype;
 begin
  if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
  select * into i from public.sales_invoices where id=p_invoice_id and business_id=p_business_id for update;
  if not found or p_amount<=0 or p_amount>i.balance then raise exception 'Invalid invoice payment allocation'; end if;
  perform private.update_invoice_balance(i.business_id,i.id,p_amount);
-end $;
+end $$;
 
 create or replace function private.update_job_material_issue(p_business_id uuid,p_material_id uuid,p_quantity numeric,p_cost numeric)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
 declare m public.production_job_materials%rowtype;
 begin
  if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
@@ -172,20 +170,20 @@ begin
  if not found or p_quantity<=0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Invalid job material issue'; end if;
  update public.production_job_materials set issued_quantity=issued_quantity+p_quantity where id=m.id;
  update public.production_jobs set actual_direct_cost=actual_direct_cost+p_cost where id=m.job_id and business_id=p_business_id;
-end $;
+end $$;
 
 create or replace function private.update_job_stage(p_business_id uuid,p_job_id uuid,p_stage text)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
 declare v_old text;
 begin
  if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
  select stage into v_old from public.production_jobs where id=p_job_id and business_id=p_business_id for update;
  if not found or v_old in('delivered','cancelled') then raise exception 'Production job not found or already closed'; end if;
  update public.production_jobs set stage=p_stage,delivered_at=case when p_stage='delivered' then now() else delivered_at end where id=p_job_id and business_id=p_business_id;
-end $;
+end $$;
 
 create or replace function private.update_purchase_receipt(p_business_id uuid,p_line_id uuid,p_received_quantity numeric)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
 declare l public.purchase_order_lines%rowtype; po public.purchase_orders%rowtype; v_received numeric(14,3);
 begin
  if auth.uid() is null or not exists(select 1 from public.business_memberships where business_id=p_business_id and user_id=auth.uid() and role='owner') then raise exception 'Owner authorization required'; end if;
@@ -196,7 +194,7 @@ begin
  update public.purchase_order_lines set received_quantity=received_quantity+p_received_quantity where id=l.id;
  select coalesce(sum(received_quantity),0) into v_received from public.purchase_order_lines where purchase_order_id=po.id;
  update public.purchase_orders set status=case when v_received>=(select sum(quantity) from public.purchase_order_lines where purchase_order_id=po.id) then 'received' else 'part_received' end where id=po.id;
-end $;
+end $$;
 
 revoke all on function private.update_invoice_balance(uuid,uuid,numeric) from public,anon;
 revoke all on function private.update_job_material_issue(uuid,uuid,numeric,numeric) from public,anon;
