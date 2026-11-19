@@ -1,0 +1,258 @@
+-- Operational transaction layer for MJ Printing & Branding.
+-- All writes are owner-scoped, transactional RPCs. Auth users are not modified.
+alter table public.quotations
+  add column if not exists below_floor_exception_reason text,
+  add column if not exists below_floor_approved_by uuid references auth.users(id);
+alter table public.production_jobs
+  add column if not exists actual_direct_cost numeric(14,2) not null default 0 check(actual_direct_cost>=0);
+alter table public.purchase_order_lines
+  add column if not exists stock_item_id uuid references public.stock_items(id);
+
+create table if not exists public.production_job_materials(
+ id uuid primary key default gen_random_uuid(),
+ business_id uuid not null references public.businesses(id) on delete cascade,
+ job_id uuid not null references public.production_jobs(id) on delete cascade,
+ stock_item_id uuid not null references public.stock_items(id),
+ planned_quantity numeric(14,3) not null check(planned_quantity>0),
+ issued_quantity numeric(14,3) not null default 0 check(issued_quantity>=0 and issued_quantity<=planned_quantity),
+ created_at timestamptz not null default now()
+);
+alter table public.production_job_materials enable row level security;
+create policy production_job_materials_owner_all on public.production_job_materials
+ for all to authenticated
+ using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'))
+ with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role='owner'));
+
+-- Operational tables remain owner-write; read access is still restricted to the same business.
+do $$
+declare t text;
+begin
+ foreach t in array array[
+ 'quotations','quotation_lines','sales_invoices','sales_invoice_items','production_jobs',
+ 'stock_items','stock_movements','suppliers','purchase_orders','purchase_order_lines',
+ 'payments','payment_allocations','refunds','expenses','audit_events'
+ ] loop
+  execute format(
+   'create policy %I on public.%I for all to authenticated using(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner'')) with check(business_id in(select business_id from public.business_memberships where user_id=(select auth.uid()) and role=''owner''))',
+   t||'_owner_write'
+  );
+ end loop;
+end $$;
+
+create or replace function public.owner_create_stock_item(
+ p_location_code text,p_item_name text,p_category text,p_unit text default 'piece',
+ p_opening_quantity numeric default 0,p_reorder_level numeric default 0,p_unit_cost numeric default 0,p_sku text default null
+) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_location uuid; v_item uuid; v_user uuid;
+begin
+ v_user:=auth.uid();
+ select business_id into v_business from public.business_memberships where user_id=v_user and role='owner' limit 1;
+ if v_business is null then raise exception 'Owner workspace required'; end if;
+ if p_location_code not in('shop_1','shop_2') or p_opening_quantity<0 or p_reorder_level<0 or p_unit_cost<0 then raise exception 'Invalid stock details'; end if;
+ select id into v_location from public.inventory_locations where business_id=v_business and location_code=p_location_code;
+ if v_location is null then raise exception 'Inventory location not found'; end if;
+ insert into public.stock_items(business_id,location_id,sku,item_name,category,unit,quantity_on_hand,reorder_level,average_unit_cost)
+ values(v_business,v_location,nullif(btrim(p_sku),''),btrim(p_item_name),btrim(p_category),coalesce(nullif(btrim(p_unit),''),'piece'),p_opening_quantity,p_reorder_level,p_unit_cost)
+ returning id into v_item;
+ if p_opening_quantity>0 then
+  insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
+  values(v_business,v_item,'opening',p_opening_quantity,p_unit_cost,v_user);
+ end if;
+ return v_item;
+end $$;
+
+create or replace function public.owner_create_quotation(
+ p_customer_id uuid,p_quote_number text,p_valid_until date,p_lines jsonb,
+ p_allow_below_floor boolean default false,p_exception_reason text default null
+) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_user uuid; v_quote uuid; v_total numeric(14,2):=0; v_cost numeric(14,2):=0;
+ v_line jsonb; v_qty numeric; v_price numeric; v_cost_line numeric; v_desc text;
+begin
+ v_user:=auth.uid();
+ select business_id into v_business from public.business_memberships where user_id=v_user and role='owner' limit 1;
+ if v_business is null then raise exception 'Owner workspace required'; end if;
+ if not exists(select 1 from public.customers where id=p_customer_id and business_id=v_business) then raise exception 'Customer not found in this workspace'; end if;
+ if jsonb_typeof(p_lines)<>'array' or jsonb_array_length(p_lines)=0 then raise exception 'At least one quotation line is required'; end if;
+ for v_line in select value from jsonb_array_elements(p_lines) loop
+  v_qty:=(v_line->>'quantity')::numeric; v_price:=(v_line->>'unit_price')::numeric;
+  v_cost_line:=coalesce((v_line->>'direct_cost')::numeric,0); v_desc:=btrim(v_line->>'description');
+  if v_qty<=0 or v_price<0 or v_cost_line<0 or coalesce(v_desc,'')='' then raise exception 'Invalid quotation line'; end if;
+  v_total:=v_total+(v_qty*v_price); v_cost:=v_cost+v_cost_line;
+ end loop;
+ if v_total<=0 then raise exception 'Quotation total must be greater than zero'; end if;
+ if ((v_total-v_cost)/v_total)*100 < 30 then
+  if not coalesce(p_allow_below_floor,false) or length(btrim(coalesce(p_exception_reason,'')))<8 then
+   raise exception 'Quotation is below the 30% gross-margin floor. An authorised exception and reason are required.';
+  end if;
+ end if;
+ insert into public.quotations(business_id,customer_id,quote_number,valid_until,total,created_by,below_floor_exception_reason,below_floor_approved_by)
+ values(v_business,p_customer_id,btrim(p_quote_number),p_valid_until,v_total,v_user,
+  case when ((v_total-v_cost)/v_total)*100<30 then btrim(p_exception_reason) end,
+  case when ((v_total-v_cost)/v_total)*100<30 then v_user end)
+ returning id into v_quote;
+ for v_line in select value from jsonb_array_elements(p_lines) loop
+  v_qty:=(v_line->>'quantity')::numeric; v_price:=(v_line->>'unit_price')::numeric;
+  v_cost_line:=coalesce((v_line->>'direct_cost')::numeric,0);
+  insert into public.quotation_lines(business_id,quotation_id,description,quantity,unit_price,direct_cost,line_total,details)
+  values(v_business,v_quote,btrim(v_line->>'description'),v_qty,v_price,v_cost_line,v_qty*v_price,coalesce(v_line->'details','{}'::jsonb));
+ end loop;
+ insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+ values(v_business,v_user,'quotation.created','quotation',v_quote,jsonb_build_object('total',v_total,'direct_cost',v_cost,'gross_margin_percent',round(((v_total-v_cost)/v_total)*100,2)));
+ return v_quote;
+end $$;
+
+create or replace function public.owner_set_quotation_status(p_quote_id uuid,p_status text)
+returns void language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_old text;
+begin
+ select business_id,status into v_business,v_old from public.quotations where id=p_quote_id for update;
+ if v_business is null or not exists(select 1 from public.business_memberships where business_id=v_business and user_id=auth.uid() and role='owner') then raise exception 'Quotation not found'; end if;
+ if p_status not in('sent','accepted','declined','expired') then raise exception 'Unsupported quotation status'; end if;
+ if not ((v_old='draft' and p_status='sent') or (v_old='sent' and p_status in('accepted','declined','expired'))) then raise exception 'Invalid quotation status transition'; end if;
+ update public.quotations set status=p_status where id=p_quote_id;
+end $$;
+
+create or replace function public.owner_convert_quote_to_invoice(
+ p_quote_id uuid,p_invoice_number text,p_job_number text,p_due_date date
+) returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
+declare q public.quotations%rowtype; v_invoice uuid; v_job uuid; v_user uuid; v_customer_supplied boolean; v_job_name text;
+begin
+ v_user:=auth.uid();
+ select * into q from public.quotations where id=p_quote_id for update;
+ if not found or not exists(select 1 from public.business_memberships where business_id=q.business_id and user_id=v_user and role='owner') then raise exception 'Quotation not found'; end if;
+ if q.status<>'accepted' then raise exception 'Only accepted quotations can be invoiced'; end if;
+ insert into public.sales_invoices(business_id,customer_id,invoice_number,status,due_date,total,amount_paid,balance,created_by)
+ values(q.business_id,q.customer_id,btrim(p_invoice_number),'sent',p_due_date,q.total,0,q.total,v_user)
+ returning id into v_invoice;
+ insert into public.sales_invoice_items(business_id,invoice_id,description,quantity,unit_price,line_total,item_type)
+ select q.business_id,v_invoice,l.description,l.quantity,l.unit_price,l.line_total,
+  case when l.details->>'item_type' in('blank_product','printing_service','custom_production','other') then l.details->>'item_type' else 'other' end
+ from public.quotation_lines l where l.quotation_id=q.id and l.business_id=q.business_id;
+ select coalesce(bool_or(coalesce((details->>'customer_supplied_items')::boolean,false)),false)
+ into v_customer_supplied from public.quotation_lines where quotation_id=q.id and business_id=q.business_id;
+ v_job_name:='Production for '||q.quote_number;
+ insert into public.production_jobs(business_id,invoice_id,quotation_id,customer_id,job_number,job_name,customer_supplied_items,actual_direct_cost)
+ values(q.business_id,v_invoice,q.id,q.customer_id,btrim(p_job_number),v_job_name,v_customer_supplied,0)
+ returning id into v_job;
+ update public.quotations set status='converted' where id=q.id;
+ insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+ values(q.business_id,v_user,'quotation.converted','quotation',q.id,jsonb_build_object('invoice_id',v_invoice,'job_id',v_job));
+ return jsonb_build_object('invoice_id',v_invoice,'job_id',v_job);
+end $$;
+
+create or replace function public.owner_add_job_material(p_job_id uuid,p_stock_item_id uuid,p_planned_quantity numeric)
+returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_id uuid;
+begin
+ select business_id into v_business from public.production_jobs where id=p_job_id;
+ if v_business is null or not exists(select 1 from public.business_memberships where business_id=v_business and user_id=auth.uid() and role='owner') then raise exception 'Production job not found'; end if;
+ if p_planned_quantity<=0 or not exists(select 1 from public.stock_items where id=p_stock_item_id and business_id=v_business and active) then raise exception 'Invalid material or quantity'; end if;
+ insert into public.production_job_materials(business_id,job_id,stock_item_id,planned_quantity)
+ values(v_business,p_job_id,p_stock_item_id,p_planned_quantity) returning id into v_id;
+ return v_id;
+end $$;
+
+create or replace function public.owner_issue_job_material(p_job_material_id uuid,p_quantity numeric)
+returns void language plpgsql security invoker set search_path=public,pg_temp as $$
+declare m public.production_job_materials%rowtype; s public.stock_items%rowtype; v_user uuid;
+begin
+ v_user:=auth.uid();
+ select * into m from public.production_job_materials where id=p_job_material_id for update;
+ if not found or not exists(select 1 from public.business_memberships where business_id=m.business_id and user_id=v_user and role='owner') then raise exception 'Job material not found'; end if;
+ if p_quantity<=0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Issue quantity exceeds planned balance'; end if;
+ select * into s from public.stock_items where id=m.stock_item_id and business_id=m.business_id for update;
+ if s.quantity_on_hand<p_quantity then raise exception 'Insufficient stock'; end if;
+ update public.stock_items set quantity_on_hand=quantity_on_hand-p_quantity where id=s.id;
+ update public.production_job_materials set issued_quantity=issued_quantity+p_quantity where id=m.id;
+ insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
+ values(m.business_id,s.id,'job_issue',-p_quantity,s.average_unit_cost,v_user);
+ update public.production_jobs set actual_direct_cost=actual_direct_cost+(p_quantity*s.average_unit_cost) where id=m.job_id;
+end $$;
+
+create or replace function public.owner_set_production_stage(p_job_id uuid,p_stage text)
+returns void language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_old text;
+begin
+ select business_id,stage into v_business,v_old from public.production_jobs where id=p_job_id for update;
+ if v_business is null or not exists(select 1 from public.business_memberships where business_id=v_business and user_id=auth.uid() and role='owner') then raise exception 'Production job not found'; end if;
+ if p_stage not in('awaiting_artwork','artwork_proof','screens_prepared','printing','finishing','quality_check','ready','delivered','cancelled') then raise exception 'Invalid production stage'; end if;
+ if v_old in('delivered','cancelled') then raise exception 'Closed jobs cannot be changed'; end if;
+ update public.production_jobs set stage=p_stage,delivered_at=case when p_stage='delivered' then now() else delivered_at end where id=p_job_id;
+end $$;
+
+create or replace function public.owner_record_payment(
+ p_invoice_id uuid,p_payment_number text,p_method text,p_amount numeric,p_reference_code text default null
+) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+declare i public.sales_invoices%rowtype; v_payment uuid; v_user uuid;
+begin
+ v_user:=auth.uid();
+ select * into i from public.sales_invoices where id=p_invoice_id for update;
+ if not found or not exists(select 1 from public.business_memberships where business_id=i.business_id and user_id=v_user and role='owner') then raise exception 'Invoice not found'; end if;
+ if p_method not in('cash','mpesa_paybill') or p_amount<=0 or p_amount>i.balance then raise exception 'Invalid payment method or amount exceeds invoice balance'; end if;
+ insert into public.payments(business_id,customer_id,payment_number,method,amount,reference_code,received_by)
+ values(i.business_id,i.customer_id,btrim(p_payment_number),p_method,p_amount,nullif(btrim(p_reference_code),''),v_user)
+ returning id into v_payment;
+ insert into public.payment_allocations(business_id,payment_id,invoice_id,amount)
+ values(i.business_id,v_payment,i.id,p_amount);
+ update public.sales_invoices set amount_paid=amount_paid+p_amount,balance=balance-p_amount,
+ status=case when balance-p_amount=0 then 'paid' else 'partially_paid' end where id=i.id;
+ insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+ values(i.business_id,v_user,'payment.received','payment',v_payment,jsonb_build_object('invoice_id',i.id,'amount',p_amount,'method',p_method));
+ return v_payment;
+end $$;
+
+create or replace function public.owner_record_expense(
+ p_category text,p_description text,p_amount numeric,p_payment_method text,p_expense_date date default current_date
+) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_id uuid; v_user uuid;
+begin
+ v_user:=auth.uid();
+ select business_id into v_business from public.business_memberships where user_id=v_user and role='owner' limit 1;
+ if v_business is null then raise exception 'Owner workspace required'; end if;
+ if p_amount<=0 or p_payment_method not in('cash','mpesa_paybill') or length(btrim(p_description))=0 then raise exception 'Invalid expense'; end if;
+ insert into public.expenses(business_id,expense_date,category,description,amount,payment_method,created_by)
+ values(v_business,p_expense_date,btrim(p_category),btrim(p_description),p_amount,p_payment_method,v_user) returning id into v_id;
+ return v_id;
+end $$;
+
+create or replace function public.owner_operational_report()
+returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $$
+declare v_business uuid; v_result jsonb;
+begin
+ select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
+ if v_business is null then raise exception 'Owner workspace required'; end if;
+ select jsonb_build_object(
+  'invoiced_sales',coalesce((select sum(total) from public.sales_invoices where business_id=v_business and status not in('draft','void')),0),
+  'payments_received',coalesce((select sum(amount) from public.payments where business_id=v_business),0),
+  'outstanding_receivables',coalesce((select sum(balance) from public.sales_invoices where business_id=v_business and status not in('draft','void')),0),
+  'active_jobs',(select count(*) from public.production_jobs where business_id=v_business and stage not in('delivered','cancelled')),
+  'delivered_jobs',(select count(*) from public.production_jobs where business_id=v_business and stage='delivered'),
+  'stock_items',(select count(*) from public.stock_items where business_id=v_business and active),
+  'low_stock_items',(select count(*) from public.stock_items where business_id=v_business and active and quantity_on_hand<=reorder_level),
+  'expenses',coalesce((select sum(amount) from public.expenses where business_id=v_business),0),
+  'cash_received',coalesce((select sum(amount) from public.payments where business_id=v_business and method='cash'),0),
+  'mpesa_received',coalesce((select sum(amount) from public.payments where business_id=v_business and method='mpesa_paybill'),0)
+ ) into v_result;
+ return v_result;
+end $$;
+
+revoke all on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) from public,anon;
+revoke all on function public.owner_create_quotation(uuid,text,date,jsonb,boolean,text) from public,anon;
+revoke all on function public.owner_set_quotation_status(uuid,text) from public,anon;
+revoke all on function public.owner_convert_quote_to_invoice(uuid,text,text,date) from public,anon;
+revoke all on function public.owner_add_job_material(uuid,uuid,numeric) from public,anon;
+revoke all on function public.owner_issue_job_material(uuid,numeric) from public,anon;
+revoke all on function public.owner_set_production_stage(uuid,text) from public,anon;
+revoke all on function public.owner_record_payment(uuid,text,text,numeric,text) from public,anon;
+revoke all on function public.owner_record_expense(text,text,numeric,text,date) from public,anon;
+revoke all on function public.owner_operational_report() from public,anon;
+grant execute on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) to authenticated;
+grant execute on function public.owner_create_quotation(uuid,text,date,jsonb,boolean,text) to authenticated;
+grant execute on function public.owner_set_quotation_status(uuid,text) to authenticated;
+grant execute on function public.owner_convert_quote_to_invoice(uuid,text,text,date) to authenticated;
+grant execute on function public.owner_add_job_material(uuid,uuid,numeric) to authenticated;
+grant execute on function public.owner_issue_job_material(uuid,numeric) to authenticated;
+grant execute on function public.owner_set_production_stage(uuid,text) to authenticated;
+grant execute on function public.owner_record_payment(uuid,text,text,numeric,text) to authenticated;
+grant execute on function public.owner_record_expense(text,text,numeric,text,date) to authenticated;
+grant execute on function public.owner_operational_report() to authenticated;
