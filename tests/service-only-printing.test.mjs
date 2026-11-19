@@ -44,6 +44,8 @@ test("outsourced printing labour can be recorded against the production job", ()
 test("owner workflow changes refresh from Realtime while preserving payment exception for later settlement", () => {
   assert.match(quote, /postgres_changes/);
   assert.match(production, /postgres_changes/);
+  assert.match(production, /table:"quality_checks"/);
+  assert.match(production, /table:"rework_events"/);
   assert.match(payment, /postgres_changes/);
   assert.match(payment, /sales_invoice_payment_allocations/);
   assert.match(production, /invoice remains outstanding until a payment is posted/);
