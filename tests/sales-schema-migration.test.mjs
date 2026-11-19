@@ -134,10 +134,10 @@ test("Invoice conversion sends the exact RPC stock-location argument", () => {
 
 
 test("Database rejects new non-Cash and non-M-Pesa payments while preserving legacy rows", () => {
-  assert.match(paymentPolicySql, /create trigger payments_sales_new_method_guard\\s+before insert on public\\.payments/);
-  assert.match(paymentPolicySql, /new\\.method not in \\('cash','mpesa_manual'\\)/);
-  assert.match(paymentPolicySql, /create trigger sales_payment_accounts_new_method_guard\\s+before insert or update of account_type on public\\.sales_payment_accounts/);
-  assert.match(paymentPolicySql, /new\\.account_type not in \\('cash','mpesa_paybill'\\)/);
-  assert.match(sql, /method in \\('cash','mpesa_manual','bank_transfer','cheque'\\)/);
-  assert.match(manualPaymentsSql, /account_type in \\('cash','mpesa_paybill','bank','cheque_clearing'\\)/);
+  assert.match(paymentPolicySql, /create trigger payments_sales_new_method_guard\s+before insert on public\.payments/);
+  assert.match(paymentPolicySql, /new\.method not in \('cash','mpesa_manual'\)/);
+  assert.match(paymentPolicySql, /create trigger sales_payment_accounts_new_method_guard\s+before insert or update of account_type on public\.sales_payment_accounts/);
+  assert.match(paymentPolicySql, /new\.account_type not in \('cash','mpesa_paybill'\)/);
+  assert.match(sql, /method in \('cash','mpesa_manual','bank_transfer','cheque'\)/);
+  assert.match(manualPaymentsSql, /account_type in \('cash','mpesa_paybill','bank','cheque_clearing'\)/);
 });
