@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(60);
+select extensions.plan(62);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -89,6 +89,8 @@ select extensions.is((select round(((total-(select sum(direct_cost) from public.
 
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'sent');
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'accepted');
+select extensions.is((select status from public.quotations where id=current_setting('test.quote_id')::uuid),'accepted','owner quotation status RPC records the accepted transition');
+select extensions.is((select count(*)::integer from public.audit_events where entity_type='quotation' and entity_id=current_setting('test.quote_id')::uuid and event_type='quotation.status_changed'),2,'each quotation status transition is audited');
 select set_config('test.deposit_id',public.owner_record_quote_deposit(current_setting('test.quote_id')::uuid,'DEP-TEST-001','mpesa_paybill',200,'DEP-REF-001')::text,true);
 select extensions.is((select amount from public.quotation_deposits where id=current_setting('test.deposit_id')::uuid),200::numeric,'quotation deposit is recorded before invoicing');
 select set_config('test.converted',public.owner_convert_quote_to_invoice(current_setting('test.quote_id')::uuid,'INV-TEST-E2E','JOB-TEST-E2E',current_date+14)::text,true);
