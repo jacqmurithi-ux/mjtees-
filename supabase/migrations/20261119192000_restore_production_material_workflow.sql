@@ -165,7 +165,7 @@ begin
   ) values (
     v_business_id,v_location_id,nullif(btrim(p_sku),''),
     btrim(p_item_name),btrim(p_category),
-    coalesce(nullif(btrim(p_unit),''),'piece'),0,p_reorder_level,0
+    coalesce(nullif(btrim(p_unit),''),'piece'),0,p_reorder_level,p_unit_cost
   ) returning id into v_stock_item_id;
 
   if p_opening_quantity>0 then
