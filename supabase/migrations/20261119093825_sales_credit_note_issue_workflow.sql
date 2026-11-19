@@ -90,7 +90,7 @@ begin
     raise exception using errcode='22023',message='Credit note total must be greater than zero';
   end if;
 
-  select si.*,o.customer_id
+  select si,o.customer_id
     into v_invoice,v_customer_id
   from public.sales_invoices si
   join public.orders o on o.business_id=si.business_id and o.id=si.order_id
