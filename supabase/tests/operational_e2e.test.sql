@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(25);
+select extensions.plan(28);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -48,7 +48,7 @@ select set_config('test.profile_id',public.owner_create_costing_profile(
  '[{"name":"Outsourced printing labour","cost":600,"basis":"per_job"}]'::jsonb,
  600,true
 )::text,true);
-select extensions.ok((select is_active and version=1 and direct_cost=600 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');
+select extensions.ok((select is_active and version=1 and direct_cost=600 from public.costing_profiles where id=current_setting('test.profile_id')::uuid),'version one costing profile is active and stores its direct cost');\n\nselect set_config('test.cost_override_quote',public.owner_create_quotation(\n (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,\n 'Q-COST-BREAKDOWN',current_date+7,\n '[{\"description\":\"Generic garment printing\",\"quantity\":16,\"unit_price\":700,\"details\":{\"blank_cost_per_piece\":450,\"other_costs_total\":800}}]'::jsonb,false,null\n)::text,true);\nselect extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.cost_override_quote')::uuid),8000::numeric,'quote direct cost is blank cost per piece times quantity plus other direct costs');\nselect extensions.is((select round(((q.total-l.direct_cost)/l.direct_cost)*100,2) from public.quotations q join public.quotation_lines l on l.quotation_id=q.id where q.id=current_setting('test.cost_override_quote')::uuid),40.00::numeric,'contribution divided by direct cost produces the expected 40 percent margin');
 
 select extensions.throws_ok(
  $$select public.owner_create_quotation((select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,'Q-TEST-LOW',current_date+7,'[{"description":"Low price test","quantity":2,"unit_price":100,"direct_cost":0,"details":{}}]'::jsonb,false,null)$$,
@@ -71,7 +71,7 @@ select set_config('test.quote_id',public.owner_create_quotation(
 )::text,true);
 
 select extensions.is((select total from public.quotations where id=current_setting('test.quote_id')::uuid),1000::numeric,'test quotation total is KES 1,000');
-select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),40.00::numeric,'test gross margin is 40 percent');
+select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),66.67::numeric,'test contribution divided by direct cost is 66.67 percent');
 
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'sent');
 select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'accepted');
@@ -93,7 +93,7 @@ select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'d
 select extensions.ok((select delivered_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production delivery is timestamped');
 select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
-select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',1000,'E2E-TEST-REF');
+select extensions.throws_ok(\n $select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',1001,null)$,\n 'P0001','Invalid payment method or amount exceeds invoice balance',\n 'rejects a customer payment greater than the outstanding invoice balance');\nselect public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',1000,'E2E-TEST-REF');
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),0::numeric,'payment clears invoice balance');
 select extensions.is((select status from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),'paid','invoice status changes to paid');
 
@@ -101,7 +101,7 @@ select extensions.is((public.owner_operational_report()->>'invoiced_sales')::num
 select extensions.is((public.owner_operational_report()->>'payments_received')::numeric,1000::numeric,'report includes received payment');
 select extensions.is((public.owner_operational_report()->>'direct_production_cost')::numeric,600::numeric,'report carries costing profile direct cost into invoice');
 select extensions.is((public.owner_operational_report()->>'gross_profit')::numeric,400::numeric,'gross profit before other direct costs is KES 400');
-select extensions.is((public.owner_operational_report()->>'gross_margin_percent')::numeric,40.00::numeric,'report calculates gross margin from recorded invoice costs');
+select extensions.is((public.owner_operational_report()->>'gross_margin_percent')::numeric,66.67::numeric,'report calculates contribution divided by direct cost');
 select extensions.is((public.owner_operational_report()->>'outstanding_receivables')::numeric,0::numeric,'report clears paid receivable');
 select extensions.is((public.owner_operational_report()->>'delivered_jobs')::integer,1,'report includes delivered production job');
 
