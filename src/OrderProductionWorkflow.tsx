@@ -49,15 +49,16 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
  },[businessId,reportDate]);
  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
  useEffect(()=>{
-  if(!supabase)return;
-  const channel=supabase.channel("order-production-"+businessId)
+  const client=supabase;
+  if(!client)return;
+  const channel=client.channel("order-production-"+businessId)
    .on("postgres_changes",{event:"*",schema:"public",table:"orders",filter:"business_id=eq."+businessId},()=>{void load();})
    .on("postgres_changes",{event:"*",schema:"public",table:"order_items",filter:"business_id=eq."+businessId},()=>{void load();})
    .on("postgres_changes",{event:"*",schema:"public",table:"production_jobs",filter:"business_id=eq."+businessId},()=>{void load();})
    .on("postgres_changes",{event:"*",schema:"public",table:"production_cost_entries",filter:"business_id=eq."+businessId},()=>{void load();})
    .on("postgres_changes",{event:"*",schema:"public",table:"production_output_entries",filter:"business_id=eq."+businessId},()=>{void load();})
    .subscribe();
-  return ()=>{void supabase.removeChannel(channel);};
+  return ()=>{void client.removeChannel(channel);};
  },[businessId,load]);
 
  const call=async(name:string,args:Record<string,unknown>,success:string)=>{
