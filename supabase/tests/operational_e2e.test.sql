@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(56);
+select extensions.plan(58);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -96,7 +96,7 @@ select extensions.ok((select customer_supplied_items from public.production_jobs
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer-owned items do not reduce MJ stock');
 
 select extensions.ok(not has_table_privilege('authenticated','public.production_job_materials','INSERT'),'production materials cannot be inserted directly outside the owner RPC');
-select extensions.ok(not has_function_privilege('authenticated','private.apply_stock_movement(uuid,uuid,numeric,numeric,text)','EXECUTE'),'private stock movement helper cannot be called directly by clients');
+select extensions.ok(not has_function_privilege('authenticated','private.apply_stock_movement(uuid,uuid,numeric,numeric,text)','EXECUTE') and not has_function_privilege('authenticated','private.update_job_material_issue(uuid,uuid,numeric,numeric)','EXECUTE') and not has_function_privilege('authenticated','private.update_job_stage(uuid,uuid,text)','EXECUTE') and not has_function_privilege('authenticated','private.update_purchase_receipt(uuid,uuid,numeric)','EXECUTE'),'private stock movement helper cannot be called directly by clients');
 select set_config('test.material_id',public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,2)::text,true);
 select extensions.is((select planned_quantity from public.production_job_materials where id=current_setting('test.material_id')::uuid),2::numeric,'owner can plan a positive quantity of same-business stock for a production job');
 select extensions.throws_ok(
@@ -156,6 +156,10 @@ select set_config('test.supplier_id',public.owner_create_supplier('Test Supplier
 select set_config('test.po_one',public.owner_create_purchase_order(current_setting('test.supplier_id')::uuid,'PO-TEST-001',10,jsonb_build_array(jsonb_build_object('stock_item_id',current_setting('test.stock_id')::uuid,'quantity',10,'unit_cost',10)))::text,true);
 select set_config('test.po_two',public.owner_create_purchase_order(current_setting('test.supplier_id')::uuid,'PO-TEST-002',0,jsonb_build_array(jsonb_build_object('stock_item_id',current_setting('test.stock_id')::uuid,'quantity',10,'unit_cost',12)))::text,true);
 select set_config('test.supplier_payment',public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_one')::uuid,'SPAY-TEST-001','cash',50,null)::text,true);
+select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_one')::uuid limit 1),2);
+select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),12::numeric,'purchase receipt updates stock through the protected movement helper');
+select extensions.ok(exists(select 1 from public.stock_movements where stock_item_id=current_setting('test.stock_id')::uuid and movement_type='purchase' and quantity=2),'purchase receipt creates an append-only stock movement');
+select extensions.ok(exists(select 1 from public.audit_events where event_type='purchasing.goods_received' and entity_type='purchase_order_line'),'purchase receipt creates an audit event');
 select extensions.is((select amount from public.supplier_payments where id=current_setting('test.supplier_payment')::uuid),50::numeric,'supplier payment is recorded in its own ledger');
 select extensions.is((select sum(po.total+po.transport_cost) from public.purchase_orders po where po.supplier_id=current_setting('test.supplier_id')::uuid)-(select sum(sp.amount) from public.supplier_payments sp where sp.supplier_id=current_setting('test.supplier_id')::uuid),180::numeric,'supplier balance reflects purchase orders less payments');
 select extensions.is(jsonb_array_length(public.owner_supplier_price_alerts()),1,'supplier price change alert detects a new purchase price');
