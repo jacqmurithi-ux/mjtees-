@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
+import CustomOrderDetails from "./CustomOrderDetails";
 
 type Order={id:string;order_number:string;customer_id:string;status:string;total_amount:number;received_at:string;required_by:string|null;promised_turnaround_hours:number|null};
 type Item={id:string;order_id:string;description:string;quantity:number;unit:string;sale_mode:string;customer_supplies_item:boolean;stock_item_id:string|null;production_method_id:string|null;production_specification:unknown};
@@ -134,6 +135,7 @@ export default function OrderProductionWorkflow({businessId,customers,onChanged}
      return <div className="production-line" key={item.id}><b>{item.description}</b><small>{item.quantity} {item.unit} · {item.sale_mode.replaceAll("_"," ")} · {item.customer_supplies_item?"Customer-supplied item":"Shop-supplied item"}</small>{(typeof specification.contract_school_name==="string"||typeof specification.garment_type==="string"||typeof specification.print_position==="string")&&<small>Contract job: {[specification.contract_school_name,specification.garment_type,specification.print_position].filter(Boolean).join(" · ")}</small>}
       {!job&&item.sale_mode==="value_added"&&<div className="inline-controls"><select value={selectedMethod} onChange={e=>setMethodByItem(v=>({...v,[item.id]:e.target.value}))}><option value="">Production method</option>{methods.map(m=><option key={m.id} value={m.code}>{m.name}</option>)}</select><input type="datetime-local" aria-label="Production due date" value={jobDue[item.id]||""} onChange={e=>setJobDue(v=>({...v,[item.id]:e.target.value}))}/><button className="primary-action compact" disabled={busy} onClick={()=>startJob(item)}>Start production</button></div>}
       {job&&<div className="job-card"><div className="enquiry-top"><b>Production job · {job.status.replaceAll("_"," ")}</b><small>{job.due_at?new Date(job.due_at).toLocaleString("en-KE"):"No job due date"}</small></div>
+       <CustomOrderDetails businessId={businessId} jobId={job.id}/>
        <div className="output-entry-panel">
         <div className="panel-toolbar"><div><b>Record actual printing</b><small>Planned {job.planned_quantity} · Accepted so far {outputEntries.filter(e=>e.job_id===job.id).reduce((n,e)=>n+Number(e.quantity_accepted),0)}</small></div></div>
         {(()=>{const v=outputForms[job.id]||{printed:"",rejected:"0",reworked:"0",workerType:"owner" as const,workerName:"",labourCost:"0",occurredAt:localDateTime(),notes:""};return <div className="inline-controls">
