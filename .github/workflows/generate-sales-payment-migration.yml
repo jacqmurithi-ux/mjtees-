@@ -1,0 +1,40 @@
+name: Generate Sales payment migration filename
+
+on:
+  push:
+    branches:
+      - feature/sales-rpc-credit-note-foundation
+    paths:
+      - ".github/workflows/generate-sales-payment-migration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate timestamped migration with pinned Supabase CLI
+        run: |
+          before="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort)"
+          npx --yes supabase@2.53.1 migration new sales_manual_payment_method_restrictions
+          after="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort)"
+          new_file="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))"
+          test -n "$new_file"
+          test "$(printf '%s\n' "$new_file" | wc -l)" -eq 1
+          printf '%s\n' "$new_file" > migration-path.txt
+          echo "Generated $new_file"
+      - name: Upload generated migration
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-payment-migration
+          path: |
+            migration-path.txt
+            supabase/migrations/*.sql
+          retention-days: 3
