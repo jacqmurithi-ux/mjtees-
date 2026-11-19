@@ -482,7 +482,7 @@ select throws_ok(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     (select id from public.sales_invoices where quotation_id='a1000000-0000-4000-8000-000000000001'),
     'Non-owner credit attempt',
-    jsonb_array_build_object('description','Test line','quantity',1,'unit_price',1,'amount',1),
+    jsonb_build_array(jsonb_build_object('description','Test line','quantity',1,'unit_price',1,'amount',1)),
     0,'74000000-0000-4000-8000-000000000004'
   )$pt$,
   '42501',null,'Non-owner cannot issue a Sales credit note');
