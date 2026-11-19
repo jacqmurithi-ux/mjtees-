@@ -12,6 +12,9 @@ test("customer-supplied screen printing has a versioned outsourced-labour costin
   assert.match(quote, /code==="screen_printing"/);
   assert.match(quote, /customer-supplied-screen-printing/);
   assert.match(quote, /owner_upsert_catalogue_item/);
+  assert.match(quote, /owner_create_costing_profile/);
+  assert.match(quote, /product_costing_profiles/);
+  assert.match(quote, /Active item-specific costing profile v/);
   assert.match(quote, /p_catalogue_item_id:null/);
   assert.match(quote, /componentType:"outsourced_service"/);
   assert.match(quote, /driverType:"per_order"/);
