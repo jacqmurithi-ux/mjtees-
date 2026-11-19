@@ -4,7 +4,7 @@ import { supabase } from './lib/supabase';
 
 type Page = 'sales'|'production'|'inventory'|'purchasing'|'finance'|'reports'|'settings';
 type Row = Record<string, any>;
-const cash=(n:number)=>new Intl.NumberFormat('en-KE',{style:'currency',currency:'KES',maximumFractionDigits:2}).format(Number(n||0));
+const cash=(n:number)=>new Intl.NumberFormat('en-KE',{style:'currency',currency:'KES',maximumFractionDigits:0}).format(Number(n||0));
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const nextNumber=(prefix:string)=>prefix+'-'+Date.now().toString().slice(-8);
 const stages=['awaiting_artwork','artwork_proof','screens_prepared','printing','finishing','quality_check','ready','delivered'];
@@ -73,7 +73,7 @@ export default function Operations({page,businessId,onChanged,onNavigate}:{page:
    console.error('MJ workspace module load failed', {page,businessId,error:e});
   }
   finally{setLoading(false)}
- },[page,businessId,customerId,profileId,selectedJob,materialStock,selectedMaterial,supplierId,poStock,payInvoice,fail]);
+ },[page,businessId,customerId,profileId,selectedJob,materialStock,selectedMaterial,supplierId,payInvoice,fail]);
  useEffect(()=>{void refresh()},[refresh]);
  async function rpc(name:string,args:Record<string,unknown>,success:string){
   if(!supabase)return;setLoading(true);setError('');setNotice('');
