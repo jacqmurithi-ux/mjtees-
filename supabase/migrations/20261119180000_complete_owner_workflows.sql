@@ -72,7 +72,7 @@ grant select on public.supplier_price_reviews to authenticated;
 
 create or replace function public.owner_record_supplier_payment(
  p_supplier_id uuid,p_purchase_order_id uuid,p_payment_number text,p_method text,p_amount numeric,p_reference_code text default null
-) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+) returns uuid language plpgsql security definer set search_path=public,pg_temp as $
 declare v_business uuid; v_due numeric(14,2); v_id uuid;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -91,7 +91,7 @@ end $$;
 
 create or replace function public.owner_record_quote_deposit(
  p_quote_id uuid,p_deposit_number text,p_method text,p_amount numeric,p_reference_code text default null
-) returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+) returns uuid language plpgsql security definer set search_path=public,pg_temp as $
 declare q public.quotations%rowtype; v_received numeric(14,2); v_id uuid;
 begin
  select * into q from public.quotations where id=p_quote_id for update;
@@ -108,7 +108,7 @@ begin
 end $$;
 
 create or replace function public.owner_record_refund(p_payment_id uuid,p_amount numeric,p_reason text)
-returns uuid language plpgsql security invoker set search_path=public,pg_temp as $$
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $
 declare p public.payments%rowtype; v_refunded numeric(14,2); v_id uuid;
 begin
  select * into p from public.payments where id=p_payment_id;
@@ -122,7 +122,7 @@ begin
 end $$;
 
 create or replace function public.owner_post_refund(p_refund_id uuid)
-returns void language plpgsql security invoker set search_path=public,pg_temp as $$
+returns void language plpgsql security definer set search_path=public,pg_temp as $
 declare r public.refunds%rowtype;
 begin
  select * into r from public.refunds where id=p_refund_id for update;
@@ -134,7 +134,7 @@ begin
 end $$;
 
 create or replace function public.owner_adjust_inventory(p_stock_item_id uuid,p_quantity_delta numeric,p_reason text)
-returns void language plpgsql security invoker set search_path=public,private,pg_temp as $$
+returns void language plpgsql security definer set search_path=public,private,pg_temp as $
 declare s public.stock_items%rowtype; v_business uuid;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -147,7 +147,7 @@ begin
 end $$;
 
 create or replace function public.owner_review_supplier_price_change(p_supplier_id uuid,p_stock_item_id uuid,p_previous_line_id uuid,p_latest_line_id uuid)
-returns void language plpgsql security invoker set search_path=public,pg_temp as $$
+returns void language plpgsql security definer set search_path=public,pg_temp as $
 declare v_business uuid;
 begin
  select business_id into v_business from public.business_memberships where user_id=auth.uid() and role='owner' limit 1;
@@ -172,7 +172,7 @@ begin
   join public.suppliers s on s.id=po.supplier_id join public.stock_items si on si.id=pol.stock_item_id
   where po.business_id=v_business and po.status<>'cancelled' and pol.stock_item_id is not null
  ), pairs as (
-  select a.supplier_id,a.supplier_name,a.stock_item_id,a.item_name,b.id previous_line_id,a.line_id latest_line_id,
+  select a.supplier_id,a.supplier_name,a.stock_item_id,a.item_name,b.line_id previous_line_id,a.line_id latest_line_id,
    b.unit_cost previous_cost,a.unit_cost latest_cost,a.created_at,
    round(((a.unit_cost-b.unit_cost)/nullif(b.unit_cost,0))*100,2) change_percent
   from ranked a join ranked b on b.supplier_id=a.supplier_id and b.stock_item_id=a.stock_item_id and b.rn=2
