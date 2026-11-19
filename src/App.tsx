@@ -1,7 +1,7 @@
 import{useEffect,useState}from'react';import type{FormEvent}from'react';import type{Session}from'@supabase/supabase-js';import{supabase,supabaseConfigured}from'./lib/supabase';import Operations from './Operations';
 type Page='overview'|'customers'|'sales'|'costing'|'production'|'inventory'|'purchasing'|'finance'|'reports'|'settings';
 type Customer={id:string;customer_name:string;phone:string|null;email:string|null;customer_type:string;created_at:string};
-type AlertRow={id:string;label:string;detail:string;date?:string;stage?:string;customer?:string;quantity?:string;product?:string};
+type AlertRow={id:string;label:string;detail?:string;date?:string;stage?:string;customer?:string;quantity?:string;product?:string};
 type PriceAlert={supplier_id:string;supplier_name:string;stock_item_id:string;item_name:string;previous_line_id:string;latest_line_id:string;previous_cost:number;latest_cost:number;change_percent:number|null;reviewed:boolean};
 const items:{id:Page;label:string}[]=[{id:'overview',label:'Dashboard'},{id:'customers',label:'Customers'},{id:'sales',label:'Quotes'},{id:'costing',label:'Costing'},{id:'production',label:'Production'},{id:'inventory',label:'Inventory'},{id:'purchasing',label:'Purchasing'},{id:'finance',label:'Payments'},{id:'reports',label:'Reports'},{id:'settings',label:'Settings'}];
 const money=(n:number)=>new Intl.NumberFormat('en-KE',{style:'currency',currency:'KES',maximumFractionDigits:0}).format(n);
@@ -35,7 +35,7 @@ export default function App(){
   if(st.data)setLowStock(st.data.filter(x=>Number(x.quantity_on_hand)<=Number(x.reorder_level)).map(x=>({id:x.id,label:x.item_name,detail:x.quantity_on_hand+' '+x.unit+' remaining · reorder at '+x.reorder_level})));
   const cutoff=new Date();cutoff.setHours(23,59,59,999);cutoff.setDate(cutoff.getDate()+2);
   setDueItems((j.data||[]).filter(x=>x.due_at&&new Date(x.due_at)<=cutoff).map(x=>{
-   const line=x.quotation?.quotation_lines?.[0];const customer=Array.isArray(x.customer)?x.customer[0]:x.customer;
+   const quotation=Array.isArray(x.quotation)?x.quotation[0]:x.quotation;const lines=quotation?.quotation_lines;const line=Array.isArray(lines)?lines[0]:lines;const customer=Array.isArray(x.customer)?x.customer[0]:x.customer;
    return {id:x.id,label:x.job_number,customer:customer?.customer_name||'Customer',quantity:line?.quantity?String(line.quantity):'',product:line?.description||x.job_name,stage:x.stage,date:nairobiDate(x.due_at)};
   }));
   setPriceAlerts(Array.isArray(alerts.data)?alerts.data:[]);
