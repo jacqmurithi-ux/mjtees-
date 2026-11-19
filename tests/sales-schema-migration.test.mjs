@@ -24,8 +24,14 @@ test("Invoice and credit records retain tenant-scoped relationships and KES-only
   assert.doesNotMatch(sql, /\bvat_(rate|amount|inclusive)\b|tax_(rate|amount)/i);
 });
 
-test("Payments support the requested manually entered channels", () => {
-  assert.match(sql, /method in \('cash','mpesa_manual','bank_transfer','cheque'\)/);
+test("Payment UI offers only cash and M-Pesa Paybill for new manual entries", () => {
+  const ui = readFileSync(new URL("../src/PaymentWorkflow.tsx", import.meta.url), "utf8");
+  assert.match(ui, /<option value=\"cash\">Cash<\/option><option value=\"mpesa_manual\">M-Pesa Paybill<\/option>/);
+  assert.doesNotMatch(ui, /<option value=\"bank_transfer\"|<option value=\"cheque\"/);
+});
+
+test("Payments retain legacy methods in the database until safely migrated", () => {
+  assert.match(sql, /method in \('cash','mpesa_manual','bank_transfer','cheque'\)/); // Legacy rows remain readable; new-entry restriction is covered by the follow-up migration.
   assert.match(sql, /external_reference/);
 });
 
@@ -117,4 +123,10 @@ test("Customer credit can be applied without payment reversal functionality", ()
   assert.doesNotMatch(salesCreditSql, /owner_reverse|payment_reversed|reversal|reversed/i);
   assert.doesNotMatch(readFileSync(new URL("../src/PaymentWorkflow.tsx", import.meta.url), "utf8"), /reverse payment|reverse legacy|owner_reverse_payment/i);
   assert.match(manualPaymentsSql, /entry_type='apply_to_invoice'/);
+});
+
+test("Invoice conversion sends the exact RPC stock-location argument", () => {
+  const ui = readFileSync(new URL("../src/QuoteWorkflow.tsx", import.meta.url), "utf8");
+  assert.match(ui, /p_stock_location_id:stockLocationId\|\|null/);
+  assert.doesNotMatch(ui, /p_customer_contact_id/);
 });
