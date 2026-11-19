@@ -417,7 +417,7 @@ select is((public.owner_issue_sales_credit_note(
       where invoice_id=(select id from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003')),
     'description','Returned customer-supplied polo','quantity',1,'unit_price',100,'amount',100
   )),0,'74000000-0000-4000-8000-000000000001'
-)->>'amount_applied_to_invoice',
+)->>'amount_applied_to_invoice'),
   '0','A paid invoice credit note is not applied against the already-paid invoice');
 select is((select status from public.sales_invoices where quotation_id='a3000000-0000-4000-8000-000000000003'),
   'paid','Paid invoice remains paid after a credit note');
