@@ -328,7 +328,7 @@ select extensions.ok(
  (select cost_snapshot->>'dimensions'='12 x 4 inches'
   and cost_snapshot->>'production_method'='screen_printing'
   and cost_snapshot->>'profile_id'=current_setting('test.custom_profile_id')
-  and cost_snapshot->>'profile_name'='Generic production service'
+  and cost_snapshot->>'profile_name'='Custom job E2E costing profile'
   from public.sales_invoice_items where invoice_id=current_setting('test.custom_invoice_id')::uuid),
  'custom job snapshot retains dimensions, method and costing profile');
 select extensions.ok(
