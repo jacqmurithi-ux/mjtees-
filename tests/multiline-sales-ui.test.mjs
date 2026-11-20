@@ -18,9 +18,11 @@ test('Sales editor supports multiple independently configured quotation lines', 
   }
 });
 
-test('Sales creates draft quotations through the multi-line RPC and records acceptance separately', () => {
+test('Sales saves only fully accepted quotations through the multi-line RPC', () => {
   assert.match(source, /owner_create_accepted_quotation/);
-  assert.match(source, /Save draft quotation/);
+  assert.match(source, /Save accepted quotation/);
+  assert.match(source, /p_acceptance_method:acceptanceMethod/);
+  assert.match(source, /p_acceptance_notes:acceptanceNotes/);
   assert.match(source, /owner_record_quotation_acceptance/);
   assert.doesNotMatch(source, /p_status:'accepted'/);
   assert.doesNotMatch(source, /rpc\('owner_create_quotation'/);
