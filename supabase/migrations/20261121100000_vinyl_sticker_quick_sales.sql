@@ -64,7 +64,7 @@ begin
   v_business,v_profile_name,1,true,
   jsonb_build_array(jsonb_build_object(
    'name','Vinyl sticker direct production costs','category','production',
-   'basis','per_job','cost',round(p_direct_cost_total,2)
+   'basis','per_piece','cost',round(p_direct_cost_total,2)
   )),
   round(p_direct_cost_total,2),30,1.8
  ) returning id into v_profile;
