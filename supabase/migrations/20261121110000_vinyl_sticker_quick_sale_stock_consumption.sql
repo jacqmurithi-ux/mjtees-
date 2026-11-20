@@ -5,6 +5,10 @@ alter table public.stock_items
   alter column quantity_on_hand type numeric(14,6)
   using quantity_on_hand::numeric(14,6);
 
+alter table public.stock_movements
+  alter column quantity type numeric(14,6)
+  using quantity::numeric(14,6);
+
 create or replace function private.apply_stock_movement(
   p_business_id uuid,
   p_stock_item_id uuid,
