@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(94);
+select extensions.plan(99);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -142,6 +142,29 @@ select set_config('test.invoice_id',(current_setting('test.converted')::jsonb->>
 select extensions.ok(not coalesce((current_setting('test.converted')::jsonb->>'production_job_created')::boolean,true),'invoice conversion does not create a production job');
 select set_config('test.job_created',public.owner_create_production_job_from_quote(current_setting('test.quote_id')::uuid,'JOB-TEST-E2E',current_date+14)::text,true);
 select set_config('test.job_id',(current_setting('test.job_created')::jsonb->>'job_id'),true);
+select extensions.is((select production_status from public.production_jobs where id=current_setting('test.job_id')::uuid),'created','new production jobs start in Created status');
+select public.owner_update_production_schedule(
+ current_setting('test.job_id')::uuid,now()+interval '1 day',now()+interval '2 days',now()+interval '3 days',null,'Customer requested a revised schedule'
+);
+select extensions.ok((select expected_start_at is not null and expected_completion_at is not null and delivery_at is not null and delay_reason='Customer requested a revised schedule' from public.production_jobs where id=current_setting('test.job_id')::uuid),'production schedule stores expected start, expected completion, delivery date and delay reason');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'ready_for_production');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'in_production');
+select extensions.ok((select actual_started_at is not null and production_status='in_production' from public.production_jobs where id=current_setting('test.job_id')::uuid),'actual production start is timestamped');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'quality_check');
+select public.owner_record_production_quality_check(current_setting('test.job_id')::uuid,false,'Initial quality check found an alignment issue',null);
+select extensions.throws_ok(
+ 'select public.owner_set_production_status(current_setting(''test.job_id'')::uuid,''completed'')',
+ 'P0001','Quality check must pass or have a recorded override reason',
+ 'failed quality check cannot complete a job without an override reason');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'in_production');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'quality_check');
+select public.owner_record_production_quality_check(current_setting('test.job_id')::uuid,true,'Rework completed and all quality checks passed',null);
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'completed');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'ready_for_collection');
+select public.owner_record_production_handover(current_setting('test.job_id')::uuid,'collection','Example Customer','Customer confirmed collection of the complete order.');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'delivered');
+select extensions.ok((select production_status='delivered' and quality_check_passed and quality_checked_by=auth.uid() and actual_completed_at is not null and delivered_at is not null and handover_at is not null and handover_method='collection' and handover_recipient='Example Customer' and handover_by=auth.uid() from public.production_jobs where id=current_setting('test.job_id')::uuid),'quality approval, completion, handover and delivery are recorded on the production job');
+
 
 select extensions.is((select amount_paid from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),200::numeric,'quote deposit is carried into invoice paid amount');
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),800::numeric,'invoice balance is reduced by the quote deposit');
