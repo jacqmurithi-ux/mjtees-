@@ -77,11 +77,11 @@ export default function Operations({page,businessId,onChanged,onNavigate}:{page:
   finally{setLoading(false)}
  },[page,businessId,customerId,profileId,selectedJob,materialStock,selectedMaterial,supplierId,payInvoice,fail]);
  useEffect(()=>{void refresh()},[refresh]);
- async function rpc(name:string,args:Record<string,unknown>,success:string){
-  if(!supabase)return;setLoading(true);setError('');setNotice('');
+ async function rpc(name:string,args:Record<string,unknown>,success:string):Promise<boolean>{
+  if(!supabase)return false;setLoading(true);setError('');setNotice('');
   const {error}=await supabase.rpc(name,args as never);setLoading(false);
-  if(error){fail(error.message);return}
-  notify(success);await refresh();await onChanged();
+  if(error){fail(error.message);return false}
+  notify(success);await refresh();await onChanged();return true;
  }
  async function createQuote(e:FormEvent){
   e.preventDefault();if(!customerId)return fail('Add a customer before creating a quotation.');if(!quoteLines.length)return fail('Add at least one quotation line.');
@@ -96,7 +96,7 @@ export default function Operations({page,businessId,onChanged,onNavigate}:{page:
    lines.push({catalogue_item_id:item.id,description:item.name,production_method:line.productionMethod||null,costing_profile_id:line.profileId||null,selling_method:item.selling_method,quantity,unit_price:unitPrice,supply_arrangement:line.supplyArrangement,discount_type:line.discountType,discount_value:Number(line.discountValue||0),discount_reason:line.discountReason.trim()||null,blank_cost_per_piece:line.blankCostPerPiece===''?null:Number(line.blankCostPerPiece),other_costs_total:Number(line.otherCosts||0),other_costs_note:line.otherCostsNote||''});
   }
   const allow=exception&&exceptionReason.trim().length>=8;if(exception&&!allow)return fail('Below-floor exception reason must contain at least 8 characters.');
-  await rpc('owner_create_accepted_quotation',{p_customer_id:customerId,p_quote_number:quoteNo,p_valid_until:validUntil,p_allow_below_floor:allow,p_exception_reason:allow?exceptionReason:null,p_lines:lines},'Fully accepted quotation saved with '+lines.length+' line(s); server-side costing and margin validation completed.');
+  const saved=await rpc('owner_create_accepted_quotation',{p_customer_id:customerId,p_quote_number:quoteNo,p_valid_until:validUntil,p_allow_below_floor:allow,p_exception_reason:allow?exceptionReason:null,p_lines:lines},'Fully accepted quotation saved with '+lines.length+' line(s); server-side costing and margin validation completed.');if(!saved)return;
   setQuoteNo(nextNumber('Q'));setException(false);setExceptionReason('');setQuoteLines([{catalogueItemId:'',productionMethod:'',profileId:'',quantity:'1',unitPrice:'',supplyArrangement:'mj_supplies',discountType:'none',discountValue:'0',discountReason:'',blankCostPerPiece:'',otherCosts:'0',otherCostsNote:''}]);
  }
  async function convertQuote(id:string){
