@@ -354,3 +354,16 @@ test('costing profiles calculate itemised component totals from required quantit
 });
  
 test('costing profiles preserve per-piece and per-job component bases in new immutable versions', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /basis:c\.basis/);
+  assert.match(operations, /value="per_job">Once per job/);
+  assert.match(operations, /value="per_piece">Per finished item/);
+  assert.match(operations, /c\.basis\|\|'per_piece'/);
+});
+
+
+test('invoice lines preserve the exact immutable quotation component snapshot', () => {
+  assert.match(pricingIntegrityMigration, /add column if not exists cost_snapshot jsonb not null default '\{\}'::jsonb/);
+  assert.match(pricingIntegrityMigration, /coalesce\(l\.details->'cost_snapshot','\{\}'::jsonb\)/);
+  assert.match(pricingIntegrityMigration, /owner_convert_quote_to_invoice/);
+});
