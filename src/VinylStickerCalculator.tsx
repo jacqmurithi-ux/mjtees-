@@ -105,7 +105,7 @@ export default function VinylStickerCalculator({onSaleSaved}:{onSaleSaved?:()=>v
   {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice">{notice}</div>}
   <section className="panel">
    <h3>1. Sticker dimensions and quantity</h3>
-   <p className="muted">No fixed 5 × 5-inch price baseline. Vinyl cost is calculated from the finished sticker area and the stock roll's dimensions and purchase price.</p>
+   <p className="muted">There is no preset sticker price. Vinyl cost is calculated from the finished sticker area and the stock roll's dimensions and purchase price.</p>
    <div className="op-grid">
     <label className="op-field">Sticker length (inches)<input type="number" min="0.01" step="0.01" value={length} onChange={e=>setLength(e.target.value)}/></label>
     <label className="op-field">Sticker width (inches)<input type="number" min="0.01" step="0.01" value={width} onChange={e=>setWidth(e.target.value)}/></label>
