@@ -3,18 +3,21 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const sql = await readFile(new URL('../supabase/migrations/20261119170000_add_operational_workflows.sql', import.meta.url), 'utf8');
+const pricingSql = await readFile(new URL('../supabase/migrations/20261120110000_fix_costing_pricing_integrity.sql', import.meta.url), 'utf8');
 
 test('quotation RPC enforces 30% gross margin and requires a reason for exceptions', () => {
-  assert.match(sql, /\(\(v_total-v_cost\)\/v_total\)\*100 < 30/);
-  assert.match(sql, /An authorised exception and reason are required/);
-  assert.match(sql, /below_floor_approved_by/);
+  assert.match(pricingSql, /\(\(v_total-v_cost\)\/v_total\)\*100/);
+  assert.match(pricingSql, /v_margin_percent<30/);
+  assert.match(pricingSql, /An authorised exception and reason are required/);
+  assert.match(pricingSql, /below_floor_approved_by/);
 });
 
 test('quotation pricing requires an active versioned costing profile and ignores client cost figures', () => {
-  assert.match(sql, /An active versioned costing profile is required before pricing this quotation/);
-  assert.match(sql, /select id,direct_cost into v_profile,v_profile_direct_cost/);
-  assert.match(sql, /v_cost:=v_profile_direct_cost/);
-  assert.match(sql, /direct_cost,line_total,details\)[\s\S]*?values\(v_business,v_quote,btrim\(v_line->>'description'\),v_qty,v_price,v_cost/);
+  assert.match(pricingSql, /An active versioned costing profile is required before pricing this quotation/);
+  assert.match(pricingSql, /jsonb_array_elements\(v_components\)/);
+  assert.match(pricingSql, /v_basis='per_job'/);
+  assert.match(pricingSql, /v_component_cost\*v_qty/);
+  assert.match(pricingSql, /direct_cost_total/);
 });
 test('generic quotation pricing clears the 30% gross-margin floor using versioned direct cost', () => {
   const quantity = 2, unitPrice = 500, directCost = 600;
@@ -62,10 +65,10 @@ test('purchasing receipts update stock and weighted average cost', () => {
 });
 
 test('reports use recorded invoices, payments, receivables and expenses', () => {
-  assert.match(sql, /owner_operational_report/);
-  assert.match(sql, /outstanding_receivables/);
-  assert.match(sql, /payments_received/);
-  assert.match(sql, /'expenses'/);
+  assert.match(pricingSql, /owner_operational_report/);
+  assert.match(pricingSql, /outstanding_receivables/);
+  assert.match(pricingSql, /payments_received/);
+  assert.match(pricingSql, /'expenses'/);
 });
 
 
@@ -120,6 +123,32 @@ test('release removes the unused recursive invoice-balance helper', async () => 
   const migration = await readFile(new URL('../supabase/migrations/20261119173000_remove_recursive_invoice_balance_helper.sql', import.meta.url), 'utf8');
   assert.ok(migration.includes('revoke all on function private.update_invoice_balance'));
   assert.ok(migration.includes('drop function if exists private.update_invoice_balance'));
+});
+
+test('owner pricing ceiling is nullable, owner-only and audited without changing fixed pricing policies', () => {
+  assert.match(pricingSql, /add column if not exists max_unit_selling_price numeric\(14,2\)/);
+  assert.match(pricingSql, /max_unit_selling_price is null or max_unit_selling_price>0/);
+  assert.match(pricingSql, /owner_update_max_unit_selling_price/);
+  assert.match(pricingSql, /owner_get_max_unit_selling_price/);
+  assert.match(pricingSql, /role='owner'/);
+  assert.match(pricingSql, /pricing\.ceiling_updated/);
+  assert.doesNotMatch(pricingSql, /(?:drop column|alter column).*gross_margin_floor|(?:drop column|alter column).*full_cost_target_multiplier/i);
+  assert.match(pricingSql, /Unit selling price exceeds the owner-set maximum price/);
+});
+
+test('quotation cost snapshots preserve profile version, component basis, customer supply and total cost', () => {
+  assert.match(pricingSql, /'profile_id',v_profile/);
+  assert.match(pricingSql, /'profile_version',v_profile_version/);
+  assert.match(pricingSql, /'components',v_breakdown/);
+  assert.match(pricingSql, /v_customer_supplied/);
+  assert.match(pricingSql, /'direct_cost_total'/);
+  assert.match(pricingSql, /'direct_cost_per_piece'/);
+  assert.match(pricingSql, /'gross_margin_percent'/);
+});
+
+test('gross margin reports use gross profit divided by revenue rather than markup', () => {
+  assert.match(pricingSql, /\(\(v_sales-v_cost\)\/v_sales\)\*100/);
+  assert.doesNotMatch(pricingSql, /\(\(v_sales-v_cost\)\/v_cost\)\*100/);
 });
 
 test('all transaction RPCs are revoked from public and anon and granted to authenticated', () => {
