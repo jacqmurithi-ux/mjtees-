@@ -298,7 +298,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    <button className="primary" disabled={loading||(quickMode==='catalogue'&&(!catalogue.length||!quickItemId))||(quickMode==='custom'&&(!customDescription.trim()||!customDimensions.trim()||!customProfileId))||Number(quickQuantity)<1||Number(quickUnitPrice)<=0}>{loading?'Saving sale…':quickMode==='custom'?'Complete Custom Job Sale · Create invoice':'Complete Quick Sale · Create invoice'}</button>
    {quickMode==='catalogue'&&!catalogue.length&&<p className="op-error">No active catalogue items are available. Add approved products/services to the catalogue first.</p>}
    {quickMode==='custom'&&profiles.filter(p=>p.is_active).length===0&&<p className="op-error">Create an active costing profile before recording a custom job sale.</p>}
-   </>
+   </>}
   </form>
  </Panel>
  {quickReceipt&&<Panel title="Latest Quick Sale · Receipt">
