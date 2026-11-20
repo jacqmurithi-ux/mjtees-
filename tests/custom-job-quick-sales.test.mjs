@@ -8,7 +8,7 @@ const operations = await readFile(new URL('../src/Operations.tsx', import.meta.u
 test('custom job Quick Sale accepts a one-off price without requiring a catalogue standard price', () => {
   assert.match(migration, /owner_create_custom_job_quick_sale/);
   assert.match(migration, /'Custom jobs','shop_1','job_costed'/);
-  assert.match(migration, /standard_unit_price[\s\S]*round\(p_unit_price,2\)/);
+  assert.match(migration, /standard_unit_price[\s\S]*round\(p_agreed_price,2\)/);
   assert.match(migration, /one_off_custom_job/);
   assert.match(migration, /delete from public\.catalogue_item_methods[\s\S]*delete from public\.catalogue_items/);
   assert.match(migration, /custom_job_quick_sale\.created/);
