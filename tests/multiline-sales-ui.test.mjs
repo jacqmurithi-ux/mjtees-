@@ -25,7 +25,7 @@ test('Sales creates fully accepted quotations through the multi-line RPC', () =>
 });
 
 test('existing customer, deposit, invoice and costing sections remain present', () => {
-  for (const text of ['Record quotation deposit','Panel title="Invoices"','owner_convert_quote_to_invoice','Create and activate new version','quotation_deposits']) {
+  for (const text of ['Record quotation deposit','Panel title="Invoices"','owner_convert_accepted_quote_to_invoice','owner_create_production_job_from_quote','Create and activate new version','quotation_deposits']) {
     assert.ok(source.includes(text), text + ' remains in the Sales or costing workflow');
   }
 });
