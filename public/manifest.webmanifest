@@ -1,0 +1,19 @@
+{
+  "name": "MJ Printing & Branding",
+  "short_name": "MJ Printing",
+  "description": "MJ Printing & Branding owner workspace",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f7fa",
+  "theme_color": "#f47721",
+  "icons": [
+    {
+      "src": "./assets/mj-printing-branding.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
