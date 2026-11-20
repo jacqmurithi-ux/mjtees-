@@ -167,3 +167,10 @@ td{font-size:13px}
  .calendar-selected{align-items:stretch;flex-direction:column}
  .calendar-selected>.primary{width:100%}
 }
+
+
+/* Header brand mark: show the complete supplied MJ logo, not a tiny square thumbnail. */
+.brandline img{display:block;flex:0 0 auto;width:156px;height:48px;object-fit:contain;background:#fff;border-radius:8px;padding:4px}
+.brandline>div{min-width:0}
+.brandline>div small{display:block;font-size:11px;color:#c9d1da}
+@media(max-width:520px){.brandline img{width:132px;height:44px}.brandline{gap:9px}}
