@@ -8,13 +8,15 @@ test('dashboard uses quote revenue, invoice balances, defined production stages 
   assert.match(app, /from\('quotations'\)/);
   assert.match(app, /!\['declined','expired'\]\.includes\(x\.status\)/);
   assert.match(app, /from\('sales_invoices'\)/);
-  assert.match(app, /\['screens_prepared','printing','finishing','quality_check'\]/);
+  assert.match(app, /\['in_production','quality_check'\]/);
   assert.match(app, /purchases-supplierPaid/);
 });
 
-test('dashboard due jobs include customer, quantity/product, stage and due date', () => {
+test('dashboard due jobs use expected completion dates and include customer, quantity/product and current status', () => {
   assert.match(app, /from\('production_jobs'\)/);
   assert.match(app, /quotation_lines\(description,quantity\)/);
+  assert.match(app, /expected_completion_at/);
+  assert.match(app, /production_status/);
   assert.match(app, /customer\?\.customer_name/);
   assert.match(app, /Nothing late/);
 });
