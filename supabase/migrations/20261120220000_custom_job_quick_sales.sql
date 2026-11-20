@@ -9,7 +9,7 @@ create or replace function public.owner_create_custom_job_quick_sale(
  p_production_method text,
  p_costing_profile_id uuid,
  p_quantity numeric,
- p_unit_price numeric,
+ p_agreed_price numeric,
  p_supply_arrangement text,
  p_other_direct_costs numeric default 0,
  p_allow_below_floor boolean default false,
@@ -47,7 +47,7 @@ begin
  where id=p_costing_profile_id and business_id=v_business and is_active for share;
  if v_profile_name is null then raise exception 'Costing profile must be active and belong to this business'; end if;
  if p_quantity is null or p_quantity<=0 then raise exception 'Quantity must be greater than zero'; end if;
- if p_unit_price is null or p_unit_price<=0 then raise exception 'Agreed custom job price must be greater than zero'; end if;
+ if p_agreed_price is null or p_agreed_price<=0 then raise exception 'Agreed custom job price must be greater than zero'; end if;
  if p_supply_arrangement not in('mj_supplies','customer_supplies') then raise exception 'Invalid supply arrangement'; end if;
  if coalesce(p_other_direct_costs,0)<0 then raise exception 'Other direct costs cannot be negative'; end if;
  if coalesce(p_payment_amount,0)<0 then raise exception 'Payment amount cannot be negative'; end if;
@@ -66,7 +66,7 @@ begin
  ) values(
   v_business,v_label,'Temporary transaction record for custom job: '||v_label,
   'service','Custom jobs','shop_1','job_costed',
-  round(p_unit_price,2),'job',null,
+  round(p_agreed_price,2),'job',null,
   jsonb_build_object('one_off_custom_job',true),true
  ) returning id into v_item;
 
@@ -85,7 +85,7 @@ begin
   p_catalogue_item_id=>v_item,
   p_production_method=>p_production_method,
   p_quantity=>p_quantity,
-  p_unit_price=>round(p_unit_price,2),
+  p_agreed_price=>round(p_agreed_price,2),
   p_supply_arrangement=>p_supply_arrangement,
   p_other_direct_costs=>coalesce(p_other_direct_costs,0),
   p_price_reason=>null,
@@ -108,7 +108,7 @@ begin
    'description',btrim(p_description),'dimensions',btrim(p_dimensions),
    'production_method',p_production_method,'costing_profile_id',p_costing_profile_id,
    'costing_profile_name',v_profile_name,'quantity',p_quantity,
-   'agreed_unit_price',round(p_unit_price,2),'supply_arrangement',p_supply_arrangement,
+   'agreed_unit_price',round(p_agreed_price,2),'supply_arrangement',p_supply_arrangement,
    'one_off_price',true
   ));
 
