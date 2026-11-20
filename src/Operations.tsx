@@ -224,7 +224,45 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
  const calendarHeading=calendarView==='month'?calendarDate.toLocaleDateString('en-KE',{month:'long',year:'numeric'}):calendarView==='week'?calendarDays[0].toLocaleDateString('en-KE',{day:'numeric',month:'short'})+' – '+calendarDays[6].toLocaleDateString('en-KE',{day:'numeric',month:'short',year:'numeric'}):calendarDate.toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
  const moveCalendar=(direction:number)=>setCalendarDate(current=>{const d=new Date(current);if(calendarView==='month')d.setMonth(d.getMonth()+direction);else d.setDate(d.getDate()+direction*(calendarView==='week'?7:1));return d;});
 
- if(page==='sales')return <><div className="heading"><div><small className="eyebrow">CUSTOMER WORKFLOW</small><h1>Sales & quotations</h1><p>Price, issue, accept and convert customer quotations.</p></div></div><ErrorLine message={error}/>{notice&&<div className="notice">{notice}</div>}<Panel title={revisionSourceId?"Create quotation revision":"Create quotation"}><form className="op-form" onSubmit={createQuote}>
+ if(page==='sales')return <><div className="heading"><div><small className="eyebrow">CUSTOMER WORKFLOW</small><h1>Sales & quotations</h1><p>Price, issue, accept and convert customer quotations.</p></div></div><ErrorLine message={error}/>{notice&&<div className="notice">{notice}</div>}
+ <Panel title="Quick Sale">
+  <form className="op-form" onSubmit={createQuickSale}>
+   <p className="op-guidance"><b>Everyday sales — no quotation required.</b> Save the sale directly as an invoice. Walk-in customers can be recorded without entering customer details. Any payment is posted to the same customer payment ledger used by invoices.</p>
+   {selectField('Customer (optional)',quickCustomerId,setQuickCustomerId,[{value:'',label:'Walk-in customer'},...customers.map(c=>({value:c.id,label:c.customer_name}))])}
+   {selectField('Product / service',quickItemId,value=>{const item=catalogue.find(x=>x.id===value);const methods=(item?.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);const preferred=methods.find((m:Row)=>m.is_preferred)||methods[0];setQuickItemId(value);setQuickMethod(preferred?.production_method||'');setQuickUnitPrice(item?.standard_unit_price==null?'':String(item.standard_unit_price));setQuickPriceReason('');},catalogue.map(x=>({value:x.id,label:x.name+' · '+x.item_type+' · '+x.selling_method.replaceAll('_',' ')})))}
+   {quickItemId&&(()=>{const item=catalogue.find(x=>x.id===quickItemId);const methods=(item?.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);const method=methods.find((m:Row)=>m.production_method===quickMethod);const profile=profiles.find(p=>p.id===method?.costing_profile_id);return <><div className="op-grid">{methods.length>0&&selectField('Production method',quickMethod,setQuickMethod,methods.map((m:Row)=>({value:m.production_method,label:m.production_method.replaceAll('_',' ')})))}{field('Quantity',quickQuantity,setQuickQuantity,{type:'number',min:'1',step:'1'})}</div><div className="op-grid">{field('Agreed unit selling price (KES)',quickUnitPrice,setQuickUnitPrice,{type:'number',min:'0.01',step:'0.01'})}<div className="op-field"><span>Catalogue-approved price</span><strong>{item?.standard_unit_price==null?'Not approved':cash(Number(item.standard_unit_price))}</strong></div></div>{profile&&<p className="op-empty">Direct cost will use {profile.profile_name} v{profile.version}. The server calculates the cost snapshot and checks the 30% gross-margin floor.</p>}{selectField('Who supplies the item?',quickSupply,setQuickSupply,[{value:'mj_supplies',label:'MJ supplies the item'},{value:'customer_supplies',label:'Customer supplies the item'}])}{field('Other direct job costs (KES)',quickOtherCosts,setQuickOtherCosts,{type:'number',min:'0',step:'0.01'})}{Number(quickUnitPrice)<Number(item?.standard_unit_price||0)&&field('Reason for price below catalogue price',quickPriceReason,setQuickPriceReason,{placeholder:'Required for a discretionary price reduction'})}</>})()}
+   <label className="op-check"><input type="checkbox" checked={quickBelowFloor} onChange={e=>setQuickBelowFloor(e.target.checked)}/> Authorise a below-30% margin exception for this sale</label>
+   {quickBelowFloor&&field('Exception reason (minimum 8 characters)',quickExceptionReason,setQuickExceptionReason)}
+   <Panel title="Payment received now">
+    <div className="op-grid">{field('Amount received (KES)',quickPaymentAmount,setQuickPaymentAmount,{type:'number',min:'0',step:'0.01',placeholder:'0 for unpaid sale'})}{selectField('Payment method',quickPaymentMethod,setQuickPaymentMethod,[{value:'cash',label:'Cash'},{value:'mpesa_paybill',label:'M-Pesa Paybill'}])}</div>
+    {field('M-Pesa reference (optional)',quickPaymentReference,setQuickPaymentReference)}
+    <small className="op-empty">Leave amount at zero if the customer will pay later. Partial and full payments are supported.</small>
+   </Panel>
+   <div className="op-grid">{field('Invoice number',quickInvoiceNo,setQuickInvoiceNo)}{field('Invoice due date',dueDate,setDueDate,{type:'date'})}</div>
+   {field('Payment number',quickPaymentNo,setQuickPaymentNo)}
+   <div className="op-guidance"><b>Estimated sale total: {cash(Math.max(0,Number(quickQuantity||0)*Number(quickUnitPrice||0)))}</b><p>Inventory is not reduced when the sale is saved. Issue materials only through the Production workflow.</p></div>
+   <button className="primary" disabled={loading||!catalogue.length||!quickItemId||Number(quickQuantity)<1||Number(quickUnitPrice)<=0}>{loading?'Saving sale…':'Complete Quick Sale · Create invoice'}</button>
+   {!catalogue.length&&<p className="op-error">No active catalogue items are available. Add approved products/services to the catalogue first.</p>}
+  </form>
+ </Panel>
+ {quickReceipt&&<Panel title="Latest Quick Sale · Receipt">
+  <div className="quick-sale-receipt">
+   <h2>MJ Printing & Branding</h2><p>SALES {quickReceipt.amount_paid>0?'PAYMENT RECEIPT':'INVOICE'}</p>
+   <div className="customer-history-row"><b>Invoice</b><strong>{quickReceipt.invoice_number}</strong></div>
+   {quickReceipt.payment_number&&<div className="customer-history-row"><b>Receipt / payment no.</b><strong>{quickReceipt.payment_number}</strong></div>}
+   <div className="customer-history-row"><b>Customer</b><span>{quickReceipt.customer_name}</span></div>
+   <div className="customer-history-row"><b>Item</b><span>{quickReceipt.description}</span></div>
+   <div className="customer-history-row"><b>Quantity × unit price</b><span>{quickReceipt.quantity} × {cash(Number(quickReceipt.unit_price))}</span></div>
+   <div className="customer-history-row"><b>Invoice total</b><strong>{cash(Number(quickReceipt.total))}</strong></div>
+   <div className="customer-history-row"><b>Paid</b><strong>{cash(Number(quickReceipt.amount_paid))}</strong></div>
+   <div className="customer-history-row"><b>Balance</b><strong>{cash(Number(quickReceipt.balance))}</strong></div>
+   {quickReceipt.payment_method&&<div className="customer-history-row"><b>Payment</b><span>{quickReceipt.payment_method.replaceAll('_',' ')} {quickReceipt.payment_reference?'· '+quickReceipt.payment_reference:''}</span></div>}
+   <p>{new Date().toLocaleString('en-KE',{timeZone:'Africa/Nairobi'})}</p>
+  </div>
+  <div className="op-actions"><button type="button" onClick={()=>window.print()}>Print {Number(quickReceipt.amount_paid)>0?'receipt':'invoice'}</button><button type="button" onClick={()=>setQuickReceipt(null)}>Close receipt</button></div>
+  <style>{'@media print{body *{visibility:hidden!important}.quick-sale-receipt,.quick-sale-receipt *{visibility:visible!important}.quick-sale-receipt{position:absolute;left:0;top:0;width:100%;padding:24px;background:#fff;color:#111}.quick-sale-receipt h2{font-size:22px}.quick-sale-receipt p{text-align:center}}'}</style>
+ </Panel>}
+<Panel title={revisionSourceId?"Create quotation revision":"Create quotation"}><form className="op-form" onSubmit={createQuote}>
    {selectField('Customer',customerId,setCustomerId,customers.map(c=>({value:c.id,label:c.customer_name})))}
    {field('Quotation number',quoteNo,setQuoteNo)}{field('Valid until',validUntil,setValidUntil,{type:'date'})}{revisionSourceId&&<>{field('Revision reason (minimum 5 characters)',revisionReason,setRevisionReason)}<p className="op-guidance">A new accepted version is created. The previous accepted version and its evidence remain unchanged.</p></>}<div className="op-grid">{selectField('Customer acceptance method',acceptanceMethod,setAcceptanceMethod,[{value:'',label:'Select method'},{value:'in_person',label:'In person'},{value:'phone',label:'Phone call'},{value:'email',label:'Email'},{value:'whatsapp',label:'WhatsApp / message'},{value:'other',label:'Other documented method'}])}{field('Acceptance reference (optional)',acceptanceReference,setAcceptanceReference)}</div>{field('Customer acceptance notes (required)',acceptanceNotes,setAcceptanceNotes,{placeholder:'Confirm the customer accepted every line and the full quotation total'})}
    <div className="op-guidance"><b>Record only a fully accepted quotation</b><p>Enter every agreed product and service, then record how the customer confirmed acceptance of the complete quotation and its full total. Partial acceptance is not supported.</p></div>
