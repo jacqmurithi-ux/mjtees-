@@ -18,9 +18,11 @@ test('Sales editor supports multiple independently configured quotation lines', 
   }
 });
 
-test('Sales creates fully accepted quotations through the multi-line RPC', () => {
+test('Sales creates draft quotations through the multi-line RPC and records acceptance separately', () => {
   assert.match(source, /owner_create_accepted_quotation/);
-  assert.match(source, /Save fully accepted quotation/);
+  assert.match(source, /Save draft quotation/);
+  assert.match(source, /owner_record_quotation_acceptance/);
+  assert.doesNotMatch(source, /p_status:'accepted'/);
   assert.doesNotMatch(source, /rpc\('owner_create_quotation'/);
 });
 
@@ -31,6 +33,6 @@ test('existing customer, deposit, invoice and costing sections remain present', 
 });
 
 test('failed quotation saves retain the editor contents', () => {
-  assert.match(source, /const saved=await rpc\('owner_create_accepted_quotation'[\s\S]*?if\(!saved\)return/);
+  assert.match(source, /const saved=await rpc\(revisionSourceId\?'owner_create_quotation_revision':'owner_create_accepted_quotation'[\s\S]*?if\(!saved\)return/);
   assert.match(source, /async function rpc\([\s\S]*?Promise<boolean>/);
 });
