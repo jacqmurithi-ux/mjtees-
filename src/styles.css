@@ -289,3 +289,12 @@ body{background:#f3f6f9}
 .install-app{border:1px solid #dce5ec;background:#fff;color:#1769aa;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;white-space:nowrap}
 .install-app:hover{background:#f0f7fc}
 @media(max-width:560px){.header-actions{gap:5px}.install-app,.signout{padding:7px 9px;font-size:11px}}
+
+.brand-logo-settings{display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:24px;align-items:center}
+.brand-logo-preview{min-height:170px;border:1px dashed #cbd5df;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;padding:18px}
+.brand-logo-preview img{display:block;max-width:100%;max-height:210px;object-fit:contain}
+.brand-logo-preview span{color:#788696;font-size:13px}
+.brand-logo-controls p{color:#64748b;font-size:13px;line-height:1.55}
+.brand-logo-controls input[type=file]{max-width:100%;padding:9px;background:#f8fafc}
+.brand-logo-controls .op-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+@media(max-width:650px){.brand-logo-settings{grid-template-columns:1fr}}
