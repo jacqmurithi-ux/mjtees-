@@ -42,13 +42,13 @@ begin
  if p_production_method is null or p_production_method not in('vinyl_cutting','dtf','screen_printing','sublimation','embroidery','other') then
   raise exception 'Unsupported custom job production method';
  end if;
+ if p_quantity is null or p_quantity<=0 or p_quantity<>trunc(p_quantity) then
+  raise exception 'Quantity must be a whole number greater than zero';
+ end if;
  if p_costing_profile_id is null then raise exception 'An active costing profile is required for a custom job'; end if;
  select profile_name into v_profile_name from public.costing_profiles
  where id=p_costing_profile_id and business_id=v_business and is_active for share;
  if v_profile_name is null then raise exception 'Costing profile must be active and belong to this business'; end if;
- if p_quantity is null or p_quantity<=0 or p_quantity<>trunc(p_quantity) then
-  raise exception 'Quantity must be a whole number greater than zero';
- end if;
  if p_agreed_price is null or p_agreed_price<=0 then raise exception 'Agreed custom job price must be greater than zero'; end if;
  if p_supply_arrangement is null or p_supply_arrangement not in('mj_supplies','customer_supplies') then raise exception 'Invalid supply arrangement'; end if;
  if coalesce(p_other_direct_costs,0)<0 then raise exception 'Other direct costs cannot be negative'; end if;
