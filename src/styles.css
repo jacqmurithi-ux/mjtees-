@@ -88,7 +88,7 @@ td{font-size:13px}
 
 /* Costing and pricing component builder */
 .cost-component-list{display:grid;gap:10px}
-.cost-component-row{display:grid;grid-template-columns:minmax(150px,1.4fr) minmax(145px,1fr) minmax(130px,.8fr) auto;gap:10px;align-items:end;padding:12px;border:1px solid #e5eaf0;border-radius:10px;background:#fbfcfd}
+.cost-component-row{display:grid;grid-template-columns:minmax(150px,1.2fr) minmax(145px,1fr) minmax(150px,1.2fr) minmax(120px,.8fr) minmax(125px,.8fr) minmax(110px,.7fr) auto;gap:10px;align-items:end;padding:12px;border:1px solid #e5eaf0;border-radius:10px;background:#fbfcfd}.cost-quantity-fields{display:grid;grid-template-columns:1fr .8fr;gap:8px}.cost-line-total{display:grid;gap:5px;padding:9px 0}.cost-line-total small{font-size:10px;color:#657366}.cost-line-total b{font-size:14px;color:#183c28}
 .cost-remove,.cost-add{border:1px solid #dce3ea;background:#fff;border-radius:8px;padding:10px 12px;font-size:12px;font-weight:700;color:#425164}
 .cost-remove:disabled{opacity:.35}
 .cost-add{justify-self:start;color:#0a7d3b;border-color:#b9dbc6}

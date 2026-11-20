@@ -339,6 +339,20 @@ test('pricing uses the 30 percent gross-margin denominator and an optional owner
   assert.match(operations, /savedMaxUnitPrice!==null&&Number\(price\)>savedMaxUnitPrice/);
 });
 
+test('costing profiles calculate itemised component totals from required quantity and unit cost', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  assert.match(operations, /quantity:string;unit:string;unitCost:string/);
+  assert.match(operations, /Number\(c\.quantity\|\|0\)\*Number\(c\.unitCost\|\|0\)/);
+  assert.match(operations, /cost_type:c\.costType,quantity:c\.quantity,unit:c\.unit,unit_cost:c\.unit_cost,cost:c\.cost,basis:c\.basis/);
+  assert.match(operations, /value="material">Material/);
+  assert.match(operations, /value="consumable">Production consumable/);
+  assert.match(operations, /value="labour">Direct labour/);
+  assert.match(operations, /value="job_expense">Job-specific expense/);
+  assert.match(operations, /Quantity required/);
+  assert.match(operations, /Unit cost \(KES\)/);
+  assert.match(operations, /Component total/);
+});
+ 
 test('costing profiles preserve per-piece and per-job component bases in new immutable versions', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
   assert.match(operations, /basis:c\.basis/);
