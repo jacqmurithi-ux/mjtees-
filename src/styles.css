@@ -283,3 +283,9 @@ body{background:#f3f6f9}
   .dashboard-grid { gap: 8px; }
   .dashboard-grid .panel { padding: 10px 13px; }
 }
+
+/* Desktop app install and compact header actions */
+.header-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.install-app{border:1px solid #dce5ec;background:#fff;color:#1769aa;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;white-space:nowrap}
+.install-app:hover{background:#f0f7fc}
+@media(max-width:560px){.header-actions{gap:5px}.install-app,.signout{padding:7px 9px;font-size:11px}}
