@@ -61,7 +61,25 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    }else if(page==='production'){
     const [j,s,m]=await Promise.all([supabase.from('production_jobs').select('*').order('created_at',{ascending:false}),supabase.from('stock_items').select('id,item_name,quantity_on_hand,unit,average_unit_cost').eq('active',true).order('item_name'),supabase.from('production_job_materials').select('*').order('created_at',{ascending:false})]);
     if(j.error)throw j.error;if(s.error)throw s.error;if(m.error)throw m.error;setRows(j.data||[]);setStock(s.data||[]);setInvoices(m.data||[]);
-    const activeJobId=selectedJob||j.data?.[0]?.id||'';if(!selectedJob&&activeJobId)setSelectedJob(activeJobId);if(!materialStock&&s.data?.[0])setMaterialStock(s.data[0].id);const activeJobMaterials=(m.data||[]).filter(x=>x.job_id===activeJobId);if(!activeJobMaterials.some(x=>x.id===selectedMaterial)){const first=activeJobMaterials[0];setSelectedMaterial(first?.id||'');setIssueQty(first?String(Math.max(0,Number(first.planned_quantity)-Number(first.issued_quantity))):'');}
+    const activeJobId=recordId||selectedJob||j.data?.[0]?.id||'';if(activeJobId&&activeJobId!==selectedJob)setSelectedJob(activeJobId);const activeJob=j.data?.find((x:Row)=>x.id===activeJobId);if(activeJob){setExpectedStart(localDateTimeInput(activeJob.expected_start_at));setExpectedCompletion(localDateTimeInput(activeJob.expected_completion_at));setDeliveryDate(localDateTimeInput(activeJob.delivery_at));setAssignedStaff(activeJob.assigned_to||'');setDelayReason(activeJob.delay_reason||'');}if(!materialStock&&s.data?.[0])setMaterialStock(s.data[0].id);const activeJobMaterials=(m.data||[]).filter(x=>x.job_id===activeJobId);if(!activeJobMaterials.some(x=>x.id===selectedMaterial)){const first=activeJobMaterials[0];setSelectedMaterial(first?.id||'');setIssueQty(first?String(Math.max(0,Number(first.planned_quantity)-Number(first.issued_quantity))):'');}
+   }else if(page==='calendar'){
+    const [q,j,c]=await Promise.all([
+     supabase.from('quotations').select('id,quote_number,status,total,customer_id,created_at,issue_date,valid_until,revision_number').order('created_at',{ascending:false}),
+     supabase.from('production_jobs').select('id,job_number,job_name,production_status,customer_id,created_at,expected_start_at,expected_completion_at,delivery_at,delay_reason,customer_supplied_items').order('created_at',{ascending:false}),
+     supabase.from('customers').select('id,customer_name')
+    ]);
+    if(q.error)throw q.error;if(j.error)throw j.error;if(c.error)throw c.error;
+    const customerNames=new Map((c.data||[]).map((x:Row)=>[x.id,x.customer_name]));
+    const events:Row[]=[];
+    for(const quote of q.data||[])events.push({id:'quote-'+quote.id,record_id:quote.id,record_type:'quotation',event_type:'quotation',date:quote.issue_date||quote.created_at,label:quote.quote_number,customer:customerNames.get(quote.customer_id)||'Customer',status:quote.status,total:quote.total,revision_number:quote.revision_number||1,detail:'Quotation recorded'});
+    for(const job of j.data||[]){
+     const base={record_id:job.id,record_type:'job',label:job.job_number,job_name:job.job_name,customer:customerNames.get(job.customer_id)||'Customer',status:job.production_status||'created',delay_reason:job.delay_reason||''};
+     events.push({...base,id:'job-created-'+job.id,event_type:'job_created',date:job.created_at,detail:'Production job created'});
+     if(job.expected_start_at)events.push({...base,id:'job-start-'+job.id,event_type:'expected_start',date:job.expected_start_at,detail:'Expected production start'});
+     if(job.expected_completion_at)events.push({...base,id:'job-complete-'+job.id,event_type:'expected_completion',date:job.expected_completion_at,detail:'Expected production completion'});
+     if(job.delivery_at)events.push({...base,id:'job-delivery-'+job.id,event_type:'delivery',date:job.delivery_at,detail:'Customer delivery / collection'});
+    }
+    setCalendarEvents(events);
    }else if(page==='inventory'){
     const {data,error}=await supabase.from('stock_items').select('id,item_name,category,unit,quantity_on_hand,reorder_level,average_unit_cost,location_id,inventory_locations(location_name)').eq('active',true).order('item_name');
     if(error)throw error;setRows(data||[]);
@@ -86,8 +104,9 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    console.error('MJ workspace module load failed', {page,businessId,error:e});
   }
   finally{setLoading(false)}
- },[page,businessId,customerId,profileId,selectedJob,materialStock,selectedMaterial,supplierId,payInvoice,fail]);
+ },[page,businessId,customerId,profileId,selectedJob,materialStock,selectedMaterial,supplierId,payInvoice,fail,recordId]);
  useEffect(()=>{void refresh()},[refresh]);
+ useEffect(()=>{if(!supabase||page!=='calendar'||!businessId)return;const channel=supabase.channel('mj-calendar-'+businessId).on('postgres_changes',{event:'*',schema:'public',table:'quotations',filter:'business_id=eq.'+businessId},()=>void refresh()).on('postgres_changes',{event:'*',schema:'public',table:'production_jobs',filter:'business_id=eq.'+businessId},()=>void refresh()).subscribe();return()=>{void supabase.removeChannel(channel)}},[page,businessId,refresh]);
  async function rpc(name:string,args:Record<string,unknown>,success:string):Promise<boolean>{
   if(!supabase)return false;setLoading(true);setError('');setNotice('');
   const {error}=await supabase.rpc(name,args as never);setLoading(false);
