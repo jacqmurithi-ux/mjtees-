@@ -211,3 +211,17 @@ revoke all on function public.owner_create_accepted_quotation(uuid,text,date,jso
 grant execute on function public.owner_create_accepted_quotation(uuid,text,date,jsonb,boolean,text) to authenticated;
 
 notify pgrst,'reload schema';
+
+-- Revision snapshots are append-only audit evidence.
+create or replace function private.reject_quotation_revision_history_mutation()
+returns trigger language plpgsql set search_path=public,pg_temp
+as $fn$
+begin
+ raise exception 'Quotation revision history is immutable';
+end $fn$;
+drop trigger if exists quotation_revision_history_immutable on public.quotation_revision_history;
+create trigger quotation_revision_history_immutable
+ before update or delete on public.quotation_revision_history
+ for each row execute function private.reject_quotation_revision_history_mutation();
+
+revoke insert,update,delete on public.quotation_revision_history from anon,authenticated;
