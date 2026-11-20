@@ -206,7 +206,7 @@ begin
  if not found or not exists(select 1 from public.business_memberships where business_id=q.business_id and user_id=auth.uid() and role='owner') then raise exception 'Quotation not found'; end if;
  if q.status<>'draft' then raise exception 'Only a draft quotation can be issued'; end if;
  if exists(select 1 from public.quotations newer where newer.supersedes_quotation_id=q.id and newer.business_id=q.business_id) then raise exception 'A superseded quotation cannot be issued'; end if;
- update public.quotations set status='sent' where id=q.id;
+ update public.quotations set status='sent',issue_date=current_date where id=q.id;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(q.business_id,auth.uid(),'quotation.status_changed','quotation',q.id,jsonb_build_object('from',q.status,'to','sent','revision_number',q.revision_number));
 end
