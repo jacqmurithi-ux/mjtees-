@@ -155,7 +155,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    const {data,error:saveError}=await supabase.rpc('owner_create_custom_job_quick_sale',{
     p_customer_id:quickCustomerId||null,p_invoice_number:quickInvoiceNo,p_due_date:dueDate||today(),
     p_description:customDescription.trim(),p_dimensions:customDimensions.trim(),p_production_method:customMethod,
-    p_costing_profile_id:customProfileId,p_quantity:quantity,p_unit_price:unitPrice,
+    p_costing_profile_id:customProfileId,p_quantity:quantity,p_agreed_price:unitPrice,
     p_supply_arrangement:quickSupply,p_other_direct_costs:Number(quickOtherCosts||0),
     p_allow_below_floor:quickBelowFloor,p_exception_reason:quickBelowFloor?quickExceptionReason.trim():null,
     p_payment_number:paid>0?quickPaymentNo:null,p_payment_method:paid>0?quickPaymentMethod:null,
