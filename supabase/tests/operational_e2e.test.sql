@@ -81,12 +81,12 @@ select public.owner_update_max_unit_selling_price(null);
 select extensions.is((select max_unit_selling_price from public.business_settings where business_id=current_setting('test.business_id')::uuid),null::numeric,'owner can clear the optional selling price ceiling');
 
 select extensions.throws_ok(
- $select public.owner_create_custom_job_quick_sale(
+ $test$select public.owner_create_custom_job_quick_sale(
   (select id from public.customers where customer_name='Example Customer'),
   'INV-CUSTOM-FRACTIONAL',current_date+7,'Fractional custom job','12 x 4 inches',
   'screen_printing',current_setting('test.profile_id')::uuid,1.5,1000,
   'customer_supplies',0,false,null,null,null,0,null
- )$,
+ )$test$,
  'P0001','Quantity must be a whole number greater than zero',
  'custom job RPC rejects fractional quantities');
 
