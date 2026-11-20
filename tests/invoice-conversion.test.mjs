@@ -37,7 +37,7 @@ test('invoice conversion copies every quotation line and its exact financial and
 test('invoice conversion preserves deposit payment records, allocations and invoice balances', () => {
   assert.match(invoiceFunction, /from public\.quotation_deposits/);
   assert.match(invoiceFunction, /insert into public\.payments/);
-  assert.match(invoiceFunction, /'QD'\|\|v_deposit\.deposit_number/);
+  assert.match(invoiceFunction, /'QD-'\|\|v_deposit\.deposit_number/);
   assert.match(invoiceFunction, /insert into public\.payment_allocations/);
   assert.match(invoiceFunction, /amount_paid,balance/);
   assert.match(invoiceFunction, /deposits_applied/);
