@@ -193,10 +193,13 @@ test('invoice cards expose customer, paid amount and outstanding balance; custom
   assert.match(operations, /owner_record_payment/);
 });
 
-test('quotation conversion continues to allocate deposits through the existing owner RPC without editing payment history', async () => {
+test('invoice conversion and production-job creation are separate owner actions while deposit recording remains unchanged', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
-  assert.match(operations, /owner_convert_quote_to_invoice/);
+  assert.match(operations, /owner_convert_accepted_quote_to_invoice/);
+  assert.match(operations, /owner_create_production_job_from_quote/);
   assert.match(operations, /owner_record_quote_deposit/);
+  assert.match(operations, /Create invoice/);
+  assert.match(operations, /Create production job/);
   assert.match(operations, /payment ledger remains append-only/);
   assert.doesNotMatch(operations, /reverse_payment|payment_reversal/i);
 });
