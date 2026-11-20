@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const calculator=readFileSync(new URL('../src/VinylStickerCalculator.tsx',import.meta.url),'utf8');
-const migration=readFileSync(new URL('../supabase/migrations/20261121100000_vinyl_sticker_quick_sales.sql',import.meta.url),'utf8');
+const migration=readFileSync(new URL('../supabase/migrations/20261120212744_vinyl_sticker_quick_sales.sql',import.meta.url),'utf8');
 test('vinyl sticker pricing has no fixed 5x5 reference price',()=>{
  assert.doesNotMatch(calculator,/5\s*[×x]\s*5-inch|KSh\s*100|baseline/i);
  assert.match(calculator,/area\/stockArea\*stock/);
