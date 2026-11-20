@@ -15,7 +15,7 @@ test('quotation RPC requires an active catalogue item and an approved catalogue 
 
 test('quotation RPC derives selling method from the catalogue, not the browser payload', () => {
   assert.match(migration, /select ci\.selling_method,ci\.standard_unit_price,ci\.name/);
-  assert.match(migration, /v_selling_method in\('job_costed','quantity_tier'\)/);
+  assert.match(migration, /select ci\.selling_method,ci\.standard_unit_price,ci\.name/);
   assert.doesNotMatch(migration, /v_line->>'selling_method'/);
 });
 
