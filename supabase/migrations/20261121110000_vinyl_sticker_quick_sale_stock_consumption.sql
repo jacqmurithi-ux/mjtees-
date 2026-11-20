@@ -1,9 +1,25 @@
 -- Automatically consume vinyl stock for successful vinyl sticker Quick Sales.
 -- The RPC, invoice, stock movement and audit event share one PostgreSQL transaction.
 
+-- PostgreSQL cannot change a column's type while an RLS policy expression
+-- depends on it. Recreate the exact owner-only insert guard around the type change.
+drop policy if exists stock_items_owner_insert on public.stock_items;
+
 alter table public.stock_items
   alter column quantity_on_hand type numeric(14,6)
   using quantity_on_hand::numeric(14,6);
+
+create policy stock_items_owner_insert on public.stock_items
+  for insert to authenticated
+  with check (
+    business_id in (
+      select business_id
+      from public.business_memberships
+      where user_id=(select auth.uid()) and role='owner'
+    )
+    and quantity_on_hand=0
+    and average_unit_cost=0
+  );
 
 alter table public.stock_movements
   alter column quantity type numeric(14,6)
