@@ -160,7 +160,7 @@ begin
     v_stock_consumption := ceil(((v_area*p_quantity)/(v_roll_width*39.37))*1000000)/1000000;
     if v_stock_consumption<=0 then raise exception 'Calculated vinyl consumption must be greater than zero'; end if;
     if v_stock.quantity_on_hand<v_stock_consumption then
-      raise exception 'Insufficient vinyl stock. Required: '||v_stock_consumption||' metre; available: '||v_stock.quantity_on_hand||' metre';
+      raise exception using message = 'Insufficient vinyl stock. Required: '||v_stock_consumption||' metre; available: '||v_stock.quantity_on_hand||' metre';
     end if;
 
     v_pricing_details := v_pricing_details || jsonb_build_object(
