@@ -39,16 +39,18 @@ begin
  if v_business is null then raise exception 'Owner workspace required'; end if;
  if length(btrim(coalesce(p_description,'')))<2 then raise exception 'Custom job description is required'; end if;
  if length(btrim(coalesce(p_dimensions,'')))<2 then raise exception 'Custom job dimensions or size are required'; end if;
- if p_production_method not in('vinyl_cutting','dtf','screen_printing','sublimation','embroidery','other') then
+ if p_production_method is null or p_production_method not in('vinyl_cutting','dtf','screen_printing','sublimation','embroidery','other') then
   raise exception 'Unsupported custom job production method';
  end if;
  if p_costing_profile_id is null then raise exception 'An active costing profile is required for a custom job'; end if;
  select profile_name into v_profile_name from public.costing_profiles
  where id=p_costing_profile_id and business_id=v_business and is_active for share;
  if v_profile_name is null then raise exception 'Costing profile must be active and belong to this business'; end if;
- if p_quantity is null or p_quantity<=0 then raise exception 'Quantity must be greater than zero'; end if;
+ if p_quantity is null or p_quantity<=0 or p_quantity<>trunc(p_quantity) then
+  raise exception 'Quantity must be a whole number greater than zero';
+ end if;
  if p_agreed_price is null or p_agreed_price<=0 then raise exception 'Agreed custom job price must be greater than zero'; end if;
- if p_supply_arrangement not in('mj_supplies','customer_supplies') then raise exception 'Invalid supply arrangement'; end if;
+ if p_supply_arrangement is null or p_supply_arrangement not in('mj_supplies','customer_supplies') then raise exception 'Invalid supply arrangement'; end if;
  if coalesce(p_other_direct_costs,0)<0 then raise exception 'Other direct costs cannot be negative'; end if;
  if coalesce(p_payment_amount,0)<0 then raise exception 'Payment amount cannot be negative'; end if;
  if coalesce(p_allow_below_floor,false) and length(btrim(coalesce(p_exception_reason,'')))<8 then
@@ -96,6 +98,44 @@ begin
   p_payment_amount=>coalesce(p_payment_amount,0),
   p_payment_reference=>p_payment_reference
  );
+
+ -- Replace the canonical catalogue-shaped snapshot with an explicit one-off
+ -- custom-job snapshot before deleting the temporary catalogue record. The
+ -- agreed price must never be represented as an approved catalogue price.
+ update public.sales_invoice_items
+ set description=v_label,
+     item_type='custom_production',
+     cost_snapshot=(
+      coalesce(cost_snapshot,'{}'::jsonb)
+       - 'catalogue_item_id'
+       - 'catalogue_item_name'
+       - 'catalogue_standard_price'
+       - 'selling_method'
+     ) || jsonb_build_object(
+      'transaction_type','custom_job',
+      'one_off_price',true,
+      'agreed_unit_price',round(p_agreed_price,2),
+      'description',btrim(p_description),
+      'dimensions',btrim(p_dimensions),
+      'production_method',p_production_method,
+      'profile_id',p_costing_profile_id,
+      'profile_name',v_profile_name
+     )
+ where business_id=v_business and invoice_id=(v_result->>'invoice_id')::uuid;
+
+ -- The canonical audit event initially records the temporary catalogue ID.
+ -- Remove that transient reference and identify the source as a custom job.
+ update public.audit_events
+ set details=(coalesce(details,'{}'::jsonb)-'catalogue_item_id') || jsonb_build_object(
+  'source','custom_job','one_off_price',true,
+  'agreed_unit_price',round(p_agreed_price,2),
+  'description',btrim(p_description),'dimensions',btrim(p_dimensions),
+  'production_method',p_production_method,'costing_profile_id',p_costing_profile_id
+ )
+ where business_id=v_business
+  and entity_type='sales_invoice'
+  and entity_id=(v_result->>'invoice_id')::uuid
+  and event_type='quick_sale.created';
 
  delete from public.catalogue_item_methods
  where business_id=v_business and catalogue_item_id=v_item;
