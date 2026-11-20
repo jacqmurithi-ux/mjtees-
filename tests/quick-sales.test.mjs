@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const migration = await readFile(new URL('../supabase/migrations/20261120200000_add_quick_sales.sql', import.meta.url), 'utf8');
+const migration = await readFile(new URL('../supabase/migrations/20261120130012_add_quick_sales.sql', import.meta.url), 'utf8');
 const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
 
 test('Quick Sales creates a direct invoice without creating a quotation', () => {
