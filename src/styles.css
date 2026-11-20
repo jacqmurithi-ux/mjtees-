@@ -174,3 +174,8 @@ td{font-size:13px}
 .brandline>div{min-width:0}
 .brandline>div small{display:block;font-size:11px;color:#c9d1da}
 @media(max-width:520px){.brandline img{width:132px;height:44px}.brandline{gap:9px}}
+
+
+/* Supplied square MJ logo: size it as a complete mark in the workspace header. */
+.brandline img{width:96px;height:92px;object-fit:contain;padding:2px;border-radius:8px}
+@media(max-width:520px){.brandline img{width:76px;height:72px}.brandline{gap:9px}}
