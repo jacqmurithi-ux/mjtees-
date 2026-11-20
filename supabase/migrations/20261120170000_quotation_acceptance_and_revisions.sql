@@ -165,17 +165,37 @@ begin
 end $fn$;
 
 
+drop function if exists public.owner_create_accepted_quotation(uuid,text,date,jsonb,boolean,text);
 create or replace function public.owner_create_accepted_quotation(
  p_customer_id uuid,p_quote_number text,p_valid_until date,p_lines jsonb,
- p_allow_below_floor boolean default false,p_exception_reason text default null
-) returns uuid language sql security definer set search_path=public,private,pg_temp
+ p_allow_below_floor boolean,p_exception_reason text,
+ p_acceptance_method text,p_acceptance_reference text,p_acceptance_notes text
+) returns uuid language plpgsql security definer set search_path=public,private,pg_temp
 as $fn$
- select private.owner_create_quotation_v2_impl(
-  p_customer_id,p_quote_number,p_valid_until,p_lines,p_allow_below_floor,p_exception_reason
- )
+declare v_quote uuid; q public.quotations%rowtype;
+begin
+ if auth.uid() is null then raise exception 'Authentication required'; end if;
+ if p_acceptance_method is null or p_acceptance_method not in('in_person','phone','email','whatsapp','other') then raise exception 'Select how the customer confirmed acceptance'; end if;
+ if length(btrim(coalesce(p_acceptance_notes,'')))<3 then raise exception 'Acceptance notes are required'; end if;
+ v_quote:=private.owner_create_quotation_v2_impl(p_customer_id,p_quote_number,p_valid_until,p_lines,p_allow_below_floor,p_exception_reason);
+ update public.quotations set status='accepted',accepted_at=now(),accepted_recorded_by=auth.uid(),
+  acceptance_method=p_acceptance_method,acceptance_reference=nullif(btrim(p_acceptance_reference),''),
+  acceptance_notes=btrim(p_acceptance_notes),accepted_revision_number=revision_number
+ where id=v_quote returning * into q;
+ insert into public.quotation_revision_history(business_id,quotation_id,revision_number,revision_reason,snapshot,created_by)
+ values(q.business_id,q.id,q.revision_number,'Customer acceptance evidence',jsonb_build_object(
+  'quotation',to_jsonb(q),'lines',(select coalesce(jsonb_agg(to_jsonb(l) order by l.line_number nulls last,l.id),'[]'::jsonb)
+   from public.quotation_lines l where l.quotation_id=q.id and l.business_id=q.business_id)
+ ),auth.uid());
+ insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+ values(q.business_id,auth.uid(),'quotation.accepted','quotation',q.id,jsonb_build_object(
+  'quote_number',q.quote_number,'revision_number',q.revision_number,'accepted_at',q.accepted_at,
+  'acceptance_method',q.acceptance_method,'acceptance_reference',q.acceptance_reference,'acceptance_notes',q.acceptance_notes));
+ return v_quote;
+end
 $fn$;
-revoke all on function public.owner_create_accepted_quotation(uuid,text,date,jsonb,boolean,text) from public,anon;
-grant execute on function public.owner_create_accepted_quotation(uuid,text,date,jsonb,boolean,text) to authenticated;
+revoke all on function public.owner_create_accepted_quotation(uuid,text,date,jsonb,boolean,text,text,text,text) from public,anon;
+grant execute on function public.owner_create_accepted_quotation(uuid,text,date,jsonb,boolean,text,text,text,text) to authenticated;
 
 
 
@@ -208,7 +228,7 @@ begin
  if length(btrim(coalesce(p_acceptance_notes,'')))<3 then raise exception 'Acceptance notes are required'; end if;
  select * into q from public.quotations where id=p_quote_id for update;
  if not found or not exists(select 1 from public.business_memberships where business_id=q.business_id and user_id=auth.uid() and role='owner') then raise exception 'Quotation not found'; end if;
- if q.status<>'sent' then raise exception 'Only an issued quotation can be accepted'; end if;
+ if q.status not in('draft','sent') then raise exception 'Only a quotation awaiting customer confirmation can be accepted'; end if;
  if exists(select 1 from public.quotations newer where newer.supersedes_quotation_id=q.id and newer.business_id=q.business_id) then raise exception 'Only the current issued quotation revision can be accepted'; end if;
  update public.quotations set status='accepted',accepted_at=now(),accepted_recorded_by=auth.uid(),
   acceptance_method=p_acceptance_method,acceptance_reference=nullif(btrim(p_acceptance_reference),''),
@@ -224,13 +244,16 @@ $fn$;
 
 create or replace function public.owner_create_quotation_revision(
  p_quote_id uuid,p_quote_number text,p_valid_until date,p_lines jsonb,
- p_allow_below_floor boolean default false,p_exception_reason text default null,p_revision_reason text default null
+ p_allow_below_floor boolean,p_exception_reason text,p_revision_reason text,
+ p_acceptance_method text,p_acceptance_reference text,p_acceptance_notes text
 ) returns uuid language plpgsql security definer set search_path=public,private,pg_temp
 as $fn$
 declare q public.quotations%rowtype; v_new_quote uuid; v_revision integer;
 begin
  if auth.uid() is null then raise exception 'Authentication required'; end if;
  if length(btrim(coalesce(p_revision_reason,'')))<5 then raise exception 'A revision reason of at least 5 characters is required'; end if;
+ if p_acceptance_method is null or p_acceptance_method not in('in_person','phone','email','whatsapp','other') then raise exception 'Select how the customer confirmed acceptance of this revision'; end if;
+ if length(btrim(coalesce(p_acceptance_notes,'')))<3 then raise exception 'Acceptance notes are required for the revised quotation'; end if;
  select * into q from public.quotations where id=p_quote_id for update;
  if not found or not exists(select 1 from public.business_memberships where business_id=q.business_id and user_id=auth.uid() and role='owner') then raise exception 'Quotation not found'; end if;
  if q.status not in('sent','accepted') then raise exception 'Only an issued or accepted quotation can be revised'; end if;
@@ -238,7 +261,9 @@ begin
  if exists(select 1 from public.sales_invoices where quotation_id=q.id and business_id=q.business_id) then raise exception 'An invoiced quotation cannot be revised'; end if;
  v_revision:=q.revision_number+1;
  v_new_quote:=private.owner_create_quotation_v2_impl(q.customer_id,p_quote_number,p_valid_until,p_lines,p_allow_below_floor,p_exception_reason);
- update public.quotations set revision_number=v_revision,revision_reason=btrim(p_revision_reason),supersedes_quotation_id=q.id
+ update public.quotations set revision_number=v_revision,revision_reason=btrim(p_revision_reason),supersedes_quotation_id=q.id,
+  status='accepted',accepted_at=now(),accepted_recorded_by=auth.uid(),acceptance_method=p_acceptance_method,
+  acceptance_reference=nullif(btrim(p_acceptance_reference),''),acceptance_notes=btrim(p_acceptance_notes),accepted_revision_number=v_revision
  where id=v_new_quote and business_id=q.business_id;
  insert into public.quotation_revision_history(business_id,quotation_id,revision_number,revision_reason,snapshot,created_by)
  values(q.business_id,q.id,q.revision_number,btrim(p_revision_reason),jsonb_build_object(
@@ -363,7 +388,7 @@ $fn$;
 
 
 revoke all on function public.owner_record_quotation_acceptance(uuid,text,text,text) from public,anon;
-revoke all on function public.owner_create_quotation_revision(uuid,text,date,jsonb,boolean,text,text) from public,anon;
+revoke all on function public.owner_create_quotation_revision(uuid,text,date,jsonb,boolean,text,text,text,text,text) from public,anon;
 grant execute on function public.owner_record_quotation_acceptance(uuid,text,text,text) to authenticated;
-grant execute on function public.owner_create_quotation_revision(uuid,text,date,jsonb,boolean,text,text) to authenticated;
+grant execute on function public.owner_create_quotation_revision(uuid,text,date,jsonb,boolean,text,text,text,text,text) to authenticated;
 notify pgrst,'reload schema';
