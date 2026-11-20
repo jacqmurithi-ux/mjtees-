@@ -276,11 +276,18 @@ select extensions.is((public.owner_operational_report()->>'gross_margin_percent'
 select extensions.is((public.owner_operational_report()->>'outstanding_receivables')::numeric,0::numeric,'report clears paid receivable');
 select extensions.is((public.owner_operational_report()->>'delivered_jobs')::integer,1,'report includes delivered production job');
 
+select set_config('test.custom_profile_id',public.owner_create_costing_profile(
+ 'Custom job E2E costing profile',
+ '[{"name":"Custom job production","category":"production","cost":600,"basis":"per_job"}]'::jsonb,
+ 600,true
+)::text,true);
+
+
 select extensions.throws_ok(
  $test$select public.owner_create_custom_job_quick_sale(
   (select id from public.customers where customer_name='Example Customer'),
   'INV-CUSTOM-FRACTIONAL',current_date+7,'Fractional custom job','12 x 4 inches',
-  'screen_printing',current_setting('test.profile_id')::uuid,1.5,1000,
+  'screen_printing',current_setting('test.custom_profile_id')::uuid,1.5,1000,
   'customer_supplies',0,false,null,null,null,0,null
  )$test$,
  'P0001','Quantity must be a whole number greater than zero',
@@ -289,7 +296,7 @@ select extensions.throws_ok(
 select set_config('test.custom_sale',public.owner_create_custom_job_quick_sale(
  (select id from public.customers where customer_name='Example Customer'),
  'INV-CUSTOM-JOB-E2E',current_date+7,'Custom name and number','12 x 4 inches',
- 'screen_printing',current_setting('test.profile_id')::uuid,1,1000,
+ 'screen_printing',current_setting('test.custom_profile_id')::uuid,1,1000,
  'customer_supplies',0,false,null,'PAY-CUSTOM-JOB-E2E','cash',200,'E2E-CUSTOM-PAY'
 )::text,true);
 select set_config('test.custom_invoice_id',(current_setting('test.custom_sale')::jsonb->>'invoice_id'),true);
@@ -320,7 +327,7 @@ select extensions.ok(
 select extensions.ok(
  (select cost_snapshot->>'dimensions'='12 x 4 inches'
   and cost_snapshot->>'production_method'='screen_printing'
-  and cost_snapshot->>'profile_id'=current_setting('test.profile_id')
+  and cost_snapshot->>'profile_id'=current_setting('test.custom_profile_id')
   and cost_snapshot->>'profile_name'='Generic production service'
   from public.sales_invoice_items where invoice_id=current_setting('test.custom_invoice_id')::uuid),
  'custom job snapshot retains dimensions, method and costing profile');
@@ -341,7 +348,7 @@ select extensions.ok(
   where entity_type='sales_invoice' and entity_id=current_setting('test.custom_invoice_id')::uuid
    and event_type='custom_job_quick_sale.created'
    and details->>'one_off_price'='true'
-   and details->>'costing_profile_id'=current_setting('test.profile_id')),
+   and details->>'costing_profile_id'=current_setting('test.custom_profile_id')),
  'custom-job audit event preserves the one-off price and costing profile');
 select extensions.is(
  (select sum(pa.amount) from public.payment_allocations pa
