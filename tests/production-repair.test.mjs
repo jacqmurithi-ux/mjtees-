@@ -154,12 +154,13 @@ test('Production planning supports multiple material requirements on one job and
 });
 
 
-test('quotation form uses whole quantities and integer KSh selling prices', async () => {
+test('quotation form uses whole quantities and read-only catalogue-approved prices', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
-  assert.match(operations, /Quantity',qty,setQty,\{type:'number',min:'1',step:'1'\}/);
-  assert.match(operations, /Unit selling price \(KES\)',price,setPrice,\{type:'number',min:'1',step:'1'\}/);
-  assert.match(operations, /Quantity must be a whole number of at least 1/);
-  assert.match(operations, /Unit selling price must be at least KSh 1/);
+  assert.match(operations, /Quantity',line\.quantity,v=>update\(\{quantity:v\}\),\{type:'number',min:'1',step:'1'\}/);
+  assert.match(operations, /Catalogue-approved unit price \(KES\)/);
+  assert.match(operations, /owner-approved standard price/);
+  assert.match(operations, /quantity must be a whole number of at least 1/);
+  assert.doesNotMatch(operations, /Unit selling price \(KES\)',price,setPrice/);
 });
 
 test('quotation pricing shows rounded minimum, 1.8x warning and margin exception reason', async () => {
@@ -169,7 +170,7 @@ test('quotation pricing shows rounded minimum, 1.8x warning and margin exception
   assert.match(operations, /Below 1\.8× full-cost target/);
   assert.match(operations, /Approved exception:/);
   assert.match(operations, /Below 30% margin/);
-  assert.match(operations, /blank_cost_per_piece:blankCostPerPiece\.trim\(\)===''\?null:Number\(blankCostPerPiece\)/);
+  assert.match(operations, /blank_cost_per_piece:line\.blankCostPerPiece===''\?null:Number\(line\.blankCostPerPiece\)/);
 });
 
 
@@ -330,13 +331,14 @@ test('Supplier purchasing migration preserves stock history and protects owner R
 });
 
 
-test('pricing uses the 30 percent gross-margin denominator and an optional owner-set unit ceiling', async () => {
+test('pricing uses the 30 percent gross-margin denominator and an owner-set unit ceiling enforced by the RPC', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  const authority = await readFile(new URL('../supabase/migrations/20261120150000_enforce_catalogue_quote_authority.sql', import.meta.url), 'utf8');
   assert.match(operations, /directCostPerPiece\/0\.7/);
   assert.match(operations, /\(\(total-cost\)\/total\)\*100/);
   assert.match(operations, /owner_update_max_unit_selling_price/);
   assert.match(operations, /max_unit_selling_price/);
-  assert.match(operations, /savedMaxUnitPrice!==null&&Number\(price\)>savedMaxUnitPrice/);
+  assert.match(authority, /v_max_price is not null and v_standard>v_max_price/);
 });
 
 test('costing profiles calculate itemised component totals from required quantity and unit cost', async () => {
