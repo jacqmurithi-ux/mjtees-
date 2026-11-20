@@ -59,7 +59,7 @@ export default function VinylStickerCalculator({onSaleSaved}:{onSaleSaved?:()=>v
  async function recordSale(){
   setError('');setNotice('');
   if(!supabase)return setError('Sales service is unavailable. Check the owner workspace connection.');
-  if(calculation.area<=0)return setError('Enter valid sticker dimensions greater than zero.');
+  if(calculation.area<=0)return setError('Enter valid sticker dimensions greater than zero.');\n  if(supply==='mj_supplies'&&(calculation.stockArea<=0||calculation.stock<=0))return setError('Enter the actual positive vinyl stock dimensions and purchase price.');
   if(!Number.isInteger(calculation.quantity)||calculation.quantity<1)return setError('Quantity must be a whole number of at least 1.');
   if(!description.trim())return setError('Enter a sticker or lettering description.');
   if(calculation.finalPrice<=0)return setError('Enter the final agreed customer price.');
