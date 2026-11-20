@@ -20,6 +20,8 @@ as $fn$
 declare
  v_business uuid; v_user uuid; v_quote uuid; v_line jsonb; v_item uuid;
  v_method text; v_profile uuid; v_profile_name text; v_profile_version integer; v_components jsonb;
+ v_selling_method text; v_catalogue_price numeric(14,2); v_catalogue_name text;
+ v_method_count integer:=0; v_preferred_count integer:=0; v_client_profile uuid;
  v_qty numeric(14,3); v_standard numeric(14,2); v_discount_type text; v_discount_value numeric(14,2);
  v_discount numeric(14,2); v_unit_net numeric(14,2); v_total numeric(14,2); v_cost numeric(14,2);
  v_component jsonb; v_component_cost numeric(14,2); v_basis text; v_category text;
@@ -48,27 +50,34 @@ begin
   v_line_count:=v_line_count+1;
   v_item:=nullif(v_line->>'catalogue_item_id','')::uuid;
   v_method:=nullif(btrim(v_line->>'production_method'),'');
-  v_profile:=nullif(v_line->>'costing_profile_id','')::uuid;
+  v_client_profile:=nullif(v_line->>'costing_profile_id','')::uuid;
   v_qty:=nullif(v_line->>'quantity','')::numeric;
-  v_standard:=nullif(v_line->>'unit_price','')::numeric;
   v_desc:=btrim(coalesce(v_line->>'description',''));
-  if v_desc='' or v_qty is null or v_qty<=0 or v_standard is null or v_standard<0 then
-   raise exception 'Each quotation line requires a description, positive quantity and non-negative approved unit price';
+  if v_item is null then raise exception 'Every quotation line must use an active catalogue item'; end if;
+  if v_desc='' or v_qty is null or v_qty<=0 then raise exception 'Each quotation line requires a description and positive quantity'; end if;
+  select ci.selling_method,ci.standard_unit_price,ci.name into v_selling_method,v_catalogue_price,v_catalogue_name from public.catalogue_items ci where ci.id=v_item and ci.business_id=v_business and ci.is_active for share;
+  if not found then raise exception 'Catalogue item is inactive or does not belong to this workspace'; end if;
+  if v_catalogue_price is null then raise exception 'Catalogue item % has no owner-approved standard price',v_catalogue_name; end if;
+  -- The catalogue owns the base price. Browser-submitted unit_price is never trusted.
+  v_standard:=v_catalogue_price;
+  select count(*) into v_method_count from public.catalogue_item_methods cm where cm.business_id=v_business and cm.catalogue_item_id=v_item and cm.is_active;
+  if v_method is null and v_method_count>0 then
+   select count(*) into v_preferred_count from public.catalogue_item_methods cm where cm.business_id=v_business and cm.catalogue_item_id=v_item and cm.is_active and cm.is_preferred;
+   if v_method_count=1 then select cm.production_method into v_method from public.catalogue_item_methods cm where cm.business_id=v_business and cm.catalogue_item_id=v_item and cm.is_active;
+   elsif v_preferred_count=1 then select cm.production_method into v_method from public.catalogue_item_methods cm where cm.business_id=v_business and cm.catalogue_item_id=v_item and cm.is_active and cm.is_preferred;
+   else raise exception 'Select one of the active production methods configured for %',v_catalogue_name; end if;
   end if;
+  v_profile:=null;
+  if v_method is not null then
+   select cm.costing_profile_id into v_profile from public.catalogue_item_methods cm where cm.business_id=v_business and cm.catalogue_item_id=v_item and cm.production_method=v_method and cm.is_active for share;
+   if not found then raise exception 'Selected production method is not active for this catalogue item'; end if;
+  end if;
+  if v_client_profile is not null and v_client_profile is distinct from v_profile then raise exception 'Costing profile is controlled by the selected catalogue production method'; end if;
+  if v_selling_method='quantity_tier' then raise exception 'Quantity-tier pricing cannot be quoted until its approved quantity rules are configured for server-side calculation'; end if;
+  if v_selling_method='job_costed' and (v_method is null or v_profile is null) then raise exception 'This catalogue item requires an active production method with its linked costing profile'; end if;
+  if v_selling_method not in('fixed_price','job_costed','quantity_tier') then raise exception 'Catalogue item has an unsupported selling method'; end if;
   if v_max_price is not null and v_standard>v_max_price then
    raise exception 'Unit selling price exceeds the owner-set maximum price of KSh %',v_max_price;
-  end if;
-  if v_item is not null and not exists(select 1 from public.catalogue_items ci
-    where ci.id=v_item and ci.business_id=v_business and ci.is_active) then
-   raise exception 'Catalogue item is inactive or does not belong to this workspace';
-  end if;
-  if v_item is not null and not exists(select 1 from public.catalogue_item_methods cm
-    where cm.business_id=v_business and cm.catalogue_item_id=v_item and cm.is_active
-     and (v_method is null or cm.production_method=v_method)) and v_method is not null then
-   raise exception 'Selected production method is not active for this catalogue item';
-  end if;
-  if v_method is not null and v_method not in('sublimation','dtf','screen_printing','embroidery','vinyl_cutting','other') then
-   raise exception 'Unsupported production method';
   end if;
   v_customer_supplied:=coalesce(v_line->>'supply_arrangement','mj_supplies')='customer_supplies';
   if coalesce(v_line->>'supply_arrangement','mj_supplies') not in('mj_supplies','customer_supplies') then
@@ -115,7 +124,7 @@ begin
      'quantity',case when v_basis='per_job' then 1 else v_qty end,
      'total_cost',case when v_basis='per_job' then v_component_cost else v_component_cost*v_qty end));
    end loop;
-  elsif coalesce(v_line->>'selling_method','')<>'fixed_price' then
+  elsif v_selling_method<>'fixed_price' then
    raise exception 'A costing profile is required for job-costed or quantity-tier lines';
   end if;
   if not v_customer_supplied and v_blank_override is not null then
@@ -132,14 +141,14 @@ begin
   v_snapshot:=jsonb_build_object('profile_id',v_profile,'profile_name',v_profile_name,'profile_version',v_profile_version,
    'quantity',v_qty,'supply_arrangement',case when v_customer_supplied then 'customer_supplies' else 'mj_supplies' end,
    'components',v_breakdown,'direct_cost_total',round(v_cost,2),'gross_margin_percent',v_margin,
-   'catalogue_item_id',v_item,'production_method',v_method,'standard_unit_price',v_standard,
+   'catalogue_item_id',v_item,'catalogue_item_name',v_catalogue_name,'selling_method',v_selling_method,'production_method',v_method,'standard_unit_price',v_standard,
    'discount_type',v_discount_type,'discount_value',v_discount_value,'discount_amount_per_unit',v_discount,
    'net_unit_price',v_unit_net);
-  insert into public.quotation_lines(business_id,quotation_id,catalogue_item_id,description,quantity,unit_price,
+  insert into public.quotation_lines(business_id,quotation_id,line_number,catalogue_item_id,description,quantity,unit_price,
    standard_unit_price,direct_cost,line_total,production_method,costing_profile_id,
    supply_arrangement,discount_type,discount_value,discount_amount,net_unit_price,gross_margin_percent,
    discount_reason,below_floor_exception_reason,cost_snapshot,details)
-  values(v_business,v_quote,v_item,v_desc,v_qty,v_unit_net,v_standard,round(v_cost,2),v_line_total,
+  values(v_business,v_quote,v_line_count,v_item,v_desc,v_qty,v_unit_net,v_standard,round(v_cost,2),v_line_total,
    v_method,v_profile,case when v_customer_supplied then 'customer_supplies' else 'mj_supplies' end,
    v_discount_type,v_discount_value,round(v_discount*v_qty,2),v_unit_net,v_margin,v_discount_reason,
    case when v_cost>0 and v_margin<30 then btrim(p_exception_reason) end,v_snapshot,
@@ -154,6 +163,7 @@ begin
   jsonb_build_object('total',round(v_lines_total,2),'line_count',v_line_count,'direct_cost_total',round(v_all_cost,2)));
  return v_quote;
 end $fn$;
+
 
 
 create or replace function public.owner_set_quotation_status(
