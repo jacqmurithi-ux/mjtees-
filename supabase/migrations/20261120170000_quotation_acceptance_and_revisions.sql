@@ -191,7 +191,7 @@ as $fn$
 declare q public.quotations%rowtype;
 begin
  if auth.uid() is null then raise exception 'Authentication required'; end if;
- if p_acceptance_method not in('in_person','phone','email','whatsapp','other') then raise exception 'Select how the customer confirmed acceptance'; end if;
+ if p_acceptance_method is null or p_acceptance_method not in('in_person','phone','email','whatsapp','other') then raise exception 'Select how the customer confirmed acceptance'; end if;
  if length(btrim(coalesce(p_acceptance_notes,'')))<3 then raise exception 'Acceptance notes are required'; end if;
  select * into q from public.quotations where id=p_quote_id for update;
  if not found or not exists(select 1 from public.business_memberships where business_id=q.business_id and user_id=auth.uid() and role='owner') then raise exception 'Quotation not found'; end if;
