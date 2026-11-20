@@ -103,16 +103,16 @@ select set_config('test.exception_quote_id',public.owner_create_quotation(
 select extensions.ok((select below_floor_approved_by=auth.uid() and below_floor_exception_reason='Approved contract exception' from public.quotations where id=current_setting('test.exception_quote_id')::uuid),'below-floor exception records owner approver and reason');
 
 select set_config('test.catalogue_item_id',public.owner_save_catalogue_item(
- null,'E2E-REV-ITEM','Customer supplied print service','', 'service',null,'fixed_price',500,'item','{}'::jsonb,true,'[]'::jsonb
+ null,'E2E-REV-ITEM','Customer supplied print service','', 'service',null,'job_costed',500,'item','{}'::jsonb,true,jsonb_build_array(jsonb_build_object('production_method','screen_printing','costing_profile_id',current_setting('test.profile_id')::uuid,'is_preferred',true,'is_active',true))
 )::text,true);
 select set_config('test.original_quote_id',public.owner_create_accepted_quotation(
  (select id from public.customers where customer_name='Example Customer'),'Q-TEST-E2E',current_date+7,
- jsonb_build_array(jsonb_build_object('catalogue_item_id',current_setting('test.catalogue_item_id'),'description','Customer supplied print service','quantity',2,'unit_price',500,'supply_arrangement','customer_supplies','discount_type','none','discount_value',0)),
+ jsonb_build_array(jsonb_build_object('catalogue_item_id',current_setting('test.catalogue_item_id'),'description','Customer supplied print service','production_method','screen_printing','costing_profile_id',current_setting('test.profile_id'),'quantity',2,'unit_price',500,'supply_arrangement','customer_supplies','discount_type','none','discount_value',0)),
  false,null
 )::text,true);
 select extensions.is((select status from public.quotations where id=current_setting('test.original_quote_id')::uuid),'draft','new quotations are drafts and are not accepted automatically');
 select extensions.is((select total from public.quotations where id=current_setting('test.original_quote_id')::uuid),1000::numeric,'test quotation total is KES 1,000');
-select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.original_quote_id')::uuid),100.00::numeric,'customer-supplied fixed-price quote excludes blank-item cost and calculates gross margin over revenue');
+select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.original_quote_id')::uuid),100.00::numeric,'customer-supplied job-costed quote excludes blank-item cost and calculates gross margin over revenue');
 
 select public.owner_set_quotation_status(current_setting('test.original_quote_id')::uuid,'sent');
 select public.owner_record_quotation_acceptance(current_setting('test.original_quote_id')::uuid,'phone','CALL-TEST-001','Customer confirmed every line and the full quotation total.');
@@ -120,14 +120,14 @@ select extensions.ok((select status='accepted' and accepted_at is not null and a
 
 select set_config('test.revision_quote_id',public.owner_create_quotation_revision(
  current_setting('test.original_quote_id')::uuid,'Q-TEST-E2E-R2',current_date+14,
- jsonb_build_array(jsonb_build_object('catalogue_item_id',current_setting('test.catalogue_item_id'),'description','Customer supplied print service','quantity',2,'unit_price',500,'supply_arrangement','customer_supplies','discount_type','none','discount_value',0)),
+ jsonb_build_array(jsonb_build_object('catalogue_item_id',current_setting('test.catalogue_item_id'),'description','Customer supplied print service','production_method','screen_printing','costing_profile_id',current_setting('test.profile_id'),'quantity',2,'unit_price',500,'supply_arrangement','customer_supplies','discount_type','none','discount_value',0)),
  false,null,'Customer requested a revised quotation'
 )::text,true);
 select extensions.ok((select status='accepted' and revision_number=1 and accepted_revision_number=1 from public.quotations where id=current_setting('test.original_quote_id')::uuid),'creating a revision preserves the original accepted agreement');
 select extensions.ok((select status='draft' and revision_number=2 and supersedes_quotation_id=current_setting('test.original_quote_id')::uuid from public.quotations where id=current_setting('test.revision_quote_id')::uuid),'revision creates a new draft version linked to the prior quotation');
 select extensions.ok(exists(select 1 from public.quotation_revision_history where quotation_id=current_setting('test.original_quote_id')::uuid and revision_number=1 and snapshot->'quotation'->>'acceptance_method'='phone' and snapshot->'quotation'->>'acceptance_notes'='Customer confirmed every line and the full quotation total.'),'revision history preserves the prior version and its acceptance evidence');
 select extensions.throws_ok(
- $select public.owner_convert_accepted_quote_to_invoice(current_setting('test.original_quote_id')::uuid,'INV-STALE-REVISION',current_date+14)$,
+ 'select public.owner_convert_accepted_quote_to_invoice(current_setting(''test.original_quote_id'')::uuid,''INV-STALE-REVISION'',current_date+14)',
  'P0001','Only the current quotation revision can be converted to an invoice',
  'a superseded accepted version cannot be invoiced after a newer revision exists');
 select public.owner_set_quotation_status(current_setting('test.revision_quote_id')::uuid,'sent');
