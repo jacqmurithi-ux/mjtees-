@@ -10,7 +10,7 @@ with check (
   and (storage.foldername(name))[3] = 'logo'
   and exists (
     select 1 from public.business_memberships m
-    where m.business_id = ((storage.foldername(name))[1])::uuid
+    where m.business_id::text = (storage.foldername(name))[1]
       and m.user_id = (select auth.uid())
       and m.role = 'owner'
   )
@@ -25,7 +25,7 @@ using (
   and (storage.foldername(name))[3] = 'logo'
   and exists (
     select 1 from public.business_memberships m
-    where m.business_id = ((storage.foldername(name))[1])::uuid
+    where m.business_id::text = (storage.foldername(name))[1]
       and m.user_id = (select auth.uid())
       and m.role = 'owner'
   )
@@ -37,7 +37,7 @@ with check (
   and (storage.foldername(name))[3] = 'logo'
   and exists (
     select 1 from public.business_memberships m
-    where m.business_id = ((storage.foldername(name))[1])::uuid
+    where m.business_id::text = (storage.foldername(name))[1]
       and m.user_id = (select auth.uid())
       and m.role = 'owner'
   )
@@ -52,7 +52,7 @@ using (
   and (storage.foldername(name))[3] = 'logo'
   and exists (
     select 1 from public.business_memberships m
-    where m.business_id = ((storage.foldername(name))[1])::uuid
+    where m.business_id::text = (storage.foldername(name))[1]
       and m.user_id = (select auth.uid())
       and m.role = 'owner'
   )
