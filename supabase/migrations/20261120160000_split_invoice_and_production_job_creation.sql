@@ -4,6 +4,11 @@
 alter table public.sales_invoices
  add column if not exists quotation_id uuid references public.quotations(id) on delete restrict;
 
+alter table public.sales_invoice_items
+ add column if not exists quotation_line_id uuid references public.quotation_lines(id) on delete restrict;
+create unique index if not exists sales_invoice_items_one_per_quotation_line
+ on public.sales_invoice_items(quotation_line_id) where quotation_line_id is not null;
+
 do $$
 begin
  if exists(
@@ -96,9 +101,9 @@ begin
 
  -- Copy every accepted quotation line without recalculating its price or cost snapshot.
  insert into public.sales_invoice_items(
-  business_id,invoice_id,description,quantity,unit_price,line_total,direct_cost,cost_snapshot,item_type
+  business_id,invoice_id,quotation_line_id,description,quantity,unit_price,line_total,direct_cost,cost_snapshot,item_type
  )
- select q.business_id,v_invoice_id,l.description,l.quantity,l.unit_price,l.line_total,l.direct_cost,
+ select q.business_id,v_invoice_id,l.id,l.description,l.quantity,l.unit_price,l.line_total,l.direct_cost,
   coalesce(l.details->'cost_snapshot','{}'::jsonb),
   case when l.details->>'item_type' in('blank_product','printing_service','custom_production','other')
    then l.details->>'item_type' else 'other' end
