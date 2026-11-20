@@ -106,7 +106,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
   finally{setLoading(false)}
  },[page,businessId,customerId,profileId,selectedJob,materialStock,selectedMaterial,supplierId,payInvoice,fail,recordId]);
  useEffect(()=>{void refresh()},[refresh]);
- useEffect(()=>{if(!supabase||page!=='calendar'||!businessId)return;const channel=supabase.channel('mj-calendar-'+businessId).on('postgres_changes',{event:'*',schema:'public',table:'quotations',filter:'business_id=eq.'+businessId},()=>void refresh()).on('postgres_changes',{event:'*',schema:'public',table:'production_jobs',filter:'business_id=eq.'+businessId},()=>void refresh()).subscribe();return()=>{void supabase.removeChannel(channel)}},[page,businessId,refresh]);
+ useEffect(()=>{const client=supabase;if(!client||page!=='calendar'||!businessId)return;const channel=client.channel('mj-calendar-'+businessId).on('postgres_changes',{event:'*',schema:'public',table:'quotations',filter:'business_id=eq.'+businessId},()=>void refresh()).on('postgres_changes',{event:'*',schema:'public',table:'production_jobs',filter:'business_id=eq.'+businessId},()=>void refresh()).subscribe();return()=>{void client.removeChannel(channel)}},[page,businessId,refresh]);
  async function rpc(name:string,args:Record<string,unknown>,success:string):Promise<boolean>{
   if(!supabase)return false;setLoading(true);setError('');setNotice('');
   const {error}=await supabase.rpc(name,args as never);setLoading(false);
