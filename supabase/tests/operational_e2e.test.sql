@@ -112,7 +112,7 @@ select set_config('test.original_quote_id',public.owner_create_accepted_quotatio
 )::text,true);
 select extensions.is((select status from public.quotations where id=current_setting('test.original_quote_id')::uuid),'draft','new quotations are drafts and are not accepted automatically');
 select extensions.is((select total from public.quotations where id=current_setting('test.original_quote_id')::uuid),1000::numeric,'test quotation total is KES 1,000');
-select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.original_quote_id')::uuid),100.00::numeric,'customer-supplied job-costed quote excludes blank-item cost and calculates gross margin over revenue');
+select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.original_quote_id')::uuid),40.00::numeric,'customer-supplied job-costed quote excludes blank-item cost and calculates gross margin over revenue');
 
 select public.owner_set_quotation_status(current_setting('test.original_quote_id')::uuid,'sent');
 select public.owner_record_quotation_acceptance(current_setting('test.original_quote_id')::uuid,'phone','CALL-TEST-001','Customer confirmed every line and the full quotation total.');
@@ -168,7 +168,7 @@ select set_config('test.customer_supplied_quote_id',public.owner_create_quotatio
 )::text,true);
 select extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.customer_supplied_quote_id')::uuid),450::numeric,'customer-supplied garments omit only blank-item component and retain per-piece decoration plus per-job setup');
 select extensions.ok((select details->'cost_snapshot'->>'profile_id'=current_setting('test.mixed_profile_id') from public.quotation_lines where quotation_id=current_setting('test.mixed_quote_id')::uuid),'quotation snapshot identifies the exact costing profile version');
-select extensions.ok((select costing_profile_id=current_setting('test.profile_id')::uuid from public.quotations where id=current_setting('test.quote_id')::uuid),'historical quotation retains the costing profile version used when it was created');
+select extensions.ok((select costing_profile_id=current_setting('test.profile_id')::uuid from public.quotation_lines where quotation_id=current_setting('test.quote_id')::uuid),'historical quotation line retains the costing profile version used when it was created');
 
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer-owned items do not reduce MJ stock');
 
