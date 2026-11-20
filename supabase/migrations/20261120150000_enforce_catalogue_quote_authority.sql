@@ -62,7 +62,8 @@ begin
    if not found then raise exception 'Selected production method is not active for this catalogue item'; end if;
   end if;
   if v_client_profile is not null and v_client_profile is distinct from v_profile then raise exception 'Costing profile is controlled by the selected catalogue production method'; end if;
-  if v_selling_method in('job_costed','quantity_tier') and (v_method is null or v_profile is null) then raise exception 'This catalogue item requires an active production method with its linked costing profile'; end if;
+  if v_selling_method='quantity_tier' then raise exception 'Quantity-tier pricing cannot be quoted until its approved quantity rules are configured for server-side calculation'; end if;
+  if v_selling_method='job_costed' and (v_method is null or v_profile is null) then raise exception 'This catalogue item requires an active production method with its linked costing profile'; end if;
   if v_selling_method not in('fixed_price','job_costed','quantity_tier') then raise exception 'Catalogue item has an unsupported selling method'; end if;
   if v_max_price is not null and v_standard>v_max_price then
    raise exception 'Unit selling price exceeds the owner-set maximum price of KSh %',v_max_price;
