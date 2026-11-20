@@ -32,6 +32,8 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
  const [refunds,setRefunds]=useState<Row[]>([]),[refundPayment,setRefundPayment]=useState(''),[refundAmount,setRefundAmount]=useState(''),[refundReason,setRefundReason]=useState('');
  const [adjustStock,setAdjustStock]=useState(''),[adjustDelta,setAdjustDelta]=useState(''),[adjustReason,setAdjustReason]=useState(''),[jobReports,setJobReports]=useState<Row[]>([]);
  const [inventorySearch,setInventorySearch]=useState(''),[inventoryLocationFilter,setInventoryLocationFilter]=useState('all'),[inventoryStockFilter,setInventoryStockFilter]=useState('all');
+ const [quickCustomerId,setQuickCustomerId]=useState(''),[quickItemId,setQuickItemId]=useState(''),[quickMethod,setQuickMethod]=useState(''),[quickQuantity,setQuickQuantity]=useState('1'),[quickUnitPrice,setQuickUnitPrice]=useState(''),[quickSupply,setQuickSupply]=useState('mj_supplies'),[quickOtherCosts,setQuickOtherCosts]=useState('0'),[quickPriceReason,setQuickPriceReason]=useState(''),[quickBelowFloor,setQuickBelowFloor]=useState(false),[quickExceptionReason,setQuickExceptionReason]=useState(''),[quickPaymentAmount,setQuickPaymentAmount]=useState(''),[quickPaymentMethod,setQuickPaymentMethod]=useState('cash'),[quickPaymentReference,setQuickPaymentReference]=useState(''),[quickInvoiceNo,setQuickInvoiceNo]=useState(nextNumber('INV')),[quickPaymentNo,setQuickPaymentNo]=useState(nextNumber('PAY')),[quickReceipt,setQuickReceipt]=useState<Row|null>(null);
+
 
  const [customerId,setCustomerId]=useState(''),[profileId,setProfileId]=useState(''),[quoteNo,setQuoteNo]=useState(nextNumber('Q')), [description,setDescription]=useState('Printing service'),[qty,setQty]=useState('1'),[price,setPrice]=useState('0'),[blankCostPerPiece,setBlankCostPerPiece]=useState(''),[otherCosts,setOtherCosts]=useState(''),[otherCostNote,setOtherCostNote]=useState(''),[validUntil,setValidUntil]=useState(today()),[customerSupplied,setCustomerSupplied]=useState(false),[exception,setException]=useState(false),[exceptionReason,setExceptionReason]=useState('');
   const [catalogue,setCatalogue]=useState<Row[]>([]),[quoteLines,setQuoteLines]=useState<Row[]>([{catalogueItemId:'',productionMethod:'',profileId:'',quantity:'1',supplyArrangement:'mj_supplies',discountType:'none',discountValue:'0',discountReason:'',blankCostPerPiece:'',otherCosts:'0',otherCostsNote:''}]),[revisionSourceId,setRevisionSourceId]=useState(''),[revisionReason,setRevisionReason]=useState('');
@@ -132,6 +134,44 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
   if(revisionSourceId&&revisionReason.trim().length<5)return fail('Revision reason must contain at least 5 characters.');if(!['in_person','phone','email','whatsapp','other'].includes(acceptanceMethod)||acceptanceNotes.trim().length<3)return fail('Record how the customer accepted the complete quotation and add acceptance notes.');const evidence={p_acceptance_method:acceptanceMethod,p_acceptance_reference:acceptanceReference,p_acceptance_notes:acceptanceNotes};const args:Record<string,unknown>=revisionSourceId?{p_quote_id:revisionSourceId,p_quote_number:quoteNo,p_valid_until:validUntil,p_lines:lines,p_allow_below_floor:allow,p_exception_reason:allow?exceptionReason:null,p_revision_reason:revisionReason,...evidence}:{p_customer_id:customerId,p_quote_number:quoteNo,p_valid_until:validUntil,p_allow_below_floor:allow,p_exception_reason:allow?exceptionReason:null,p_lines:lines,...evidence};
   const saved=await rpc(revisionSourceId?'owner_create_quotation_revision':'owner_create_accepted_quotation',args,(revisionSourceId?'Accepted quotation revision':'Accepted quotation')+' saved with '+lines.length+' line(s) and customer acceptance evidence.');if(!saved)return;
   setQuoteNo(nextNumber('Q'));setException(false);setExceptionReason('');setRevisionSourceId('');setRevisionReason('');setAcceptanceMethod('');setAcceptanceReference('');setAcceptanceNotes('');setQuoteLines([{catalogueItemId:'',productionMethod:'',profileId:'',quantity:'1',supplyArrangement:'mj_supplies',discountType:'none',discountValue:'0',discountReason:'',blankCostPerPiece:'',otherCosts:'0',otherCostsNote:''}]);
+ }
+
+ async function createQuickSale(e:FormEvent){
+  e.preventDefault();
+  const item=catalogue.find(x=>x.id===quickItemId);
+  const quantity=Number(quickQuantity),unitPrice=Number(quickUnitPrice),paid=quickPaymentAmount.trim()===''?0:Number(quickPaymentAmount);
+  if(!item)return fail('Select an active catalogue item.');
+  if(!Number.isInteger(quantity)||quantity<1)return fail('Quantity must be a whole number of at least 1.');
+  if(!Number.isFinite(unitPrice)||unitPrice<=0)return fail('Enter the agreed selling price per item.');
+  if(!Number.isFinite(paid)||paid<0||paid>quantity*unitPrice)return fail('Payment must be zero or a valid amount no greater than the sale total.');
+  if(unitPrice<Number(item.standard_unit_price||0)&&quickPriceReason.trim().length<3)return fail('Give a reason when the agreed price is below the catalogue price.');
+  if(quickBelowFloor&&quickExceptionReason.trim().length<8)return fail('A below-floor exception reason must contain at least 8 characters.');
+  const methods=(item.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);
+  if(methods.length&&!methods.some((m:Row)=>m.production_method===quickMethod))return fail('Select an active production method for this item.');
+  if(!supabase)return;
+  setLoading(true);setError('');setNotice('');
+  const {data,error:saveError}=await supabase.rpc('owner_create_quick_sale',{
+   p_customer_id:quickCustomerId||null,p_invoice_number:quickInvoiceNo,p_due_date:dueDate||today(),
+   p_catalogue_item_id:item.id,p_production_method:quickMethod||null,p_quantity:quantity,
+   p_unit_price:unitPrice,p_supply_arrangement:quickSupply,p_other_direct_costs:Number(quickOtherCosts||0),
+   p_price_reason:quickPriceReason.trim()||null,p_allow_below_floor:quickBelowFloor,
+   p_exception_reason:quickBelowFloor?quickExceptionReason.trim():null,
+   p_payment_number:paid>0?quickPaymentNo:null,p_payment_method:paid>0?quickPaymentMethod:null,
+   p_payment_amount:paid,p_payment_reference:quickPaymentReference.trim()||null
+  } as never);
+  setLoading(false);
+  if(saveError)return fail(saveError.message);
+  const saved=data as Row;
+  setQuickReceipt(saved);
+  notify('Quick sale saved. Invoice '+saved.invoice_number+' created'+(paid>0?' and payment recorded.':'.'));
+  setQuickInvoiceNo(nextNumber('INV'));setQuickPaymentNo(nextNumber('PAY'));
+  setQuickPaymentAmount('');setQuickPaymentReference('');setQuickPriceReason('');
+  setQuickOtherCosts('0');setQuickBelowFloor(false);setQuickExceptionReason('');
+  await refresh();await onChanged();
+ }
+ async function createProductionJobFromInvoice(invoiceId:string){
+  const saved=await rpc('owner_create_production_job_from_invoice',{p_invoice_id:invoiceId,p_job_number:jobNo,p_due_date:dueDate},'Production job created and linked to the invoice. No stock was issued.');
+  if(saved)setJobNo(nextNumber('JOB'));
  }
  async function recordAcceptance(e:FormEvent){e.preventDefault();if(!acceptanceQuote)return fail('Select a quotation awaiting customer confirmation.');if(!['in_person','phone','email','whatsapp','other'].includes(acceptanceMethod))return fail('Select how the customer confirmed acceptance.');if(acceptanceNotes.trim().length<3)return fail('Record notes confirming acceptance of the complete quotation.');const saved=await rpc('owner_record_quotation_acceptance',{p_quote_id:acceptanceQuote,p_acceptance_method:acceptanceMethod,p_acceptance_reference:acceptanceReference,p_acceptance_notes:acceptanceNotes},'Full customer acceptance recorded with timestamp, staff account and evidence.');if(saved){setAcceptanceQuote('');setAcceptanceReference('');setAcceptanceNotes('');}}
  function startRevision(q:Row){const lines=(q.quotation_lines||[]).map((l:Row)=>({catalogueItemId:l.catalogue_item_id||'',productionMethod:l.production_method||'',profileId:l.costing_profile_id||'',quantity:String(l.quantity),supplyArrangement:l.supply_arrangement||'mj_supplies',discountType:l.discount_type||'none',discountValue:String(l.discount_value||0),discountReason:l.discount_reason||'',blankCostPerPiece:l.details?.blank_cost_per_piece==null?'':String(l.details.blank_cost_per_piece),otherCosts:String(l.details?.other_costs_total||0),otherCostsNote:l.details?.other_costs_note||''}));if(!lines.length)return fail('This quotation has no lines to revise.');if(lines.some((line:Row)=>!line.catalogueItemId))return fail('This older quotation has lines that are not linked to the active catalogue. Create a new quotation from the catalogue instead of copying an incomplete revision.');const needsCostReview=(q.quotation_lines||[]).some((line:Row)=>line.details?.other_costs_total==null);setRevisionSourceId(q.id);setRevisionReason('');setAcceptanceMethod('phone');setAcceptanceReference('');setAcceptanceNotes('');setCustomerId(q.customer_id);setQuoteNo(nextNumber('Q'));setValidUntil(q.valid_until||today());setQuoteLines(lines);notify(needsCostReview?'Revision loaded. Review all costs: this older quotation did not retain every job-specific cost input.':'Revision loaded. Review the lines and enter a reason before saving the new version.');}
