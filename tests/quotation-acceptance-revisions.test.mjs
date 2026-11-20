@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261120170000_quotation_acceptance_and_revisions.sql', import.meta.url), 'utf8');
 const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+const revisionBase = await readFile(new URL('../supabase/migrations/20261120140000_add_multiline_quotation_engine.sql', import.meta.url), 'utf8');
 const e2e = await readFile(new URL('../supabase/tests/operational_e2e.test.sql', import.meta.url), 'utf8');
 
 test('new quotations are drafts and do not receive acceptance evidence at creation', () => {
@@ -26,7 +27,7 @@ test('revisions create a new draft and preserve the previous accepted snapshot',
   assert.match(migration, /create or replace function public\.owner_create_quotation_revision/);
   assert.match(migration, /revision_number=v_revision,revision_reason=btrim\(p_revision_reason\),supersedes_quotation_id=q\.id/);
   assert.match(migration, /'quotation',to_jsonb\(q\),'lines'/);
-  assert.match(migration, /quotation_revision_history_immutable/);
+  assert.match(revisionBase, /quotation_revision_history_immutable/);
   assert.match(migration, /Only the current quotation revision can be converted to an invoice/);
 });
 
