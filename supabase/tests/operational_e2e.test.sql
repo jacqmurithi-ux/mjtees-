@@ -107,7 +107,7 @@ select set_config('test.catalogue_item_id',public.owner_save_catalogue_item(
 )::text,true);
 select set_config('test.original_quote_id',public.owner_create_accepted_quotation(
  (select id from public.customers where customer_name='Example Customer'),'Q-TEST-E2E',current_date+7,
- '[{"catalogue_item_id":"'||current_setting('test.catalogue_item_id')||'","description":"Customer supplied print service","quantity":2,"unit_price":500,"supply_arrangement":"customer_supplies","discount_type":"none","discount_value":0}]'::jsonb,
+ jsonb_build_array(jsonb_build_object('catalogue_item_id',current_setting('test.catalogue_item_id'),'description','Customer supplied print service','quantity',2,'unit_price',500,'supply_arrangement','customer_supplies','discount_type','none','discount_value',0)),
  false,null
 )::text,true);
 select extensions.is((select status from public.quotations where id=current_setting('test.original_quote_id')::uuid),'draft','new quotations are drafts and are not accepted automatically');
@@ -120,7 +120,7 @@ select extensions.ok((select status='accepted' and accepted_at is not null and a
 
 select set_config('test.revision_quote_id',public.owner_create_quotation_revision(
  current_setting('test.original_quote_id')::uuid,'Q-TEST-E2E-R2',current_date+14,
- '[{"catalogue_item_id":"'||current_setting('test.catalogue_item_id')||'","description":"Customer supplied print service","quantity":2,"unit_price":500,"supply_arrangement":"customer_supplies","discount_type":"none","discount_value":0}]'::jsonb,
+ jsonb_build_array(jsonb_build_object('catalogue_item_id',current_setting('test.catalogue_item_id'),'description','Customer supplied print service','quantity',2,'unit_price',500,'supply_arrangement','customer_supplies','discount_type','none','discount_value',0)),
  false,null,'Customer requested a revised quotation'
 )::text,true);
 select extensions.ok((select status='accepted' and revision_number=1 and accepted_revision_number=1 from public.quotations where id=current_setting('test.original_quote_id')::uuid),'creating a revision preserves the original accepted agreement');
