@@ -1,5 +1,8 @@
 name: Deploy MJ Printing & Branding
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 permissions:
   actions: read
