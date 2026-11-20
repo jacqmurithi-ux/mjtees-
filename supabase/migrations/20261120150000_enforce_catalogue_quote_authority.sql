@@ -1,5 +1,13 @@
 -- Make the active catalogue the sole authority for quotation prices, selling methods and costing-profile links.
 -- Additive replacement only: no data changes occur until an explicitly approved migration is run.
+
+alter table public.quotation_lines add column if not exists line_number integer;
+with numbered as (
+ select id,row_number() over(partition by quotation_id order by id)::integer as position
+ from public.quotation_lines where line_number is null
+)
+update public.quotation_lines ql set line_number=numbered.position from numbered where ql.id=numbered.id;
+create unique index if not exists quotation_lines_order_unique on public.quotation_lines(quotation_id,line_number) where line_number is not null;
 create or replace function private.owner_create_quotation_v2_impl(
  p_customer_id uuid,p_quote_number text,p_valid_until date,p_lines jsonb,
  p_allow_below_floor boolean default false,p_exception_reason text default null
@@ -133,11 +141,11 @@ begin
    'catalogue_item_id',v_item,'catalogue_item_name',v_catalogue_name,'selling_method',v_selling_method,'production_method',v_method,'standard_unit_price',v_standard,
    'discount_type',v_discount_type,'discount_value',v_discount_value,'discount_amount_per_unit',v_discount,
    'net_unit_price',v_unit_net);
-  insert into public.quotation_lines(business_id,quotation_id,catalogue_item_id,description,quantity,unit_price,
+  insert into public.quotation_lines(business_id,quotation_id,line_number,catalogue_item_id,description,quantity,unit_price,
    standard_unit_price,direct_cost,line_total,production_method,costing_profile_id,
    supply_arrangement,discount_type,discount_value,discount_amount,net_unit_price,gross_margin_percent,
    discount_reason,below_floor_exception_reason,cost_snapshot,details)
-  values(v_business,v_quote,v_item,v_desc,v_qty,v_unit_net,v_standard,round(v_cost,2),v_line_total,
+  values(v_business,v_quote,v_line_count,v_item,v_desc,v_qty,v_unit_net,v_standard,round(v_cost,2),v_line_total,
    v_method,v_profile,case when v_customer_supplied then 'customer_supplies' else 'mj_supplies' end,
    v_discount_type,v_discount_value,round(v_discount*v_qty,2),v_unit_net,v_margin,v_discount_reason,
    case when v_cost>0 and v_margin<30 then btrim(p_exception_reason) end,v_snapshot,
