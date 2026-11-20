@@ -268,7 +268,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
   <form className="op-form" onSubmit={createQuickSale}>
    <p className="op-guidance"><b>Everyday sales — no quotation required.</b> Save the sale directly as an invoice. Walk-in customers can be recorded without entering customer details. Any payment is posted to the same customer payment ledger used by invoices.</p>
    {selectField('Customer (optional)',quickCustomerId,setQuickCustomerId,[{value:'',label:'Walk-in customer'},...customers.map(c=>({value:c.id,label:c.customer_name}))])}
-   {selectField('Sale workflow',quickMode,setQuickMode,[{value:'catalogue',label:'Standard catalogue sale'},{value:'custom',label:'Custom job — one-off price'}])}
+   {selectField('Sale workflow',quickMode,value=>setQuickMode(value as 'catalogue'|'custom'),[{value:'catalogue',label:'Standard catalogue sale'},{value:'custom',label:'Custom job — one-off price'}])}
    {quickMode==='custom'?<><p className="op-guidance"><b>One-off custom job.</b> This price is recorded on this invoice only. No standard catalogue price is created.</p>
     {field('Job description',customDescription,setCustomDescription,{placeholder:'e.g. Name and number vinyl lettering'})}
     {field('Dimensions / size',customDimensions,setCustomDimensions,{placeholder:'e.g. 12 × 4 inches'})}
