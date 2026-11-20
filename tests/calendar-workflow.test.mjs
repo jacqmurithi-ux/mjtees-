@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
 const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const migration = await readFile(new URL('../supabase/migrations/20261120180000_production_schedule_quality_handover.sql', import.meta.url), 'utf8');
+const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('calendar loads quotations on their issue date and jobs on creation and scheduled dates', () => {
   assert.match(operations, /from\('quotations'\)\.select\('id,quote_number,status,total,customer_id,created_at,issue_date,valid_until,revision_number'\)/);
@@ -33,6 +34,14 @@ test('calendar events open the exact quotation or production job and highlight t
   assert.match(operations, /recordId===j\.id\?/);
   assert.match(app, /function navigate\(target:Page,id\?:string\)/);
   assert.match(app, /onNavigate=\{navigate\} recordId=\{recordId\}/);
+});
+
+
+test('calendar views have responsive layout, event colours and a usable mobile record panel', () => {
+  for (const selector of ['.calendar-toolbar','.calendar-weekdays','.calendar-grid-month','.calendar-grid-week','.calendar-grid-day','.calendar-event.calendar-status-green','.calendar-event.calendar-status-orange','.calendar-selected']) {
+    assert.ok(styles.includes(selector), selector+' is styled');
+  }
+  assert.match(styles, /@media\(max-width:680px\)/);
 });
 
 test('calendar refreshes when quotation or production job records change', () => {
