@@ -22,7 +22,7 @@ test('legacy quotations can be accepted only with complete evidence and current-
   assert.match(migration, /length\(btrim\(coalesce\(p_acceptance_notes,''\)\)\)<3/);
   assert.match(migration, /accepted_recorded_by=auth\.uid\(\)/);
   assert.match(migration, /accepted_revision_number=revision_number/);
-  assert.match(migration, /Only the current issued quotation revision can be accepted/);
+  assert.match(migration, /Only the current quotation revision can be accepted/);
 });
 
 test('revisions create a separately accepted version and preserve the previous accepted snapshot', () => {
