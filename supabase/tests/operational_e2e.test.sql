@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(99);
+select extensions.plan(109);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -79,6 +79,79 @@ select extensions.throws_ok(
  'server rejects a unit selling price above the owner-set ceiling');
 select public.owner_update_max_unit_selling_price(null);
 select extensions.is((select max_unit_selling_price from public.business_settings where business_id=current_setting('test.business_id')::uuid),null::numeric,'owner can clear the optional selling price ceiling');
+
+select extensions.throws_ok(
+ $select public.owner_create_custom_job_quick_sale(
+  (select id from public.customers where customer_name='Example Customer'),
+  'INV-CUSTOM-FRACTIONAL',current_date+7,'Fractional custom job','12 x 4 inches',
+  'screen_printing',current_setting('test.profile_id')::uuid,1.5,1000,
+  'customer_supplies',0,false,null,null,null,0,null
+ )$,
+ 'P0001','Quantity must be a whole number greater than zero',
+ 'custom job RPC rejects fractional quantities');
+
+select set_config('test.custom_sale',public.owner_create_custom_job_quick_sale(
+ (select id from public.customers where customer_name='Example Customer'),
+ 'INV-CUSTOM-JOB-E2E',current_date+7,'Custom name and number','12 x 4 inches',
+ 'screen_printing',current_setting('test.profile_id')::uuid,1,1000,
+ 'customer_supplies',0,false,null,'PAY-CUSTOM-JOB-E2E','cash',200,'E2E-CUSTOM-PAY'
+)::text,true);
+select set_config('test.custom_invoice_id',(current_setting('test.custom_sale')::jsonb->>'invoice_id'),true);
+
+select extensions.is(
+ (select description from public.sales_invoice_items where invoice_id=current_setting('test.custom_invoice_id')::uuid),
+ 'Custom name and number (12 x 4 inches)',
+ 'custom job invoice line retains the supplied description and dimensions');
+select extensions.is(
+ (select item_type from public.sales_invoice_items where invoice_id=current_setting('test.custom_invoice_id')::uuid),
+ 'custom_production',
+ 'custom job invoice line is classified as custom production');
+select extensions.is(
+ (select cost_snapshot->>'transaction_type' from public.sales_invoice_items where invoice_id=current_setting('test.custom_invoice_id')::uuid),
+ 'custom_job',
+ 'custom job invoice snapshot is explicitly typed as a custom job');
+select extensions.is(
+ (select (cost_snapshot->>'agreed_unit_price')::numeric from public.sales_invoice_items where invoice_id=current_setting('test.custom_invoice_id')::uuid),
+ 1000::numeric,
+ 'custom job snapshot stores the agreed one-off price');
+select extensions.ok(
+ (select cost_snapshot->>'catalogue_standard_price' is null
+  and cost_snapshot->>'catalogue_item_id' is null
+  and cost_snapshot->>'catalogue_item_name' is null
+  and cost_snapshot->>'one_off_price'='true'
+  from public.sales_invoice_items where invoice_id=current_setting('test.custom_invoice_id')::uuid),
+ 'custom job snapshot contains no catalogue standard price or temporary catalogue identity');
+select extensions.ok(
+ (select cost_snapshot->>'dimensions'='12 x 4 inches'
+  and cost_snapshot->>'production_method'='screen_printing'
+  and cost_snapshot->>'profile_id'=current_setting('test.profile_id')
+  and cost_snapshot->>'profile_name'='Generic production service'
+  from public.sales_invoice_items where invoice_id=current_setting('test.custom_invoice_id')::uuid),
+ 'custom job snapshot retains dimensions, method and costing profile');
+select extensions.ok(
+ exists(select 1 from public.audit_events
+  where entity_type='sales_invoice' and entity_id=current_setting('test.custom_invoice_id')::uuid
+   and event_type='quick_sale.created'
+   and details->>'source'='custom_job'
+   and details->>'catalogue_item_id' is null),
+ 'canonical Quick Sale audit event identifies the custom-job source without a temporary catalogue ID');
+select extensions.ok(
+ not exists(select 1 from public.catalogue_items
+  where business_id=current_setting('test.business_id')::uuid
+   and name='Custom name and number (12 x 4 inches)'),
+ 'temporary custom-job catalogue item is removed after invoice creation');
+select extensions.ok(
+ exists(select 1 from public.audit_events
+  where entity_type='sales_invoice' and entity_id=current_setting('test.custom_invoice_id')::uuid
+   and event_type='custom_job_quick_sale.created'
+   and details->>'one_off_price'='true'
+   and details->>'costing_profile_id'=current_setting('test.profile_id')),
+ 'custom-job audit event preserves the one-off price and costing profile');
+select extensions.is(
+ (select sum(pa.amount) from public.payment_allocations pa
+  where pa.invoice_id=current_setting('test.custom_invoice_id')::uuid),
+ 200::numeric,
+ 'custom job payment is allocated through the canonical payment ledger');
 
 select set_config('test.cost_override_quote',public.owner_create_quotation(
  (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,
