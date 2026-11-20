@@ -1,6 +1,10 @@
 -- Direct Quick Sales: create an invoice and optional payment without creating a quotation.
 -- All ledger writes remain inside owner-authorised database functions. No stock is issued here.
 
+-- Invoice lines retain the same immutable cost snapshot used by quotation conversion.
+alter table public.sales_invoice_items
+ add column if not exists cost_snapshot jsonb not null default '{}'::jsonb;
+
 create or replace function public.owner_create_quick_sale(
  p_customer_id uuid,
  p_invoice_number text,
@@ -80,7 +84,7 @@ begin
  if p_catalogue_item_id is null then raise exception 'Select an active catalogue item'; end if;
  if p_quantity is null or p_quantity<=0 then raise exception 'Quantity must be greater than zero'; end if;
  if p_unit_price is null or p_unit_price<=0 then raise exception 'Selling price must be greater than zero'; end if;
- if p_supply_arrangement not in('mj_supplies','customer_supplies') then raise exception 'Invalid supply arrangement'; end if;
+ if p_supply_arrangement is null or p_supply_arrangement not in('mj_supplies','customer_supplies') then raise exception 'Invalid supply arrangement'; end if;
  if coalesce(p_other_direct_costs,0)<0 then raise exception 'Other direct costs cannot be negative'; end if;
  if v_payment_amount<0 then raise exception 'Payment amount cannot be negative'; end if;
 
