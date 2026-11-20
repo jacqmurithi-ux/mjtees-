@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './lib/supabase';
 
 type Customer={id:string;customer_name:string};
+type VinylStock={id:string;item_name:string;unit:string;quantity_on_hand:number;average_unit_cost:number};
 type Receipt=Record<string,any>;
 const money=(value:number)=>new Intl.NumberFormat('en-KE',{style:'currency',currency:'KES',maximumFractionDigits:2}).format(Number.isFinite(value)?value:0);
 const wholeKsh=(value:number)=>Math.ceil(Math.max(0,value));
@@ -12,9 +13,11 @@ const complexityFactors={simple:1,medium:1.15,complicated:1.3} as const;
 export default function VinylStickerCalculator({onSaleSaved}:{onSaleSaved?:()=>void}){
  const [length,setLength]=useState('12');
  const [width,setWidth]=useState('4');
+ const [vinylStock,setVinylStock]=useState<VinylStock[]>([]);
+ const [selectedVinylId,setSelectedVinylId]=useState('');
  const [stockLength,setStockLength]=useState('39.37');
  const [stockWidth,setStockWidth]=useState('24');
- const [stockPrice,setStockPrice]=useState('160');
+ const [stockPrice,setStockPrice]=useState('0');
  const [productionLabour,setProductionLabour]=useState('0');
  const [transferTape,setTransferTape]=useState('0');
  const [applicationCost,setApplicationCost]=useState('0');
@@ -38,6 +41,8 @@ export default function VinylStickerCalculator({onSaleSaved}:{onSaleSaved?:()=>v
  const [receipt,setReceipt]=useState<Receipt|null>(null);
 
  useEffect(()=>{let active=true;void(async()=>{if(!supabase)return;const{data,error}=await supabase.from('customers').select('id,customer_name').order('customer_name');if(active&&!error)setCustomers(data||[]);})();return()=>{active=false}},[]);
+ useEffect(()=>{let active=true;void(async()=>{if(!supabase)return;const{data,error}=await supabase.from('stock_items').select('id,item_name,unit,quantity_on_hand,average_unit_cost').eq('active',true).eq('category','Vinyl sticker material').order('item_name');if(!active)return;if(error){setError('Could not load vinyl colours from Inventory: '+error.message);return;}const items=(data||[]) as VinylStock[];setVinylStock(items);if(items.length){const first=items[0];setSelectedVinylId(first.id);setStockPrice(String(Number(first.average_unit_cost)||0));}})();return()=>{active=false}},[]);
+ function selectVinylStock(id:string){setSelectedVinylId(id);const item=vinylStock.find(x=>x.id===id);if(item)setStockPrice(String(Number(item.average_unit_cost)||0));}
  const calculation=useMemo(()=>{
   const l=Math.max(0,Number(length)||0),w=Math.max(0,Number(width)||0);
   const stockL=Math.max(0,Number(stockLength)||0),stockW=Math.max(0,Number(stockWidth)||0);
@@ -59,7 +64,8 @@ export default function VinylStickerCalculator({onSaleSaved}:{onSaleSaved?:()=>v
   setError('');setNotice('');
   if(!supabase)return setError('Sales service is unavailable. Check the owner workspace connection.');
   if(calculation.area<=0)return setError('Enter valid sticker dimensions greater than zero.');
-  if(supply==='mj_supplies'&&(calculation.stockArea<=0||calculation.stock<=0))return setError('Enter the actual positive vinyl stock dimensions and purchase price.');
+  if(supply==='mj_supplies'&&(!selectedVinylId||!vinylStock.some(x=>x.id===selectedVinylId)))return setError('Select an active vinyl colour from Inventory before recording this sale.');
+  if(supply==='mj_supplies'&&(calculation.stockArea<=0||calculation.stock<=0))return setError('The selected vinyl stock must have a positive recorded cost and valid roll dimensions.');
   if(!Number.isInteger(calculation.quantity)||calculation.quantity<1)return setError('Quantity must be a whole number of at least 1.');
   if(!description.trim())return setError('Enter a sticker or lettering description.');
   if(calculation.finalPrice<=0)return setError('Enter the final agreed customer price.');
@@ -78,6 +84,8 @@ export default function VinylStickerCalculator({onSaleSaved}:{onSaleSaved?:()=>v
    unit:'inch',length:calculation.l,width:calculation.w,area_square_inches:calculation.area,
    stock_length_inches:calculation.stockL,stock_width_inches:calculation.stockW,
    stock_purchase_price:calculation.stock,material_cost_per_piece:calculation.material,
+   inventory_stock_item_id:selectedVinylId||null,inventory_stock_item_name:vinylStock.find(x=>x.id===selectedVinylId)?.item_name||null,
+   inventory_quantity_on_hand:vinylStock.find(x=>x.id===selectedVinylId)?.quantity_on_hand??null,inventory_average_unit_cost:vinylStock.find(x=>x.id===selectedVinylId)?.average_unit_cost??null,
    design_complexity:design,complexity_factor:complexityFactors[design],
    margin_floor_percent:30,suggested_unit_price:calculation.suggested,
    final_agreed_unit_price:calculation.finalPrice,quantity:calculation.quantity
@@ -115,9 +123,11 @@ export default function VinylStickerCalculator({onSaleSaved}:{onSaleSaved?:()=>v
    <h3>2. Vinyl stock and supply arrangement</h3>
    <div className="op-grid">
     <label className="op-field">Who supplies the vinyl?<select value={supply} onChange={e=>setSupply(e.target.value as 'mj_supplies'|'customer_supplies')}><option value="mj_supplies">MJ supplies the vinyl</option><option value="customer_supplies">Customer supplies the vinyl</option></select></label>
-    <label className="op-field">Stock length (inches)<input type="number" min="0" step="0.01" value={stockLength} onChange={e=>setStockLength(e.target.value)}/></label>
-    <label className="op-field">Stock width (inches)<input type="number" min="0" step="0.01" value={stockWidth} onChange={e=>setStockWidth(e.target.value)}/></label>
-    <label className="op-field">Full stock purchase price (KES)<input type="number" min="0" step="0.01" value={stockPrice} onChange={e=>setStockPrice(e.target.value)}/></label>
+    {supply==='mj_supplies'&&<label className="op-field">Vinyl colour / stock item<select value={selectedVinylId} onChange={e=>selectVinylStock(e.target.value)}><option value="">Select vinyl colour from Inventory</option>{vinylStock.map(item=><option key={item.id} value={item.id}>{item.item_name} · {Number(item.quantity_on_hand).toFixed(2)} {item.unit} available</option>)}</select>{vinylStock.length===0&&<small className="muted">No active items in the “Vinyl sticker material” inventory category. Add a colour in Inventory first.</small>}</label>}
+    <label className="op-field">Stock length represented (inches)<input type="number" min="0" step="0.01" value={stockLength} onChange={e=>setStockLength(e.target.value)}/></label>
+    <label className="op-field">Stock roll width (inches)<input type="number" min="0" step="0.01" value={stockWidth} onChange={e=>setStockWidth(e.target.value)}/></label>
+    <label className="op-field">Inventory cost for stock length (KES)<input type="number" min="0" step="0.01" value={stockPrice} onChange={e=>setStockPrice(e.target.value)} readOnly={supply==='mj_supplies'&&!!selectedVinylId}/></label>
+    {supply==='mj_supplies'&&selectedVinylId&&<small className="muted">Cost loaded from Inventory: {money(Number(vinylStock.find(x=>x.id===selectedVinylId)?.average_unit_cost)||0)} per {vinylStock.find(x=>x.id===selectedVinylId)?.unit}. Selecting stock does not deduct it.</small>}
    </div>
    <h3>3. Other direct production costs per sticker</h3>
    <p className="muted">Only include work actually done. For simple cut lettering with no weeding, transfer tape or application, leave those costs at zero.</p>
