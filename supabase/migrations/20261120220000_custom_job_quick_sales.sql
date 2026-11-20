@@ -85,7 +85,7 @@ begin
   p_catalogue_item_id=>v_item,
   p_production_method=>p_production_method,
   p_quantity=>p_quantity,
-  p_agreed_price=>round(p_agreed_price,2),
+  p_unit_price=>round(p_agreed_price,2),
   p_supply_arrangement=>p_supply_arrangement,
   p_other_direct_costs=>coalesce(p_other_direct_costs,0),
   p_price_reason=>null,
