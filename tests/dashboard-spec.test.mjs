@@ -4,10 +4,16 @@ import { readFile } from 'node:fs/promises';
 
 const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
 
-test('dashboard uses quote revenue, invoice balances, defined production stages and supplier net payable', () => {
-  assert.match(app, /from\('quotations'\)/);
-  assert.match(app, /!\['declined','expired'\]\.includes\(x\.status\)/);
-  assert.match(app, /from\('sales_invoices'\)/);
+test('dashboard separates invoiced sales, payment receipts and invoice balances without double-counting', () => {
+  assert.match(app, /from\('quotations'\)/); // customer quote counts only; not sales revenue
+  assert.match(app, /from\('sales_invoices'\)\.select\('id,total,balance,status'\)/);
+  assert.match(app, /const sold=\(i\.data\|\|\[\]\)\.reduce\(\(n,x\)=>n\+Number\(x\.total\|\|0\),0\)/);
+  assert.match(app, /from\('payments'\)\.select\('id,amount,received_at'\)/);
+  assert.match(app, /const received=\(pm\.data\|\|\[\]\)\.reduce\(\(n,x\)=>n\+Number\(x\.amount\|\|0\),0\)/);
+  assert.match(app, /const due=\(i\.data\|\|\[\]\)\.reduce\(\(n,x\)=>n\+Number\(x\.balance\|\|0\),0\)/);
+  assert.match(app, /title="Invoiced sales"/);
+  assert.match(app, /title="Cash received"/);
+  assert.match(app, /title="Outstanding receivables"/);
   assert.match(app, /\['in_production','quality_check'\]/);
   assert.match(app, /purchases-supplierPaid/);
 });
