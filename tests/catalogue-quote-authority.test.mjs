@@ -33,3 +33,8 @@ test('Sales editor displays approved catalogue price and does not submit editabl
   assert.doesNotMatch(operations, /unit_price:unitPrice/);
   assert.doesNotMatch(operations, /selling_method:item\.selling_method/);
 });
+
+test('quantity-tier items fail closed until approved tier rules are implemented server-side', () => {
+  assert.match(migration, /v_selling_method='quantity_tier' then raise exception/);
+  assert.match(operations, /quantity-tier pricing is not yet configured for server-side calculation/);
+});
