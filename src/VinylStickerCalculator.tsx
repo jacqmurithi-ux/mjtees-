@@ -55,7 +55,6 @@ export default function VinylStickerCalculator({onSaleSaved}:{onSaleSaved?:()=>v
   const margin=finalPrice>0?((finalPrice-unitDirect)/finalPrice)*100:0;
   return {l,w,area,stockL,stockW,stock,stockArea,material,labour,tape,application,unitDirect,marginFloorPrice,complexityPrice,suggested,finalPrice,margin,quantity:qty,totalCost:unitDirect*qty,totalPrice:finalPrice*qty};
  },[length,width,stockLength,stockWidth,stockPrice,productionLabour,transferTape,applicationCost,design,quantity,supply,agreedPrice]);
- const updateSuggested=()=>setAgreedPrice(String(calculation.suggested));
  async function recordSale(){
   setError('');setNotice('');
   if(!supabase)return setError('Sales service is unavailable. Check the owner workspace connection.');
