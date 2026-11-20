@@ -165,6 +165,19 @@ begin
 end $fn$;
 
 
+create or replace function public.owner_create_accepted_quotation(
+ p_customer_id uuid,p_quote_number text,p_valid_until date,p_lines jsonb,
+ p_allow_below_floor boolean default false,p_exception_reason text default null
+) returns uuid language sql security definer set search_path=public,private,pg_temp
+as $fn$
+ select private.owner_create_quotation_v2_impl(
+  p_customer_id,p_quote_number,p_valid_until,p_lines,p_allow_below_floor,p_exception_reason
+ )
+$fn$;
+revoke all on function public.owner_create_accepted_quotation(uuid,text,date,jsonb,boolean,text) from public,anon;
+grant execute on function public.owner_create_accepted_quotation(uuid,text,date,jsonb,boolean,text) to authenticated;
+
+
 
 create or replace function public.owner_set_quotation_status(
  p_quote_id uuid,p_status text
