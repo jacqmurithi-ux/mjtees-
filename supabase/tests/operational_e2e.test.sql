@@ -118,9 +118,11 @@ select extensions.is((select status from public.quotations where id=current_sett
 select extensions.is((select count(*)::integer from public.audit_events where entity_type='quotation' and entity_id=current_setting('test.quote_id')::uuid and event_type='quotation.status_changed'),2,'each quotation status transition is audited');
 select set_config('test.deposit_id',public.owner_record_quote_deposit(current_setting('test.quote_id')::uuid,'DEP-TEST-001','mpesa_paybill',200,'DEP-REF-001')::text,true);
 select extensions.is((select amount from public.quotation_deposits where id=current_setting('test.deposit_id')::uuid),200::numeric,'quotation deposit is recorded before invoicing');
-select set_config('test.converted',public.owner_convert_quote_to_invoice(current_setting('test.quote_id')::uuid,'INV-TEST-E2E','JOB-TEST-E2E',current_date+14)::text,true);
+select set_config('test.converted',public.owner_convert_accepted_quote_to_invoice(current_setting('test.quote_id')::uuid,'INV-TEST-E2E',current_date+14)::text,true);
 select set_config('test.invoice_id',(current_setting('test.converted')::jsonb->>'invoice_id'),true);
-select set_config('test.job_id',(current_setting('test.converted')::jsonb->>'job_id'),true);
+select extensions.ok(not coalesce((current_setting('test.converted')::jsonb->>'production_job_created')::boolean,true),'invoice conversion does not create a production job');
+select set_config('test.job_created',public.owner_create_production_job_from_quote(current_setting('test.quote_id')::uuid,'JOB-TEST-E2E',current_date+14)::text,true);
+select set_config('test.job_id',(current_setting('test.job_created')::jsonb->>'job_id'),true);
 
 select extensions.is((select amount_paid from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),200::numeric,'quote deposit is carried into invoice paid amount');
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),800::numeric,'invoice balance is reduced by the quote deposit');
