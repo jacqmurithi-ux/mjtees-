@@ -179,3 +179,64 @@ td{font-size:13px}
 /* Supplied square MJ logo: size it as a complete mark in the workspace header. */
 .brandline img{width:96px;height:92px;object-fit:contain;padding:2px;border-radius:8px}
 @media(max-width:520px){.brandline img{width:76px;height:72px}.brandline{gap:9px}}
+
+
+/* MJ brand system and wide desktop workspace */
+:root{
+  --o:#f28c28;
+  --b:#1565c0;
+  --g:#0e7a3e;
+  --brand-gradient:linear-gradient(105deg,#f28c28 0%,#1565c0 52%,#0e7a3e 100%);
+  --surface:#fff;
+  --surface-soft:#f6f8fb;
+}
+body{background:#f3f6f9}
+.topbar{background:var(--brand-gradient);box-shadow:0 3px 14px #14283b1a}
+.brandline{max-width:1600px}
+.brandline img{width:46px;height:46px;border:2px solid #fff}
+.brandline small{color:#fff;letter-spacing:.35px}
+.signout{border-color:#ffffff80;background:#ffffff16}
+.signout:hover{background:#ffffff2b}
+.tabbar{background:#fff;border-bottom:3px solid transparent;border-image:var(--brand-gradient) 1;box-shadow:0 4px 14px #1d34400a}
+.tabbar button{transition:background .15s,border-color .15s,color .15s}
+.tabbar button:hover{border-color:var(--b);color:var(--b)}
+.tabbar button.active{background:var(--brand-gradient);border-color:transparent;color:#fff}
+.eyebrow{color:var(--b)}
+.pagehead .eyebrow{color:var(--g);font-weight:800}
+.primary{background:var(--o);box-shadow:0 2px 5px #f28c2833}
+.primary:hover{background:#df7616}
+.panel,.stat{box-shadow:0 2px 10px #1d34400a}
+.panel h3{color:#183b5b}
+.quickgrid button:hover,.quick button:hover{border-color:var(--b);background:#eff6ff}
+.notice{border-left:4px solid var(--g)}
+.category-pill{background:#eaf3ff;color:#15579b}
+.inventory-status{background:#e7f5ec;color:#176b37}
+.op-guidance-link,.price-alert button{background:var(--b)}
+.cost-add{color:var(--g);border-color:#b9dbc6}
+.cost-preview{background:#eef7f1;border-color:#d5eadb}
+.cost-preview b{color:var(--g)}
+.login .hero{background:var(--brand-gradient)}
+.loginform .eyebrow{color:var(--g)}
+@media(min-width:1000px){
+  .topbar{padding:15px 28px}
+  .brandline{width:min(100%,1600px);margin:0 auto}
+  .tabbar{padding:10px max(24px,calc((100% - 1600px)/2));gap:9px;flex-wrap:wrap;overflow:visible}
+  .tabbar button{padding:10px 17px}
+  .content{width:min(100%,1600px);max-width:1600px;padding:28px 32px 56px}
+  .pagehead{margin:6px 0 22px}
+  .pagehead h1{font-size:28px}
+  .stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+  .dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+  .panel{padding:20px;margin-bottom:16px}
+  .op-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .inventory-filters{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .toolbar{align-items:center}
+  .table{max-width:100%}
+}
+@media(min-width:1450px){
+  .content{padding-left:42px;padding-right:42px}
+  .dashboard-grid{grid-template-columns:1.15fr .85fr}
+}
+@media(max-width:999px){
+  .tabbar{border-image:none;border-bottom:1px solid var(--line)}
+}
