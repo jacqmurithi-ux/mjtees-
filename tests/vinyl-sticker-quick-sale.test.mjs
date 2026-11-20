@@ -21,5 +21,5 @@ test('server RPC records direct cost snapshot and preserves the canonical sale l
  assert.match(migration,/owner_create_custom_job_quick_sale/);
  assert.match(migration,/sales_invoice_items/);
  assert.match(migration,/gross_margin_percent/);
- assert.match(migration,/payment_allocations/); 
+ assert.match(migration,/p_payment_amount/); 
 });
