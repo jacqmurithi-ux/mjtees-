@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from './lib/supabase';
 
-type Page = 'sales'|'production'|'calendar'|'inventory'|'purchasing'|'finance'|'reports'|'settings';
+type Page = 'costing'|'sales'|'production'|'calendar'|'inventory'|'purchasing'|'finance'|'reports'|'settings';
 type Row = Record<string, any>;
 const cash=(n:number)=>new Intl.NumberFormat('en-KE',{style:'currency',currency:'KES',maximumFractionDigits:0}).format(Number(n||0));
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -94,7 +94,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
     if(!payInvoice&&i.data?.[0]){setPayInvoice(i.data[0].id);setPaymentAmount(String(i.data[0].balance))}if(!refundPayment&&p.data?.[0])setRefundPayment(p.data[0].id)
    }else if(page==='reports'){
     const {data,error}=await supabase.rpc('owner_operational_report');if(error)throw error;setReport(data as Row);
-   }else if(page==='settings'){
+   }else if(page==='settings'||page==='costing'){
     const [profileResult,settingsResult,brandResult]=await Promise.all([supabase.from('costing_profiles').select('id,profile_name,version,direct_cost,is_active,components,created_at').order('profile_name').order('version',{ascending:false}),supabase.rpc('owner_get_max_unit_selling_price'),supabase.from('business_settings').select('logo_url').eq('business_id',businessId).maybeSingle()]);if(profileResult.error)throw profileResult.error;if(settingsResult.error)throw settingsResult.error;if(brandResult.error)throw brandResult.error;setProfiles(profileResult.data||[]);setLogoUrl(brandResult.data?.logo_url||'');const ceiling=settingsResult.data==null?null:Number(settingsResult.data);setSavedMaxUnitPrice(ceiling);setMaxUnitPrice(ceiling==null?'':String(ceiling));
    }
   }catch(e){
