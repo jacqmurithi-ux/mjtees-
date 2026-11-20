@@ -12,6 +12,7 @@ test('new quotations are drafts and do not receive acceptance evidence at creati
   assert.match(migration, /update public\.quotations set total=round\(v_lines_total,2\)\s+where id=v_quote/);
   assert.doesNotMatch(migration, /accepted_at=now\(\),accepted_recorded_by=v_user/);
   assert.match(migration, /'quotation\.created'/);
+  assert.match(migration, /create or replace function public\.owner_create_accepted_quotation[\s\S]*?security definer/);
 });
 
 test('acceptance is a separate owner-only evidence action for the current issued revision', () => {
