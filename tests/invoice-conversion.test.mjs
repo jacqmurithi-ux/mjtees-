@@ -77,7 +77,7 @@ test('Sales UI resolves invoices directly from quotations and presents a separat
   assert.match(operations, /owner_create_production_job_from_quote/);
   assert.match(operations, /Create invoice/);
   assert.match(operations, /Create production job/);
-  assert.match(operations, /sales_invoice_items\\(description,quantity,unit_price,line_total,direct_cost,quotation_line_id\\)/);
-  assert.match(operations, /i\\.sales_invoice_items\\?\\.map/);
+  assert.match(operations, /sales_invoice_items\(description,quantity,unit_price,line_total,direct_cost,quotation_line_id\)/);
+  assert.match(operations, /i\.sales_invoice_items\?\.map/);
   assert.doesNotMatch(operations, /Create invoice \+ job/);
 });
