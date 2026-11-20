@@ -224,7 +224,7 @@ begin
  select * into q from public.quotations where id=p_quote_id for update;
  if not found or not exists(select 1 from public.business_memberships where business_id=q.business_id and user_id=auth.uid() and role='owner') then raise exception 'Quotation not found'; end if;
  if q.status not in('draft','sent') then raise exception 'Only a quotation awaiting customer confirmation can be accepted'; end if;
- if exists(select 1 from public.quotations newer where newer.supersedes_quotation_id=q.id and newer.business_id=q.business_id) then raise exception 'Only the current issued quotation revision can be accepted'; end if;
+ if exists(select 1 from public.quotations newer where newer.supersedes_quotation_id=q.id and newer.business_id=q.business_id) then raise exception 'Only the current quotation revision can be accepted'; end if;
  update public.quotations set status='accepted',accepted_at=now(),accepted_recorded_by=auth.uid(),
   acceptance_method=p_acceptance_method,acceptance_reference=nullif(btrim(p_acceptance_reference),''),
   acceptance_notes=btrim(p_acceptance_notes),accepted_revision_number=revision_number
