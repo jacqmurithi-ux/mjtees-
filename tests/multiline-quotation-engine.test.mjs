@@ -4,7 +4,6 @@ import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261120140000_add_multiline_quotation_engine.sql', import.meta.url), 'utf8');
 const authoritativeMigration = await readFile(new URL('../supabase/migrations/20261120150000_enforce_catalogue_quote_authority.sql', import.meta.url), 'utf8');
-const authoritativeMigration = await readFile(new URL('../supabase/migrations/20261120150000_enforce_catalogue_quote_authority.sql', import.meta.url), 'utf8');
 
 test('accepted quotation RPC supports multiple independent lines and catalogue-linked methods', () => {
   assert.match(migration, /jsonb_array_length\(p_lines\)<1/);
@@ -16,8 +15,9 @@ test('accepted quotation RPC supports multiple independent lines and catalogue-l
 });
 
 test('fixed-price services may omit a costing profile while costed lines may not', () => {
-  assert.match(migration, /selling_method','\)<>\x27fixed_price\x27/);
-  assert.match(migration, /A costing profile is required for job-costed or quantity-tier lines/);
+  assert.match(authoritativeMigration, /v_selling_method<>'fixed_price'/);
+  assert.match(authoritativeMigration, /A costing profile is required for job-costed or quantity-tier lines/);
+  assert.match(authoritativeMigration, /v_selling_method='job_costed' and \(v_method is null or v_profile is null\)/);
 });
 
 test('customer-supplied items exclude blank-item costing and retain supply arrangement', () => {
