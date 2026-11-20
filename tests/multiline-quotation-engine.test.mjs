@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261120140000_add_multiline_quotation_engine.sql', import.meta.url), 'utf8');
+const authoritativeMigration = await readFile(new URL('../supabase/migrations/20261120150000_enforce_catalogue_quote_authority.sql', import.meta.url), 'utf8');
 
 test('accepted quotation RPC supports multiple independent lines and catalogue-linked methods', () => {
   assert.match(migration, /jsonb_array_length\(p_lines\)<1/);
