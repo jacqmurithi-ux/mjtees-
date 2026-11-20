@@ -260,6 +260,10 @@ begin
   status='accepted',accepted_at=now(),accepted_recorded_by=auth.uid(),acceptance_method=p_acceptance_method,
   acceptance_reference=nullif(btrim(p_acceptance_reference),''),acceptance_notes=btrim(p_acceptance_notes),accepted_revision_number=v_revision
  where id=v_new_quote and business_id=q.business_id;
+ insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+ values(q.business_id,auth.uid(),'quotation.accepted','quotation',v_new_quote,jsonb_build_object(
+  'revision_number',v_revision,'accepted_at',now(),'acceptance_method',p_acceptance_method,
+  'acceptance_reference',nullif(btrim(p_acceptance_reference),''),'acceptance_notes',btrim(p_acceptance_notes)));
  insert into public.quotation_revision_history(business_id,quotation_id,revision_number,revision_reason,snapshot,created_by)
  values(q.business_id,q.id,q.revision_number,btrim(p_revision_reason),jsonb_build_object(
   'quotation',to_jsonb(q),'lines',(select coalesce(jsonb_agg(to_jsonb(l) order by l.line_number nulls last,l.id),'[]'::jsonb) from public.quotation_lines l where l.quotation_id=q.id and l.business_id=q.business_id)
