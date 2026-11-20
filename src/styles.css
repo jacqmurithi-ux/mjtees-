@@ -298,3 +298,23 @@ body{background:#f3f6f9}
 .brand-logo-controls input[type=file]{max-width:100%;padding:9px;background:#f8fafc}
 .brand-logo-controls .op-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 @media(max-width:650px){.brand-logo-settings{grid-template-columns:1fr}}
+
+
+/* Consistent, high-contrast action buttons across white surfaces.
+   Keep navigation, calendar event tiles and inline text links in their own visual roles. */
+:root{--action-button:#f28c28;--action-button-hover:#df7616;--action-button-text:#fff}
+button:not(.tabbar button):not(.group button):not(.calendar-event):not(.customer-name-link):not(.text-action):not(.pulse):not(.hamb):not(.close):not(.user button):not(.modalhead button){
+  background:var(--action-button);
+  border:1px solid var(--action-button);
+  color:var(--action-button-text);
+}
+button:not(.tabbar button):not(.group button):not(.calendar-event):not(.customer-name-link):not(.text-action):not(.pulse):not(.hamb):not(.close):not(.user button):not(.modalhead button):hover:not(:disabled){
+  background:var(--action-button-hover);
+  border-color:var(--action-button-hover);
+  color:#fff;
+}
+button:not(.tabbar button):not(.group button):not(.calendar-event):not(.customer-name-link):not(.text-action):not(.pulse):not(.hamb):not(.close):not(.user button):not(.modalhead button):focus-visible{
+  outline:3px solid #1565c055;
+  outline-offset:2px;
+}
+button:disabled{cursor:not-allowed}
