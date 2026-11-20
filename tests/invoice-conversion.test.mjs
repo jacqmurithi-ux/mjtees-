@@ -27,6 +27,9 @@ test('one accepted quotation can be invoiced only once and repeated requests ret
 
 test('invoice conversion copies every quotation line and its exact financial and costing snapshot', () => {
   assert.match(invoiceFunction, /insert into public\.sales_invoice_items/);
+  assert.match(conversion, /quotation_line_id uuid references public\\.quotation_lines\\(id\\)/);
+  assert.match(invoiceFunction, /invoice_id,quotation_line_id,description/);
+  assert.match(invoiceFunction, /v_invoice_id,l\\.id,l\\.description/);
   assert.match(invoiceFunction, /l\.description,l\.quantity,l\.unit_price,l\.line_total,l\.direct_cost/);
   assert.match(invoiceFunction, /coalesce\(l\.details->'cost_snapshot','\{\}'::jsonb\)/);
   assert.match(invoiceFunction, /order by l\.line_number nulls last,l\.id/);
@@ -74,5 +77,7 @@ test('Sales UI resolves invoices directly from quotations and presents a separat
   assert.match(operations, /owner_create_production_job_from_quote/);
   assert.match(operations, /Create invoice/);
   assert.match(operations, /Create production job/);
+  assert.match(operations, /sales_invoice_items\\(description,quantity,unit_price,line_total,direct_cost,quotation_line_id\\)/);
+  assert.match(operations, /i\\.sales_invoice_items\\?\\.map/);
   assert.doesNotMatch(operations, /Create invoice \+ job/);
 });
