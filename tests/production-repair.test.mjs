@@ -79,7 +79,7 @@ test('Production screen queries the restored schema, calls the matching RPCs, an
   for (const table of ['production_jobs','stock_items','production_job_materials']) {
     assert.match(operations, new RegExp("from\\('" + table + "'\\)"));
   }
-  for (const rpc of ['owner_add_job_material','owner_issue_job_material','owner_set_production_stage']) {
+  for (const rpc of ['owner_add_job_material','owner_issue_job_material','owner_set_production_status','owner_update_production_schedule','owner_record_production_quality_check','owner_record_production_handover']) {
     assert.ok(operations.includes(rpc), rpc + ' is wired to the Production screen');
   }
   assert.match(operations, /Reflect\.get\(e,'message'\)/);
@@ -141,7 +141,7 @@ test('Production stage selector only offers legal next stages and includes quali
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
   assert.match(operations, /quality_check/);
   assert.match(operations, /const nextStages:Record<string,string\[]>/);
-  assert.match(operations, /\[j\.stage,\.\.\.\(nextStages\[j\.stage\]\|\|\[\]\)\]/);
+  assert.match(operations, /\[j\.production_status\|\|'created',\.\.\.\(nextProductionStatuses\[j\.production_status\|\|'created'\]\|\|\[\]\)\]/);
 });
 
 test('Production planning supports multiple material requirements on one job and scopes issuing to that job', async () => {
@@ -154,12 +154,13 @@ test('Production planning supports multiple material requirements on one job and
 });
 
 
-test('quotation form uses whole quantities and integer KSh selling prices', async () => {
+test('quotation form uses whole quantities and read-only catalogue-approved prices', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
-  assert.match(operations, /Quantity',qty,setQty,\{type:'number',min:'1',step:'1'\}/);
-  assert.match(operations, /Unit selling price \(KES\)',price,setPrice,\{type:'number',min:'1',step:'1'\}/);
-  assert.match(operations, /Quantity must be a whole number of at least 1/);
-  assert.match(operations, /Unit selling price must be at least KSh 1/);
+  assert.match(operations, /Quantity',line\.quantity,v=>update\(\{quantity:v\}\),\{type:'number',min:'1',step:'1'\}/);
+  assert.match(operations, /Catalogue-approved unit price \(KES\)/);
+  assert.match(operations, /owner-approved standard price/);
+  assert.match(operations, /quantity must be a whole number of at least 1/);
+  assert.doesNotMatch(operations, /Unit selling price \(KES\)',price,setPrice/);
 });
 
 test('quotation pricing shows rounded minimum, 1.8x warning and margin exception reason', async () => {
@@ -169,7 +170,7 @@ test('quotation pricing shows rounded minimum, 1.8x warning and margin exception
   assert.match(operations, /Below 1\.8× full-cost target/);
   assert.match(operations, /Approved exception:/);
   assert.match(operations, /Below 30% margin/);
-  assert.match(operations, /blank_cost_per_piece:blankCostPerPiece\.trim\(\)===''\?null:Number\(blankCostPerPiece\)/);
+  assert.match(operations, /blank_cost_per_piece:line\.blankCostPerPiece===''\?null:Number\(line\.blankCostPerPiece\)/);
 });
 
 
@@ -192,10 +193,13 @@ test('invoice cards expose customer, paid amount and outstanding balance; custom
   assert.match(operations, /owner_record_payment/);
 });
 
-test('quotation conversion continues to allocate deposits through the existing owner RPC without editing payment history', async () => {
+test('invoice conversion and production-job creation are separate owner actions while deposit recording remains unchanged', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
-  assert.match(operations, /owner_convert_quote_to_invoice/);
+  assert.match(operations, /owner_convert_accepted_quote_to_invoice/);
+  assert.match(operations, /owner_create_production_job_from_quote/);
   assert.match(operations, /owner_record_quote_deposit/);
+  assert.match(operations, /Create invoice/);
+  assert.match(operations, /Create production job/);
   assert.match(operations, /payment ledger remains append-only/);
   assert.doesNotMatch(operations, /reverse_payment|payment_reversal/i);
 });
@@ -330,13 +334,14 @@ test('Supplier purchasing migration preserves stock history and protects owner R
 });
 
 
-test('pricing uses the 30 percent gross-margin denominator and an optional owner-set unit ceiling', async () => {
+test('pricing uses the 30 percent gross-margin denominator and an owner-set unit ceiling enforced by the RPC', async () => {
   const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  const authority = await readFile(new URL('../supabase/migrations/20261120150000_enforce_catalogue_quote_authority.sql', import.meta.url), 'utf8');
   assert.match(operations, /directCostPerPiece\/0\.7/);
   assert.match(operations, /\(\(total-cost\)\/total\)\*100/);
   assert.match(operations, /owner_update_max_unit_selling_price/);
   assert.match(operations, /max_unit_selling_price/);
-  assert.match(operations, /savedMaxUnitPrice!==null&&Number\(price\)>savedMaxUnitPrice/);
+  assert.match(authority, /v_max_price is not null and v_standard>v_max_price/);
 });
 
 test('costing profiles calculate itemised component totals from required quantity and unit cost', async () => {
@@ -361,6 +366,40 @@ test('costing profiles preserve per-piece and per-job component bases in new imm
   assert.match(operations, /c\.basis\|\|'per_piece'/);
 });
 
+
+
+const productionWorkflow = await readFile(new URL('../supabase/migrations/20261120180000_production_schedule_quality_handover.sql', import.meta.url), 'utf8');
+
+test('production workflow records expected and actual dates, optional assignment and delay reasons', () => {
+  for (const column of ['expected_start_at','expected_completion_at','actual_started_at','actual_completed_at','delivery_at','assigned_to','delay_reason']) {
+    assert.match(productionWorkflow, new RegExp('add column if not exists '+column));
+  }
+  assert.match(productionWorkflow, /owner_update_production_schedule/);
+  assert.match(productionWorkflow, /Assigned staff member must belong to this business/);
+  assert.match(productionWorkflow, /production\.schedule_updated/);
+});
+
+test('production status transitions enforce material readiness, quality approval and handover', () => {
+  assert.match(productionWorkflow, /owner_set_production_status/);
+  assert.match(productionWorkflow, /Materials shortage: replenish or revise the material plan/);
+  assert.match(productionWorkflow, /Quality check must pass or have a recorded override reason/);
+  assert.match(productionWorkflow, /Record collection or delivery handover before closing the job/);
+  assert.match(productionWorkflow, /owner_record_production_quality_check/);
+  assert.match(productionWorkflow, /owner_record_production_handover/);
+  assert.match(productionWorkflow, /production\.quality_checked/);
+  assert.match(productionWorkflow, /production\.handover_recorded/);
+});
+
+test('production UI exposes scheduling, quality result and customer handover controls', async () => {
+  const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+  for (const label of ['Expected start','Expected completion','Delivery / collection date','Delay reason (optional)','Save production schedule','Quality findings / notes','Save quality result','Received by / recipient','Record handover']) {
+    assert.ok(operations.includes(label), label+' is present');
+  }
+  assert.match(operations, /owner_set_production_status/);
+  assert.match(operations, /owner_update_production_schedule/);
+  assert.match(operations, /owner_record_production_quality_check/);
+  assert.match(operations, /owner_record_production_handover/);
+});
 
 test('invoice lines preserve the exact immutable quotation component snapshot', () => {
   assert.match(pricingIntegrityMigration, /add column if not exists cost_snapshot jsonb not null default '\{\}'::jsonb/);

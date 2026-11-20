@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(87);
+select extensions.plan(99);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -102,25 +102,64 @@ select set_config('test.exception_quote_id',public.owner_create_quotation(
 )::text,true);
 select extensions.ok((select below_floor_approved_by=auth.uid() and below_floor_exception_reason='Approved contract exception' from public.quotations where id=current_setting('test.exception_quote_id')::uuid),'below-floor exception records owner approver and reason');
 
-select set_config('test.quote_id',public.owner_create_quotation(
- (select id from public.customers where customer_name='Example Customer'),current_setting('test.profile_id')::uuid,
- 'Q-TEST-E2E',current_date+7,
- '[{"description":"Generic production service for customer-supplied items","quantity":2,"unit_price":500,"direct_cost":0,"details":{"item_type":"printing_service","customer_supplied_items":true}}]'::jsonb,
- false,null
+select set_config('test.catalogue_item_id',public.owner_save_catalogue_item(
+ null,'E2E-REV-ITEM','Customer supplied print service','', 'service',null,'job_costed',500,'item','{}'::jsonb,true,jsonb_build_array(jsonb_build_object('production_method','screen_printing','costing_profile_id',current_setting('test.profile_id')::uuid,'is_preferred',true,'is_active',true))
 )::text,true);
+select set_config('test.original_quote_id',public.owner_create_accepted_quotation(
+ (select id from public.customers where customer_name='Example Customer'),'Q-TEST-E2E',current_date+7,
+ jsonb_build_array(jsonb_build_object('catalogue_item_id',current_setting('test.catalogue_item_id'),'description','Customer supplied print service','production_method','screen_printing','costing_profile_id',current_setting('test.profile_id'),'quantity',2,'unit_price',500,'supply_arrangement','customer_supplies','discount_type','none','discount_value',0)),
+ false,null,'phone','CALL-TEST-001','Customer confirmed every line and the full quotation total.'
+)::text,true);
+select extensions.ok((select status='accepted' and accepted_at is not null and accepted_recorded_by=auth.uid() and acceptance_method='phone' and acceptance_reference='CALL-TEST-001' and acceptance_notes='Customer confirmed every line and the full quotation total.' from public.quotations where id=current_setting('test.original_quote_id')::uuid),'only fully accepted quotations are saved, with timestamp, staff account and customer confirmation evidence');
+select extensions.is((select total from public.quotations where id=current_setting('test.original_quote_id')::uuid),1000::numeric,'test quotation total is KES 1,000');
+select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.original_quote_id')::uuid),40.00::numeric,'customer-supplied job-costed quote excludes blank-item cost and calculates gross margin over revenue');
+select extensions.is((select accepted_revision_number from public.quotations where id=current_setting('test.original_quote_id')::uuid),1,'initial accepted quotation records its accepted revision number');
 
-select extensions.is((select total from public.quotations where id=current_setting('test.quote_id')::uuid),1000::numeric,'test quotation total is KES 1,000');
-select extensions.is((select round(((total-(select sum(direct_cost) from public.quotation_lines where quotation_id=q.id))/total)*100,2) from public.quotations q where id=current_setting('test.quote_id')::uuid),40.00::numeric,'customer-supplied quote excludes blank-item cost and calculates gross margin over revenue');
-
-select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'sent');
-select public.owner_set_quotation_status(current_setting('test.quote_id')::uuid,'accepted');
-select extensions.is((select status from public.quotations where id=current_setting('test.quote_id')::uuid),'accepted','owner quotation status RPC records the accepted transition');
-select extensions.is((select count(*)::integer from public.audit_events where entity_type='quotation' and entity_id=current_setting('test.quote_id')::uuid and event_type='quotation.status_changed'),2,'each quotation status transition is audited');
+select set_config('test.revision_quote_id',public.owner_create_quotation_revision(
+ current_setting('test.original_quote_id')::uuid,'Q-TEST-E2E-R2',current_date+14,
+ jsonb_build_array(jsonb_build_object('catalogue_item_id',current_setting('test.catalogue_item_id'),'description','Customer supplied print service','production_method','screen_printing','costing_profile_id',current_setting('test.profile_id'),'quantity',2,'unit_price',500,'supply_arrangement','customer_supplies','discount_type','none','discount_value',0)),
+ false,null,'Customer requested a revised quotation','whatsapp','MSG-TEST-002','Customer approved all revised lines and the revised total.'
+)::text,true);
+select extensions.ok((select status='accepted' and revision_number=1 and accepted_revision_number=1 from public.quotations where id=current_setting('test.original_quote_id')::uuid),'creating a revision preserves the original accepted agreement');
+select extensions.ok((select status='accepted' and revision_number=2 and accepted_revision_number=2 and supersedes_quotation_id=current_setting('test.original_quote_id')::uuid and acceptance_method='whatsapp' from public.quotations where id=current_setting('test.revision_quote_id')::uuid),'revision creates a separately accepted version linked to the prior quotation');
+select extensions.ok(exists(select 1 from public.quotation_revision_history where quotation_id=current_setting('test.original_quote_id')::uuid and revision_number=1 and snapshot->'quotation'->>'acceptance_method'='phone' and snapshot->'quotation'->>'acceptance_notes'='Customer confirmed every line and the full quotation total.'),'revision history preserves the prior version and its acceptance evidence');
+select extensions.throws_ok(
+ 'select public.owner_convert_accepted_quote_to_invoice(current_setting(''test.original_quote_id'')::uuid,''INV-STALE-REVISION'',current_date+14)',
+ 'P0001','Only the current quotation revision can be converted to an invoice',
+ 'a superseded accepted version cannot be invoiced after a newer revision exists');
+select extensions.ok((select status='accepted' and accepted_revision_number=2 and acceptance_method='whatsapp' and acceptance_reference='MSG-TEST-002' from public.quotations where id=current_setting('test.revision_quote_id')::uuid),'current revision retains its fresh customer acceptance evidence');
+select extensions.is((select count(*)::integer from public.audit_events where entity_type='quotation' and entity_id=current_setting('test.original_quote_id')::uuid and event_type='quotation.accepted'),1,'initial quotation acceptance is audited separately from its revision');
+select set_config('test.quote_id',current_setting('test.revision_quote_id'),true);
 select set_config('test.deposit_id',public.owner_record_quote_deposit(current_setting('test.quote_id')::uuid,'DEP-TEST-001','mpesa_paybill',200,'DEP-REF-001')::text,true);
 select extensions.is((select amount from public.quotation_deposits where id=current_setting('test.deposit_id')::uuid),200::numeric,'quotation deposit is recorded before invoicing');
-select set_config('test.converted',public.owner_convert_quote_to_invoice(current_setting('test.quote_id')::uuid,'INV-TEST-E2E','JOB-TEST-E2E',current_date+14)::text,true);
+select set_config('test.converted',public.owner_convert_accepted_quote_to_invoice(current_setting('test.quote_id')::uuid,'INV-TEST-E2E',current_date+14)::text,true);
 select set_config('test.invoice_id',(current_setting('test.converted')::jsonb->>'invoice_id'),true);
-select set_config('test.job_id',(current_setting('test.converted')::jsonb->>'job_id'),true);
+select extensions.ok(not coalesce((current_setting('test.converted')::jsonb->>'production_job_created')::boolean,true),'invoice conversion does not create a production job');
+select set_config('test.job_created',public.owner_create_production_job_from_quote(current_setting('test.quote_id')::uuid,'JOB-TEST-E2E',current_date+14)::text,true);
+select set_config('test.job_id',(current_setting('test.job_created')::jsonb->>'job_id'),true);
+select extensions.is((select production_status from public.production_jobs where id=current_setting('test.job_id')::uuid),'created','new production jobs start in Created status');
+select public.owner_update_production_schedule(
+ current_setting('test.job_id')::uuid,now()+interval '1 day',now()+interval '2 days',now()+interval '3 days',null,'Customer requested a revised schedule'
+);
+select extensions.ok((select expected_start_at is not null and expected_completion_at is not null and delivery_at is not null and delay_reason='Customer requested a revised schedule' from public.production_jobs where id=current_setting('test.job_id')::uuid),'production schedule stores expected start, expected completion, delivery date and delay reason');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'ready_for_production');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'in_production');
+select extensions.ok((select actual_started_at is not null and production_status='in_production' from public.production_jobs where id=current_setting('test.job_id')::uuid),'actual production start is timestamped');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'quality_check');
+select public.owner_record_production_quality_check(current_setting('test.job_id')::uuid,false,'Initial quality check found an alignment issue',null);
+select extensions.throws_ok(
+ 'select public.owner_set_production_status(current_setting(''test.job_id'')::uuid,''completed'')',
+ 'P0001','Quality check must pass or have a recorded override reason',
+ 'failed quality check cannot complete a job without an override reason');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'in_production');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'quality_check');
+select public.owner_record_production_quality_check(current_setting('test.job_id')::uuid,true,'Rework completed and all quality checks passed',null);
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'completed');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'ready_for_collection');
+select public.owner_record_production_handover(current_setting('test.job_id')::uuid,'collection','Example Customer','Customer confirmed collection of the complete order.');
+select public.owner_set_production_status(current_setting('test.job_id')::uuid,'delivered');
+select extensions.ok((select production_status='delivered' and quality_check_passed and quality_checked_by=auth.uid() and actual_completed_at is not null and delivered_at is not null and handover_at is not null and handover_method='collection' and handover_recipient='Example Customer' and handover_by=auth.uid() from public.production_jobs where id=current_setting('test.job_id')::uuid),'quality approval, completion, handover and delivery are recorded on the production job');
+
 
 select extensions.is((select amount_paid from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),200::numeric,'quote deposit is carried into invoice paid amount');
 select extensions.is((select balance from public.sales_invoices where id=current_setting('test.invoice_id')::uuid),800::numeric,'invoice balance is reduced by the quote deposit');
@@ -147,7 +186,7 @@ select set_config('test.customer_supplied_quote_id',public.owner_create_quotatio
 )::text,true);
 select extensions.is((select direct_cost from public.quotation_lines where quotation_id=current_setting('test.customer_supplied_quote_id')::uuid),450::numeric,'customer-supplied garments omit only blank-item component and retain per-piece decoration plus per-job setup');
 select extensions.ok((select details->'cost_snapshot'->>'profile_id'=current_setting('test.mixed_profile_id') from public.quotation_lines where quotation_id=current_setting('test.mixed_quote_id')::uuid),'quotation snapshot identifies the exact costing profile version');
-select extensions.ok((select costing_profile_id=current_setting('test.profile_id')::uuid from public.quotations where id=current_setting('test.quote_id')::uuid),'historical quotation retains the costing profile version used when it was created');
+select extensions.ok((select costing_profile_id=current_setting('test.profile_id')::uuid from public.quotation_lines where quotation_id=current_setting('test.quote_id')::uuid),'historical quotation line retains the costing profile version used when it was created');
 
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),10::numeric,'customer-owned items do not reduce MJ stock');
 
