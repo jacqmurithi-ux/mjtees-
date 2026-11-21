@@ -85,6 +85,49 @@ begin
  return v_result||jsonb_build_object('pricing_source','dtf_costing','direct_cost_total',round(p_direct_cost_per_piece*p_quantity,2));
 end $$;
 
+-- Carry DTF quote metadata into production and consume MJ garments only when
+-- the accepted quotation is converted into a production job.
+create or replace function private.apply_dtf_quote_production_details()
+returns trigger language plpgsql security definer set search_path=public,private,pg_temp as $
+declare v_line public.quotation_lines%rowtype; v_details jsonb; v_garment jsonb; v_stock public.stock_items%rowtype; v_qty numeric;
+begin
+ if new.quotation_id is null then return new; end if;
+ select * into v_line from public.quotation_lines
+ where quotation_id=new.quotation_id and business_id=new.business_id
+  and details->'cost_snapshot'->>'pricing_source'='dtf_costing'
+ order by line_number nulls first,created_at,id limit 1;
+ if not found then return new; end if;
+ v_details:=v_line.details->'cost_snapshot'->'dtf_details';
+ update public.production_jobs set
+  notes=concat_ws(E'\\n',nullif(notes,''),'DTF production details: '||v_details::text),
+  actual_direct_cost=v_line.direct_cost,
+  customer_supplied_items=not (coalesce(v_details->'garments','[]'::jsonb) @> '[{"supply_source":"mj_supplies"}]'::jsonb)
+ where id=new.id and business_id=new.business_id;
+ for v_garment in select value from jsonb_array_elements(coalesce(v_details->'garments','[]'::jsonb)) loop
+  if v_garment->>'supply_source'='mj_supplies' and nullif(v_garment->>'inventory_stock_item_id','') is not null then
+   v_qty:=(v_garment->>'quantity')::numeric;
+   if v_qty<=0 or v_qty<>trunc(v_qty) then raise exception 'DTF garment inventory quantities must be whole numbers greater than zero'; end if;
+   select * into v_stock from public.stock_items
+   where id=(v_garment->>'inventory_stock_item_id')::uuid and business_id=new.business_id and active for update;
+   if not found then raise exception 'DTF garment stock item is inactive or unavailable'; end if;
+   if v_stock.quantity_on_hand<v_qty then raise exception 'Insufficient stock for %: required %, available %',v_stock.item_name,v_qty,v_stock.quantity_on_hand; end if;
+   perform private.apply_stock_movement(new.business_id,v_stock.id,-v_qty,v_stock.average_unit_cost,'dtf_garment_quote_conversion');
+   insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+   values(new.business_id,auth.uid(),'inventory.dtf_garment_stock_consumed','production_job',new.id,
+    jsonb_build_object('stock_item_id',v_stock.id,'item_name',v_stock.item_name,'quantity',v_qty,'unit',v_stock.unit,'movement_type','dtf_garment_quote_conversion'));
+  end if;
+ end loop;
+ return new;
+end $;
+
+drop trigger if exists trg_apply_dtf_quote_production_details on public.production_jobs;
+create trigger trg_apply_dtf_quote_production_details
+after insert on public.production_jobs
+for each row execute function private.apply_dtf_quote_production_details();
+
+revoke all on function private.apply_dtf_quote_production_details() from public,anon;
+grant execute on function private.apply_dtf_quote_production_details() to authenticated;
+
 revoke all on function public.owner_create_dtf_quotation(uuid,text,date,numeric,numeric,numeric,jsonb,boolean,text) from public,anon;
 grant execute on function public.owner_create_dtf_quotation(uuid,text,date,numeric,numeric,numeric,jsonb,boolean,text) to authenticated;
 revoke all on function public.owner_create_dtf_quick_sale(uuid,text,date,text,numeric,numeric,numeric,jsonb,jsonb,boolean,text,text,text,numeric,text) from public,anon;
