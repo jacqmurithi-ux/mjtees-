@@ -126,7 +126,7 @@ begin
  select * into b from public.dtf_print_batches where id=j.batch_id and business_id=biz;
  unit_price:=coalesce(j.agreed_unit_price,j.suggested_unit_price);
  if unit_price+0.000001 < j.direct_cost/j.quantity/0.7 then raise exception 'DTF job price is below the 30% gross-margin floor'; end if;
- details:=jsonb_build_object('module','dtf_costing','source','mixed_supplier_batch','batch_id',b.id,'job_id',j.id,'sticker_type',j.sticker_type,'width_inches',j.width_inches,'height_inches',j.height_inches,'quantity',j.quantity,'allocated_print_transport_cost',j.allocated_print_transport_cost,'allocated_heat_press_cost',j.allocated_heat_press_cost,'allocated_labour_cost',j.allocated_labour_cost,'allocated_labour_cost',j.allocated_labour_cost,'direct_cost_total',j.direct_cost,'direct_cost_per_piece',j.direct_cost/j.quantity);
+ details:=jsonb_build_object('module','dtf_costing','source','mixed_supplier_batch','batch_id',b.id,'job_id',j.id,'sticker_type',j.sticker_type,'width_inches',j.width_inches,'height_inches',j.height_inches,'quantity',j.quantity,'allocated_print_transport_cost',j.allocated_print_transport_cost,'allocated_heat_press_cost',j.allocated_heat_press_cost,'allocated_labour_cost',j.allocated_labour_cost,'direct_cost_total',j.direct_cost,'direct_cost_per_piece',j.direct_cost/j.quantity);
  qid:=public.owner_create_dtf_quotation(j.customer_id,p_quote_number,p_valid_until,j.quantity,unit_price,j.direct_cost/j.quantity,details,false,null);
  update public.dtf_print_jobs set quotation_id=qid,transaction_status='quoted' where id=j.id;
  return qid;
@@ -145,7 +145,7 @@ begin
  select * into b from public.dtf_print_batches where id=j.batch_id and business_id=biz;
  price:=coalesce(j.agreed_unit_price,j.suggested_unit_price);
  if price+0.000001 < j.direct_cost/j.quantity/0.7 then raise exception 'DTF job price is below the 30% gross-margin floor'; end if;
- details:=jsonb_build_object('module','dtf_costing','source','mixed_supplier_batch','batch_id',b.id,'job_id',j.id,'stickers',jsonb_build_array(jsonb_build_object('label',j.sticker_type,'width_inches',j.width_inches,'height_inches',j.height_inches,'quantity',j.quantity)),'direct_cost_total',j.direct_cost,'direct_cost_per_piece',j.direct_cost/j.quantity,'garments','[]'::jsonb);
+ details:=jsonb_build_object('module','dtf_costing','source','mixed_supplier_batch','batch_id',b.id,'job_id',j.id,'stickers',jsonb_build_array(jsonb_build_object('label',j.sticker_type,'width_inches',j.width_inches,'height_inches',j.height_inches,'quantity',j.quantity)),'allocated_print_transport_cost',j.allocated_print_transport_cost,'allocated_heat_press_cost',j.allocated_heat_press_cost,'allocated_labour_cost',j.allocated_labour_cost,'direct_cost_total',j.direct_cost,'direct_cost_per_piece',j.direct_cost/j.quantity,'garments','[]'::jsonb);
  result:=public.owner_create_dtf_quick_sale(j.customer_id,p_invoice_number,p_due_date,j.sticker_type,j.quantity,price,j.direct_cost/j.quantity,details,'[]'::jsonb,false,null,p_payment_number,p_payment_method,coalesce(p_payment_amount,0),p_payment_reference);
  update public.dtf_print_jobs set invoice_id=(result->>'invoice_id')::uuid,transaction_status='sold' where id=j.id;
  return result||jsonb_build_object('dtf_batch_id',b.id,'dtf_job_id',j.id);
