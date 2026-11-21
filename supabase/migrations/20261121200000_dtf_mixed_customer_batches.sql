@@ -122,3 +122,40 @@ revoke all on function public.owner_quote_dtf_batch_job(uuid,text,date) from pub
 grant execute on function public.owner_quote_dtf_batch_job(uuid,text,date) to authenticated;
 revoke all on function public.owner_sell_dtf_batch_job(uuid,text,date,numeric,text,text,text) from public,anon;
 grant execute on function public.owner_sell_dtf_batch_job(uuid,text,date,numeric,text,text,text) to authenticated;
+
+
+-- Supplier cost recognition: unpaid DTF orders remain obligations; each actual
+-- payment is posted once to Finance > Expenses / Supplies.
+alter table public.dtf_print_batches add column if not exists supplier_id uuid references public.suppliers(id);
+alter table public.dtf_print_batches add column if not exists supplier_order_reference text;
+alter table public.supplier_payments add column if not exists dtf_batch_id uuid references public.dtf_print_batches(id);
+alter table public.expenses add column if not exists source_type text;
+alter table public.expenses add column if not exists source_id uuid;
+create unique index if not exists expenses_source_unique on public.expenses(source_type,source_id) where source_type is not null and source_id is not null;
+create index if not exists supplier_payments_dtf_batch_idx on public.supplier_payments(dtf_batch_id);
+
+create or replace function public.owner_record_dtf_supplier_payment(
+ p_batch_id uuid,p_payment_number text,p_method text,p_amount numeric,p_reference_code text default null
+) returns uuid language plpgsql security definer set search_path=public,private,pg_temp as $$
+declare u uuid:=auth.uid(); biz uuid; b public.dtf_print_batches%rowtype; supplier_due numeric; paid numeric; payment_id uuid; expense_id uuid;
+begin
+ select business_id into biz from public.business_memberships where user_id=u and role='owner' order by created_at limit 1;
+ if biz is null then raise exception 'Owner workspace required'; end if;
+ select * into b from public.dtf_print_batches where id=p_batch_id and business_id=biz for update;
+ if not found then raise exception 'DTF supplier batch not found'; end if;
+ if b.supplier_id is null then raise exception 'Select the supplier for this DTF batch before recording payment'; end if;
+ if p_method not in ('cash','mpesa_paybill') or p_amount is null or p_amount<=0 or length(btrim(coalesce(p_payment_number,'')))=0 then raise exception 'Enter a valid payment number, method and positive amount'; end if;
+ select coalesce(sum(amount),0) into paid from public.supplier_payments where business_id=biz and dtf_batch_id=b.id;
+ supplier_due:=b.printing_charge+b.transport_cost-paid;
+ if p_amount>greatest(0,supplier_due) then raise exception 'Payment exceeds outstanding DTF supplier order balance'; end if;
+ insert into public.supplier_payments(business_id,supplier_id,dtf_batch_id,payment_number,method,amount,reference_code,paid_by)
+ values(biz,b.supplier_id,b.id,btrim(p_payment_number),p_method,p_amount,nullif(btrim(p_reference_code),''),u) returning id into payment_id;
+ insert into public.expenses(business_id,expense_date,category,description,amount,payment_method,created_by,source_type,source_id)
+ values(biz,current_date,'Supplies','DTF supplier order '+b.batch_number||' — payment '+btrim(p_payment_number),p_amount,p_method,u,'dtf_supplier_payment',payment_id)
+ returning id into expense_id;
+ insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+ values(biz,u,'dtf.supplier_payment_recorded','dtf_supplier_payment',payment_id,jsonb_build_object('batch_id',b.id,'expense_id',expense_id,'amount',p_amount,'category','Supplies','outstanding_after_payment',supplier_due-p_amount));
+ return payment_id;
+end $$;
+revoke all on function public.owner_record_dtf_supplier_payment(uuid,text,text,numeric,text) from public,anon;
+grant execute on function public.owner_record_dtf_supplier_payment(uuid,text,text,numeric,text) to authenticated;
