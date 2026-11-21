@@ -485,6 +485,20 @@ select extensions.is(
  2::numeric,
  'branded order reserves the exact apparel variant without reducing physical stock');
 select extensions.throws_ok(
+ $assert$select public.owner_reserve_apparel_variant(
+  current_setting('test.apparel_job_id')::uuid,
+  (select id from public.catalogue_item_variants where catalogue_item_id=current_setting('test.apparel_blank_catalogue_id')::uuid),
+  1
+ )$assert$,
+ 'P0001','Selected apparel variant does not match an item on the production job invoice',
+ 'a production job cannot reserve a variant from an unrelated catalogue item');
+select extensions.throws_ok(
+ $assert$select public.owner_reserve_apparel_variant(
+  current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,1
+ )$assert$,
+ 'P0001','Reservation exceeds invoiced quantity. Invoiced 4, already reserved or issued 4, requested 1',
+ 'combined reservations across sizes and colours cannot exceed the invoice quantity');
+select extensions.throws_ok(
  $assert$select public.owner_create_apparel_quick_sale(
   jsonb_build_object(
    'p_customer_id',(select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
