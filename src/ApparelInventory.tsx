@@ -15,7 +15,7 @@ export default function ApparelInventory({businessId,onChanged}:{businessId:stri
  const refresh=useCallback(async()=>{
   if(!supabase)throw new Error('Supabase is not configured.');
   const [c,v,j,r]=await Promise.all([
-   supabase.from('catalogue_items').select('id,name,item_type,category').eq('is_active',true).eq('item_type','product').order('name'),
+   supabase.from('catalogue_items').select('id,name,item_type,category,description').eq('is_active',true).eq('item_type','product').order('name'),
    supabase.from('catalogue_item_variants').select('id,sku,size,colour,style,capacity,attributes,catalogue_item_id,stock_item_id,stock_items(item_name,quantity_on_hand,reorder_level,average_unit_cost,unit)').eq('business_id',businessId).eq('active',true).order('sku'),
    supabase.from('production_jobs').select('id,job_number,production_status,customer_supplied_items').eq('business_id',businessId).not('production_status','in','(cancelled,delivered)').order('created_at',{ascending:false}),
    supabase.from('apparel_variant_reservations').select('id,variant_id,job_id,quantity,issued_quantity,status,created_at').eq('business_id',businessId).in('status',['reserved','partially_issued']).order('created_at',{ascending:false})
@@ -35,7 +35,8 @@ export default function ApparelInventory({businessId,onChanged}:{businessId:stri
  const selectedProduct=catalogue.find(x=>x.id===product);
  const productName=String(selectedProduct?.name||'').toLowerCase();
  const productCategory=String(selectedProduct?.category||'').toLowerCase();
- const isReflective=/reflective.*(jacket|vest)|(jacket|vest).*reflective/.test(productName);
+ const productText=(productName+' '+String(selectedProduct?.description||'').toLowerCase());
+ const isReflective=/(reflective|hi.?vis).*(jacket|vest)|(jacket|vest).*(reflective|hi.?vis)/.test(productText);
  const isHeadwear=/cap|headwear/.test(productName)||productCategory==='headwear';
  const isDrinkware=/mug|tumbler|drinkware/.test(productName)||productCategory==='drinkware';
  const isApparel=/t[ -]?shirt|polo|hoodie/.test(productName)||productCategory==='apparel';
