@@ -184,13 +184,16 @@ declare v_res public.apparel_variant_reservations%rowtype; v_variant public.cata
  v_stock public.stock_items%rowtype; v_job public.production_jobs%rowtype; v_remaining numeric;
 begin
  if auth.uid() is null or p_quantity is null or p_quantity<=0 then raise exception 'Authentication and a positive issue quantity are required'; end if;
- select * into v_res from public.apparel_variant_reservations where id=p_reservation_id for update;
+ -- Read the reservation to identify its job, then lock in the same order as cancellation:
+ -- production job first, reservation second, stock item third.
+ select * into v_res from public.apparel_variant_reservations where id=p_reservation_id;
  if not found or not exists(select 1 from public.business_memberships where business_id=v_res.business_id and user_id=auth.uid() and role='owner') then raise exception 'Reservation not found'; end if;
- if v_res.status not in('reserved','partially_issued') then raise exception 'Reservation is no longer active'; end if;
- v_remaining:=v_res.quantity-v_res.issued_quantity;
- if p_quantity>v_remaining then raise exception 'Issue quantity exceeds remaining reserved quantity'; end if;
  select * into v_job from public.production_jobs where id=v_res.job_id and business_id=v_res.business_id for update;
  if not found or v_job.production_status in('cancelled','delivered') then raise exception 'Cannot issue stock to a closed production job'; end if;
+ select * into v_res from public.apparel_variant_reservations where id=p_reservation_id for update;
+ if not found or v_res.status not in('reserved','partially_issued') then raise exception 'Reservation is no longer active'; end if;
+ v_remaining:=v_res.quantity-v_res.issued_quantity;
+ if p_quantity>v_remaining then raise exception 'Issue quantity exceeds remaining reserved quantity'; end if;
  select * into v_variant from public.catalogue_item_variants where id=v_res.variant_id and business_id=v_res.business_id;
  select * into v_stock from public.stock_items where id=v_variant.stock_item_id and business_id=v_res.business_id for update;
  if not found or not v_stock.active or v_stock.quantity_on_hand<p_quantity then raise exception 'Insufficient stock or inactive variant'; end if;
