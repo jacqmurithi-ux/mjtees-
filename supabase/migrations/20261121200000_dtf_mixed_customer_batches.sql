@@ -39,8 +39,8 @@ create index if not exists dtf_jobs_batch_idx on public.dtf_print_jobs(batch_id,
 create index if not exists dtf_jobs_customer_idx on public.dtf_print_jobs(business_id,customer_id,created_at desc);
 alter table public.dtf_print_batches enable row level security;
 alter table public.dtf_print_jobs enable row level security;
-create policy dtf_batches_owner_read on public.dtf_print_batches for select to authenticated using(exists(select 1 from public.business_memberships m where m.business_id=business_id and m.user_id=auth.uid() and m.role='owner'));
-create policy dtf_jobs_owner_read on public.dtf_print_jobs for select to authenticated using(exists(select 1 from public.business_memberships m where m.business_id=business_id and m.user_id=auth.uid() and m.role='owner'));
+create policy dtf_batches_owner_read on public.dtf_print_batches for select to authenticated using(exists(select 1 from public.business_memberships m where m.business_id=dtf_print_batches.business_id and m.user_id=auth.uid() and m.role='owner'));
+create policy dtf_jobs_owner_read on public.dtf_print_jobs for select to authenticated using(exists(select 1 from public.business_memberships m where m.business_id=dtf_print_jobs.business_id and m.user_id=auth.uid() and m.role='owner'));
 revoke all on public.dtf_print_batches,public.dtf_print_jobs from anon,authenticated;
 grant select on public.dtf_print_batches,public.dtf_print_jobs to authenticated;
 create or replace function public.owner_create_dtf_batch(p_batch jsonb,p_jobs jsonb)
@@ -70,7 +70,7 @@ begin
  for j in select value from jsonb_array_elements(p_jobs) loop
   n:=n+1; cust:=(j->>'customer_id')::uuid; w:=(j->>'width_inches')::numeric; h:=(j->>'height_inches')::numeric; q:=(j->>'quantity')::integer; a:=w*h*q;
   alloc_print:=round(print_total*a/area_total,2);
-  alloc_press:=case when n=jsonb_array_length(p_jobs) then press_total-(select coalesce(sum(allocated_heat_press_cost),0) from public.dtf_print_jobs where batch_id=b) else round(press_total*a/area_total,2) end;
+  alloc_press:=case when n=jsonb_array_length(p_jobs) then press_total-(select coalesce(sum(allocated_heat_press_cost),0) from public.dtf_print_jobs where batch_id=b) when coalesce(p_batch->>'heat_press_basis','piece')='piece' then round(coalesce((p_batch->>'heat_press_rate')::numeric,0)*q,2) else round(press_total*a/area_total,2) end;
   direct:=coalesce((j->>'direct_cost')::numeric,alloc_print+alloc_press);
   insert into public.dtf_print_jobs(business_id,batch_id,line_number,customer_id,job_reference,sticker_type,width_inches,height_inches,quantity,area_sq_in,allocated_print_transport_cost,allocated_heat_press_cost,direct_cost,suggested_unit_price,agreed_unit_price)
   values(biz,b,n,cust,nullif(j->>'job_reference',''),coalesce(nullif(j->>'sticker_type',''),'DTF sticker'),w,h,q,a,alloc_print,alloc_press,direct,coalesce((j->>'suggested_unit_price')::numeric,ceil(direct/q/0.7)),nullif(j->>'agreed_unit_price','')::numeric);
