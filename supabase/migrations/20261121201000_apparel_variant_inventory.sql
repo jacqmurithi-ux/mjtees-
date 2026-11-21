@@ -148,7 +148,7 @@ language plpgsql security definer
 set search_path=public,pg_temp
 as $fn$
 declare v_business uuid; v_job public.production_jobs%rowtype; v_variant public.catalogue_item_variants%rowtype;
- v_stock public.stock_items%rowtype; v_reserved numeric; v_id uuid;
+ v_stock public.stock_items%rowtype; v_reserved numeric; v_invoice_quantity numeric; v_id uuid;
 begin
  if auth.uid() is null or p_quantity is null or p_quantity<=0 or p_quantity<>trunc(p_quantity) then raise exception 'Authentication and a positive whole-piece reservation quantity are required'; end if;
  select business_id into v_business from public.business_memberships
@@ -159,6 +159,24 @@ begin
  select * into v_variant from public.catalogue_item_variants
  where id=p_variant_id and business_id=v_business and active for share;
  if not found then raise exception 'Active apparel variant not found'; end if;
+ -- The job-level row lock serializes reservations for all variants on this invoice.
+ -- A variant may only be reserved for a catalogue item actually present on its invoice.
+ select coalesce(sum(i.quantity),0) into v_invoice_quantity
+ from public.sales_invoice_items i
+ where i.business_id=v_business and i.invoice_id=v_job.invoice_id
+  and i.cost_snapshot->>'catalogue_item_id'=v_variant.catalogue_item_id::text;
+ if v_invoice_quantity<=0 then
+  raise exception 'Selected apparel variant does not match an item on the production job invoice';
+ end if;
+ select coalesce(sum(case when r.status in('reserved','partially_issued')
+   then r.quantity else r.issued_quantity end),0) into v_reserved
+ from public.apparel_variant_reservations r
+ join public.catalogue_item_variants cv on cv.id=r.variant_id and cv.business_id=r.business_id
+ where r.business_id=v_business and r.job_id=p_job_id
+  and cv.catalogue_item_id=v_variant.catalogue_item_id;
+ if v_reserved+p_quantity>v_invoice_quantity then
+  raise exception 'Reservation exceeds invoiced quantity. Invoiced %, already reserved or issued %, requested %',v_invoice_quantity,v_reserved,p_quantity;
+ end if;
  select * into v_stock from public.stock_items where id=v_variant.stock_item_id and business_id=v_business and active for update;
  if not found then raise exception 'Variant stock item is inactive'; end if;
  select coalesce(sum(quantity-issued_quantity),0) into v_reserved
