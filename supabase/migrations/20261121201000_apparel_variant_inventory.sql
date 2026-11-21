@@ -79,7 +79,7 @@ language plpgsql security definer
 set search_path=public,private,pg_temp
 as $fn$
 declare v_business uuid; v_item public.catalogue_items%rowtype; v_location uuid;
- v_stock uuid; v_variant uuid; v_name text; v_attrs jsonb;
+ v_stock uuid; v_variant uuid; v_name text; v_attrs jsonb; v_item_name text; v_category text;
 begin
  if auth.uid() is null then raise exception 'Authentication required'; end if;
  select business_id into v_business from public.business_memberships
@@ -91,11 +91,32 @@ begin
  if length(btrim(coalesce(p_sku,'')))<2 or p_location_code not in('shop_1','shop_2')
    or coalesce(p_opening_quantity,-1)<0 or coalesce(p_reorder_level,-1)<0 or coalesce(p_unit_cost,-1)<0
  then raise exception 'Enter a SKU, valid location and non-negative stock values'; end if;
- if nullif(btrim(coalesce(p_size,'')),'') is null
+ v_item_name:=lower(coalesce(v_item.name,''));
+ v_category:=lower(coalesce(v_item.category,''));
+ if (v_item_name ~ '(t[ -]?shirts?|polos?|hoodies?)' or v_category='apparel')
+    and v_item_name !~ '(reflective)' then
+  if nullif(btrim(coalesce(p_size,'')),'') is null or nullif(btrim(coalesce(p_colour,'')),'') is null then
+   raise exception 'This apparel variant requires both size and colour';
+  end if;
+ elsif v_item_name ~ '(caps?|headwear)' or v_category='headwear' then
+  if nullif(btrim(coalesce(p_colour,'')),'') is null or nullif(btrim(coalesce(p_style,'')),'') is null then
+   raise exception 'A cap variant requires colour and style (for example adjustable or fitted)';
+  end if;
+ elsif v_item_name ~ '(mugs?|tumblers?|drinkware)' or v_category='drinkware' then
+  if nullif(btrim(coalesce(p_colour,'')),'') is null or nullif(btrim(coalesce(p_capacity,'')),'') is null then
+   raise exception 'A drinkware variant requires colour and capacity/type';
+  end if;
+ elsif v_item_name ~ 'reflective.*(jackets?|vests?)|((jackets?|vests?).*reflective)' then
+  if nullif(btrim(coalesce(p_size,'')),'') is null or nullif(btrim(coalesce(p_colour,'')),'') is null
+     or nullif(btrim(coalesce(p_style,'')),'') is null then
+   raise exception 'A reflective garment variant requires size, colour and reflective style';
+  end if;
+ elsif nullif(btrim(coalesce(p_size,'')),'') is null
   and nullif(btrim(coalesce(p_colour,'')),'') is null
   and nullif(btrim(coalesce(p_style,'')),'') is null
-  and nullif(btrim(coalesce(p_capacity,'')),'') is null
- then raise exception 'At least one variant attribute (size, colour, style or capacity) is required'; end if;
+  and nullif(btrim(coalesce(p_capacity,'')),'') is null then
+  raise exception 'At least one variant attribute (size, colour, style or capacity) is required';
+ end if;
  select id into v_location from public.inventory_locations
  where business_id=v_business and location_code=p_location_code;
  if v_location is null then raise exception 'Inventory location not found'; end if;
@@ -176,7 +197,34 @@ begin
  update public.apparel_variant_reservations set issued_quantity=issued_quantity+p_quantity,
   status=case when issued_quantity+p_quantity>=quantity then 'issued' else 'partially_issued' end,updated_at=now()
  where id=v_res.id;
- update public.production_jobs set actual_direct_cost=coalesce(actual_direct_cost,0)+(p_quantity*v_stock.average_unit_cost)
+ -- Replace the estimated blank-item component from the linked invoice with actual
+ -- issued garment cost. Preserve all other direct costs and count partial issues once.
+ select coalesce(sum(i.quantity),0),
+        coalesce(sum(case when jsonb_typeof(i.cost_snapshot->'components')='array' then
+          (select coalesce(sum(nullif(c.value->>'total_cost','')::numeric),0)
+           from jsonb_array_elements(i.cost_snapshot->'components') c(value)
+           where c.value->>'category'='blank_item')
+         else 0 end),0)
+ into v_invoice_quantity,v_blank_estimate_total
+ from public.sales_invoice_items i
+ where i.business_id=v_res.business_id
+  and i.invoice_id=v_job.invoice_id
+  and i.cost_snapshot->>'catalogue_item_id'=v_variant.catalogue_item_id::text;
+ select coalesce(sum(r.issued_quantity),0) into v_previously_issued
+ from public.apparel_variant_reservations r
+ join public.catalogue_item_variants cv on cv.id=r.variant_id and cv.business_id=r.business_id
+ where r.business_id=v_res.business_id and r.job_id=v_res.job_id
+  and cv.catalogue_item_id=v_variant.catalogue_item_id;
+ if v_invoice_quantity>0 and v_blank_estimate_total>0 then
+  v_blank_estimate_to_replace:=round(
+   (v_blank_estimate_total/v_invoice_quantity)
+   *least(p_quantity,greatest(v_invoice_quantity-v_previously_issued,0)),2);
+ end if;
+ select greatest(0,coalesce(actual_direct_cost,0)-v_blank_estimate_to_replace)
+   +round(p_quantity*v_stock.average_unit_cost,2)
+ into v_actual_job_cost
+ from public.production_jobs where id=v_res.job_id and business_id=v_res.business_id;
+ update public.production_jobs set actual_direct_cost=v_actual_job_cost
  where id=v_res.job_id and business_id=v_res.business_id;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(v_res.business_id,auth.uid(),'inventory.apparel_variant_issued','apparel_variant_reservation',v_res.id,
@@ -274,7 +322,7 @@ set search_path=public,private,pg_temp
 as $fn$
 declare
  v_business uuid; v_variant public.catalogue_item_variants%rowtype; v_stock public.stock_items%rowtype;
- v_result jsonb; v_qty numeric; v_supply text; v_item_id uuid; v_invoice uuid;
+ v_result jsonb; v_qty numeric; v_supply text; v_item_id uuid; v_invoice uuid; v_reserved numeric:=0;
  v_invoice_total numeric(14,2); v_existing_cost numeric(14,2); v_blank_estimate numeric(14,2);
  v_other_cost numeric(14,2); v_actual_cost numeric(14,2); v_margin numeric(7,2);
  v_snapshot jsonb; v_exception boolean; v_exception_reason text;
@@ -282,6 +330,7 @@ begin
  if auth.uid() is null or jsonb_typeof(p_sale_args)<>'object' or p_variant_id is null then raise exception 'Invalid apparel sale request'; end if;
  select business_id into v_business from public.business_memberships
  where user_id=auth.uid() and role='owner' order by created_at limit 1;
+ perform 1 from public.businesses where id=v_business for update;
  select * into v_variant from public.catalogue_item_variants
  where id=p_variant_id and business_id=v_business and active for share;
  if not found then raise exception 'Active apparel variant not found'; end if;
@@ -292,7 +341,15 @@ begin
  if v_supply<>'mj_supplies' then raise exception 'Customer-supplied items must use the standard sale workflow without MJ stock'; end if;
  if v_qty is null or v_qty<=0 or v_qty<>trunc(v_qty) then raise exception 'Apparel quantity must be a whole number greater than zero'; end if;
  select * into v_stock from public.stock_items where id=v_variant.stock_item_id and business_id=v_business and active for update;
- if not found or v_stock.quantity_on_hand<v_qty then raise exception 'Insufficient apparel variant stock'; end if;
+ if not found then raise exception 'Apparel variant stock item is inactive or unavailable'; end if;
+ select coalesce(sum(quantity-issued_quantity),0) into v_reserved
+ from public.apparel_variant_reservations
+ where business_id=v_business and variant_id=p_variant_id
+  and status in('reserved','partially_issued');
+ if v_stock.quantity_on_hand-v_reserved<v_qty then
+  raise exception 'Insufficient available apparel stock after reservations. On hand %, reserved %, requested %',
+   v_stock.quantity_on_hand,v_reserved,v_qty;
+ end if;
  v_result:=public.owner_create_quick_sale(
   (p_sale_args->>'p_customer_id')::uuid,p_sale_args->>'p_invoice_number',(p_sale_args->>'p_due_date')::date,
   v_item_id,p_sale_args->>'p_production_method',v_qty,(p_sale_args->>'p_unit_price')::numeric,v_supply,
