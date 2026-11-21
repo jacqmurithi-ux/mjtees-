@@ -15,7 +15,7 @@ export default function ApparelInventory({businessId,onChanged}:{businessId:stri
  const refresh=useCallback(async()=>{
   if(!supabase)throw new Error('Supabase is not configured.');
   const [c,v,j,r]=await Promise.all([
-   supabase.from('catalogue_items').select('id,name,item_type').eq('is_active',true).order('name'),
+   supabase.from('catalogue_items').select('id,name,item_type,category').eq('is_active',true).order('name'),
    supabase.from('catalogue_item_variants').select('id,sku,size,colour,style,capacity,attributes,catalogue_item_id,stock_item_id,stock_items(item_name,quantity_on_hand,reorder_level,average_unit_cost,unit)').eq('business_id',businessId).eq('active',true).order('sku'),
    supabase.from('production_jobs').select('id,job_number,production_status,customer_supplied_items').eq('business_id',businessId).not('production_status','in','(cancelled,delivered)').order('created_at',{ascending:false}),
    supabase.from('apparel_variant_reservations').select('id,variant_id,job_id,quantity,issued_quantity,status,created_at').eq('business_id',businessId).in('status',['reserved','partially_issued']).order('created_at',{ascending:false})
@@ -32,9 +32,21 @@ export default function ApparelInventory({businessId,onChanged}:{businessId:stri
   if(e){setError(e.message);return}
   setNotice(message);await refresh();await onChanged();
  }
+ const selectedProduct=catalogue.find(x=>x.id===product);
+ const productName=String(selectedProduct?.name||'').toLowerCase();
+ const productCategory=String(selectedProduct?.category||'').toLowerCase();
+ const isReflective=/reflective.*(jacket|vest)|(jacket|vest).*reflective/.test(productName);
+ const isHeadwear=/cap|headwear/.test(productName)||productCategory==='headwear';
+ const isDrinkware=/mug|tumbler|drinkware/.test(productName)||productCategory==='drinkware';
+ const isApparel=/t[ -]?shirt|polo|hoodie/.test(productName)||productCategory==='apparel';
+ const requiredAttributes=isReflective?['size','colour','style']:isHeadwear?['colour','style']:isDrinkware?['colour','capacity']:isApparel?['size','colour']:[];
  async function create(e:React.FormEvent){
   e.preventDefault();if(!product)return setError('Select an existing catalogue product.');
   if(!sku.trim())return setError('Enter a unique variant SKU.');
+  const supplied={size,colour,style,capacity};
+  const missing=requiredAttributes.filter(key=>!supplied[key as keyof typeof supplied].trim());
+  if(missing.length)return setError('This product requires: '+missing.join(', ')+'.');
+  if(!requiredAttributes.length&&!Object.values(supplied).some(x=>x.trim()))return setError('Enter at least one variant attribute.');
   if(![opening,reorder,cost].every(x=>Number.isFinite(Number(x))&&Number(x)>=0))return setError('Opening quantity, reorder level and cost must be non-negative.');
   await run('owner_create_apparel_variant',{p_catalogue_item_id:product,p_sku:sku.trim(),p_size:size.trim()||null,p_colour:colour.trim()||null,p_style:style.trim()||null,p_capacity:capacity.trim()||null,p_location_code:location,p_opening_quantity:Number(opening),p_reorder_level:Number(reorder),p_unit_cost:Number(cost)},'Variant created. Opening stock was recorded in the stock ledger.');
   setSku('');setSize('');setColour('');setStyle('');setCapacity('');setOpening('0');setCost('0');
@@ -46,9 +58,9 @@ export default function ApparelInventory({businessId,onChanged}:{businessId:stri
    {error&&<div className="op-error">{error}</div>}{notice&&<div className="notice">{notice}</div>}
    <form className="op-form" onSubmit={create}>
     {select('Existing catalogue product',product,setProduct,catalogue.map(x=>({value:x.id,label:x.name+' · '+x.item_type})))}
-    <div className="op-grid">{field('Variant SKU',sku,setSku,{required:true,placeholder:'TEE-BLK-M'})}{field('Size',size,setSize,{placeholder:'S, M, L, XL'})}{field('Colour',colour,setColour,{placeholder:'Black, White, Navy'})}{field('Style',style,setStyle,{placeholder:'Regular, fitted, reflective'})}{field('Capacity / type',capacity,setCapacity,{placeholder:'350 ml, ceramic'})}</div>
+    <div className="op-grid">{field('Variant SKU',sku,setSku,{required:true,placeholder:'TEE-BLK-M'})}{field('Size',size,setSize,{placeholder:'S, M, L, XL',required:requiredAttributes.includes('size')})}{field('Colour',colour,setColour,{placeholder:'Black, White, Navy',required:requiredAttributes.includes('colour')})}{field('Style',style,setStyle,{placeholder:'Regular, fitted, reflective',required:requiredAttributes.includes('style')})}{field('Capacity / type',capacity,setCapacity,{placeholder:'350 ml, ceramic',required:requiredAttributes.includes('capacity')})}</div>
     <div className="op-grid">{select('Stock location',location,setLocation,[{value:'shop_1',label:'Shop 1 — Apparel, vinyl & stickers'},{value:'shop_2',label:'Shop 2 — Inks, screens & consumables'}])}{field('Verified opening quantity',opening,setOpening,{type:'number',min:'0',step:'1'})}{field('Reorder level',reorder,setReorder,{type:'number',min:'0',step:'1'})}{field('Unit cost (KES)',cost,setCost,{type:'number',min:'0',step:'0.01'})}</div>
-    <small className="op-empty">Only enter an opening quantity after physically counting that exact variant. New stock receipts remain on the existing Purchasing page.</small>
+    <small className="op-empty">{requiredAttributes.length?('Required for this product: '+requiredAttributes.join(', ')+'. '):'Enter at least one attribute; add any product-specific details needed to distinguish the variant. '}Only enter an opening quantity after physically counting that exact variant. New stock receipts remain on the existing Purchasing page.</small>
     <button className="primary" disabled={busy||!product||sku.trim().length<2}>Create variant</button>
    </form>
    <div className="op-list">{variants.length?variants.map(v=><article className="op-record" key={v.id}><div><b>{v.sku} · {catalogue.find(c=>c.id===v.catalogue_item_id)?.name||'Catalogue item'}</b><small>{[v.size,v.colour,v.style,v.capacity].filter(Boolean).join(' · ')||'No attributes'} · {v.stock_items?.item_name}</small><small>Cost {Number(v.stock_items?.average_unit_cost||0).toFixed(2)} KES · Reorder at {v.stock_items?.reorder_level||0}</small></div><strong>{v.stock_items?.quantity_on_hand??0} {v.stock_items?.unit||'piece'}</strong></article>):<p className="op-empty">No apparel variants yet.</p>}</div>
