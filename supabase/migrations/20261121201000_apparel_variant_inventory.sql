@@ -323,28 +323,8 @@ begin
 end
 $fn$;
 
-create or replace function public.owner_issue_job_material(p_job_material_id uuid,p_quantity numeric)
-returns void
-language plpgsql security definer
-set search_path=public,private,pg_temp
-as $fn$
-declare m public.production_job_materials%rowtype; s public.stock_items%rowtype; v_user uuid;
-begin
- v_user:=auth.uid();
- if v_user is null then raise exception 'Authentication required'; end if;
- select * into m from public.production_job_materials where id=p_job_material_id for update;
- if not found or not exists(select 1 from public.business_memberships where business_id=m.business_id and user_id=v_user and role='owner') then raise exception 'Job material not found'; end if;
- if p_quantity is null or p_quantity<=0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Issue quantity exceeds planned balance'; end if;
- select * into s from public.stock_items where id=m.stock_item_id and business_id=m.business_id for update;
- if not found or s.quantity_on_hand<p_quantity then raise exception 'Insufficient stock'; end if;
- perform private.apply_stock_movement(m.business_id,s.id,-p_quantity,s.average_unit_cost,'job_issue');
- perform private.update_job_material_issue(m.business_id,m.id,p_quantity,p_quantity*s.average_unit_cost);
-end
-$fn$;
 revoke all on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) from public,anon;
-revoke all on function public.owner_issue_job_material(uuid,numeric) from public,anon;
 grant execute on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) to authenticated;
-grant execute on function public.owner_issue_job_material(uuid,numeric) to authenticated;
 
 
 -- Cancellation releases only unissued reservations. Issued quantities remain consumed.
@@ -422,9 +402,10 @@ begin
   coalesce((p_sale_args->>'p_payment_amount')::numeric,0),p_sale_args->>'p_payment_reference'
  );
  v_invoice:=(v_result->>'invoice_id')::uuid;
- select i.total,li.direct_cost,li.cost_snapshot,li.production_method into v_invoice_total,v_existing_cost,v_snapshot,v_effective_method
+ select i.total,li.direct_cost,li.cost_snapshot into v_invoice_total,v_existing_cost,v_snapshot
  from public.sales_invoices i join public.sales_invoice_items li on li.invoice_id=i.id and li.business_id=i.business_id
  where i.id=v_invoice and i.business_id=v_business for update of li;
+ v_effective_method:=nullif(v_snapshot->>'production_method','');
  if v_effective_method is not null then
   raise exception 'Branded apparel orders must reserve stock and issue it through production';
  end if;
