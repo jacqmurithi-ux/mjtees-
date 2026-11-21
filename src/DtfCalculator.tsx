@@ -9,12 +9,12 @@ const money=(n:number)=>new Intl.NumberFormat('en-KE',{style:'currency',currency
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const number=(v:string)=>Math.max(0,Number(v)||0);
 const next=(p:string)=>p+'-'+Date.now().toString().slice(-8);
-const initialSticker=():Sticker=>({id:Date.now(),width:'3.5',height:'3.5',quantity:'1',label:'DTF print'});
+const initialSticker=():Sticker=>({id:Date.now(),width:'',height:'',quantity:'1',label:'DTF print'});
 const initialGarment=():Garment=>({id:Date.now()+1,kind:'T-shirt',description:'',colour:'',size:'',quantity:'1',source:'customer_supplies',stockId:'',unitCost:'0'});
 
 export default function DtfCalculator({onSaved}:{onSaved?:()=>void}){
  const[customers,setCustomers]=useState<Customer[]>([]),[stock,setStock]=useState<Stock[]>([]);
- const[customerId,setCustomerId]=useState(''),[stickers,setStickers]=useState<Sticker[]>([initialSticker()]),[garments,setGarments]=useState<Garment[]>([initialGarment()]);
+ const[customerId,setCustomerId]=useState(''),[stickers,setStickers]=useState<Sticker[]>([initialSticker()]),[garments,setGarments]=useState<Garment[]>([]);
  const[dimensionUnit,setDimensionUnit]=useState<'inches'|'cm'>('inches'),[sheetWidth,setSheetWidth]=useState(''),[sheetHeight,setSheetHeight]=useState(''),[sheetUnit,setSheetUnit]=useState<'inches'|'cm'>('inches');\n const[printCharge,setPrintCharge]=useState('0'),[transport,setTransport]=useState('0'),[pressMode,setPressMode]=useState<'piece'|'batch'>('piece'),[pressCost,setPressCost]=useState('10');
  const[quoteNo,setQuoteNo]=useState(()=>next('QT')), [invoiceNo,setInvoiceNo]=useState(()=>next('INV')),[dueDate,setDueDate]=useState(today),[agreed,setAgreed]=useState(''),[payment,setPayment]=useState(''),[method,setMethod]=useState<'cash'|'mpesa_paybill'>('cash'),[reference,setReference]=useState('');
  const[belowFloor,setBelowFloor]=useState(false),[reason,setReason]=useState(''),[loading,setLoading]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[lastRecord,setLastRecord]=useState<any>(null);
