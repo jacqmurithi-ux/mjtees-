@@ -34,6 +34,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
  const [adjustStock,setAdjustStock]=useState(''),[adjustDelta,setAdjustDelta]=useState(''),[adjustReason,setAdjustReason]=useState(''),[jobReports,setJobReports]=useState<Row[]>([]);
  const [inventorySearch,setInventorySearch]=useState(''),[inventoryLocationFilter,setInventoryLocationFilter]=useState('all'),[inventoryStockFilter,setInventoryStockFilter]=useState('all');
  const [quickMode,setQuickMode]=useState<'catalogue'|'custom'>('catalogue'),[customDescription,setCustomDescription]=useState(''),[customDimensions,setCustomDimensions]=useState(''),[customMethod,setCustomMethod]=useState('vinyl_cutting'),[customProfileId,setCustomProfileId]=useState(''),[quickCustomerId,setQuickCustomerId]=useState(''),[quickItemId,setQuickItemId]=useState(''),[quickMethod,setQuickMethod]=useState(''),[quickQuantity,setQuickQuantity]=useState('1'),[quickUnitPrice,setQuickUnitPrice]=useState(''),[quickSupply,setQuickSupply]=useState('mj_supplies'),[quickOtherCosts,setQuickOtherCosts]=useState('0'),[quickPriceReason,setQuickPriceReason]=useState(''),[quickBelowFloor,setQuickBelowFloor]=useState(false),[quickExceptionReason,setQuickExceptionReason]=useState(''),[quickPaymentAmount,setQuickPaymentAmount]=useState(''),[quickPaymentMethod,setQuickPaymentMethod]=useState('cash'),[quickPaymentReference,setQuickPaymentReference]=useState(''),[quickInvoiceNo,setQuickInvoiceNo]=useState(nextNumber('INV')),[quickPaymentNo,setQuickPaymentNo]=useState(nextNumber('PAY')),[quickReceipt,setQuickReceipt]=useState<Row|null>(null);
+ const [quickAddonLines,setQuickAddonLines]=useState<Row[]>([]);
 
 
  const [customerId,setCustomerId]=useState(''),[profileId,setProfileId]=useState(''),[quoteNo,setQuoteNo]=useState(nextNumber('Q')), [description,setDescription]=useState('Printing service'),[qty,setQty]=useState('1'),[price,setPrice]=useState('0'),[blankCostPerPiece,setBlankCostPerPiece]=useState(''),[otherCosts,setOtherCosts]=useState(''),[otherCostNote,setOtherCostNote]=useState(''),[validUntil,setValidUntil]=useState(today()),[customerSupplied,setCustomerSupplied]=useState(false),[exception,setException]=useState(false),[exceptionReason,setExceptionReason]=useState('');
@@ -152,16 +153,36 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    if(!customProfileId)return fail('Select an active costing profile for this custom job.');
    if(!Number.isInteger(quantity)||quantity<1)return fail('Quantity must be a whole number of at least 1.');
    if(!Number.isFinite(unitPrice)||unitPrice<=0)return fail('Enter the agreed custom-job price per unit.');
-   if(!Number.isFinite(paid)||paid<0||paid>quantity*unitPrice)return fail('Payment must be zero or a valid amount no greater than the sale total.');
+   const addonTotal=quickAddonLines.reduce((sum,line)=>sum+Number(line.quantity||0)*Number(line.unitPrice||0),0);
+   const saleTotal=quantity*unitPrice+addonTotal;
+   if(!Number.isFinite(paid)||paid<0||paid>saleTotal)return fail('Payment must be zero or a valid amount no greater than the combined sale total.');
+   for(let index=0;index<quickAddonLines.length;index++){
+    const line=quickAddonLines[index],catalogueItem=catalogue.find(x=>x.id===line.catalogueItemId&&x.is_active);
+    if(!catalogueItem)return fail('Add-on '+(index+1)+': select an active catalogue item.');
+    if(!Number.isInteger(Number(line.quantity))||Number(line.quantity)<1)return fail('Add-on '+(index+1)+': quantity must be a whole number of at least 1.');
+    if(!Number.isFinite(Number(line.unitPrice))||Number(line.unitPrice)<=0)return fail('Add-on '+(index+1)+': enter a valid selling price.');
+    if(Number(line.unitPrice)<Number(catalogueItem.standard_unit_price||0)&&String(line.priceReason||'').trim().length<3)return fail('Add-on '+(index+1)+': explain any price below the approved catalogue price.');
+    const activeMethods=(catalogueItem.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);
+    if(activeMethods.length&&!activeMethods.some((m:Row)=>m.production_method===line.productionMethod))return fail('Add-on '+(index+1)+': choose an active production method.');
+    if(line.allowBelowFloor&&String(line.exceptionReason||'').trim().length<8)return fail('Add-on '+(index+1)+': below-floor exception reason must contain at least 8 characters.');
+  }
    if(quickBelowFloor&&quickExceptionReason.trim().length<8)return fail('A below-floor exception reason must contain at least 8 characters.');
    if(!supabase)return;
    setLoading(true);setError('');setNotice('');
-   const {data,error:saveError}=await supabase.rpc('owner_create_custom_job_quick_sale',{
+   const {data,error:saveError}=await supabase.rpc('owner_create_custom_job_bundle_quick_sale',{
     p_customer_id:quickCustomerId||null,p_invoice_number:quickInvoiceNo,p_due_date:dueDate||today(),
     p_description:customDescription.trim(),p_dimensions:customDimensions.trim(),p_production_method:customMethod,
     p_costing_profile_id:customProfileId,p_quantity:quantity,p_agreed_price:unitPrice,
     p_supply_arrangement:quickSupply,p_other_direct_costs:Number(quickOtherCosts||0),
     p_allow_below_floor:quickBelowFloor,p_exception_reason:quickBelowFloor?quickExceptionReason.trim():null,
+    p_catalogue_lines:quickAddonLines.map(line=>({
+     catalogue_item_id:line.catalogueItemId,production_method:line.productionMethod||null,
+     quantity:Number(line.quantity),unit_price:Number(line.unitPrice),
+     supply_arrangement:line.supplyArrangement,other_direct_costs:Number(line.otherDirectCosts||0),
+     price_reason:String(line.priceReason||'').trim()||null,
+     allow_below_floor:Boolean(line.allowBelowFloor),
+     exception_reason:line.allowBelowFloor?String(line.exceptionReason||'').trim():null
+    })),
     p_payment_number:paid>0?quickPaymentNo:null,p_payment_method:paid>0?quickPaymentMethod:null,
     p_payment_amount:paid,p_payment_reference:quickPaymentReference.trim()||null
    } as never);
@@ -170,7 +191,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    const saved=data as Row;setQuickReceipt(saved);
    notify('Custom job sale saved. Invoice '+saved.invoice_number+' created'+(paid>0?' and payment recorded.':'.'));
    setQuickInvoiceNo(nextNumber('INV'));setQuickPaymentNo(nextNumber('PAY'));setQuickPaymentAmount('');
-   setQuickPaymentReference('');setQuickOtherCosts('0');setQuickBelowFloor(false);setQuickExceptionReason('');
+   setQuickPaymentReference('');setQuickOtherCosts('0');setQuickBelowFloor(false);setQuickExceptionReason('');setQuickAddonLines([]);
    await refresh();await onChanged();return;
   }
   if(!item)return fail('Select an active catalogue item.');
@@ -288,12 +309,34 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
     <div className="op-grid">{field('Quantity',quickQuantity,setQuickQuantity,{type:'number',min:'1',step:'1'})}{field('Agreed unit price (KES)',quickUnitPrice,setQuickUnitPrice,{type:'number',min:'0.01',step:'0.01'})}</div>
     {selectField('Who supplies the item?',quickSupply,setQuickSupply,[{value:'mj_supplies',label:'MJ supplies the materials / item'},{value:'customer_supplies',label:'Customer supplies the item'}])}
     {field('Other direct job costs (KES)',quickOtherCosts,setQuickOtherCosts,{type:'number',min:'0',step:'0.01'})}
+    <Panel title="Optional catalogue products / services">
+     <p className="op-empty">Add any MJ-supplied approved catalogue items to this same invoice. Each item remains a separate invoice line and uses its own catalogue price, costing and margin controls.</p>
+     {quickAddonLines.map((line,index)=>{
+      const item=catalogue.find(x=>x.id===line.catalogueItemId&&x.is_active);
+      const methods=(item?.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);
+      const update=(patch:Row)=>setQuickAddonLines(current=>current.map((entry,i)=>i===index?{...entry,...patch}:entry));
+      return <div className="op-card" key={index}>
+       <div className="op-actions"><b>Catalogue line {index+1}</b><button type="button" onClick={()=>setQuickAddonLines(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
+       {selectField('Active catalogue product / service',line.catalogueItemId,value=>{const selected=catalogue.find(x=>x.id===value&&x.is_active);const active=(selected?.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);const preferred=active.find((m:Row)=>m.is_preferred)||active[0];update({catalogueItemId:value,productionMethod:preferred?.production_method||'',unitPrice:selected?.standard_unit_price==null?'':String(selected.standard_unit_price),priceReason:''});},catalogue.filter(x=>x.is_active).map(x=>({value:x.id,label:x.name+' · '+x.item_type+' · '+x.selling_method.replaceAll('_',' ')})))}
+       {item&&<><div className="op-grid">{methods.length>0&&selectField('Production method',line.productionMethod,value=>update({productionMethod:value}),methods.map((m:Row)=>({value:m.production_method,label:m.production_method.replaceAll('_',' ')})))}{field('Quantity',String(line.quantity),value=>update({quantity:value}),{type:'number',min:'1',step:'1'})}</div>
+        <div className="op-grid">{field('Agreed unit price (KES)',String(line.unitPrice),value=>update({unitPrice:value}),{type:'number',min:'0.01',step:'0.01'})}<div className="op-field"><span>Approved catalogue price</span><strong>{item.standard_unit_price==null?'Not approved':cash(Number(item.standard_unit_price))}</strong></div></div>
+        {Number(line.unitPrice)<Number(item.standard_unit_price||0)&&field('Reason for price below catalogue price',String(line.priceReason||''),value=>update({priceReason:value}))}
+        {selectField('Who supplies the item?',line.supplyArrangement,value=>update({supplyArrangement:value}),[{value:'mj_supplies',label:'MJ supplies the item'},{value:'customer_supplies',label:'Customer supplies the item'}])}
+        {field('Other direct costs (KES)',String(line.otherDirectCosts||'0'),value=>update({otherDirectCosts:value}),{type:'number',min:'0',step:'0.01'})}
+        <label className="op-check"><input type="checkbox" checked={Boolean(line.allowBelowFloor)} onChange={e=>update({allowBelowFloor:e.target.checked})}/> Authorise below-30% margin exception for this line</label>
+        {line.allowBelowFloor&&field('Exception reason (minimum 8 characters)',String(line.exceptionReason||''),value=>update({exceptionReason:value}))}
+        <p className="op-empty">Line total: <b>{cash(Number(line.quantity||0)*Number(line.unitPrice||0))}</b></p>
+       </>}
+      </div>;
+     })}
+     <button type="button" onClick={()=>setQuickAddonLines(current=>[...current,{catalogueItemId:'',productionMethod:'',quantity:'1',unitPrice:'',supplyArrangement:'mj_supplies',otherDirectCosts:'0',priceReason:'',allowBelowFloor:false,exceptionReason:''}])}>Add catalogue line</button>
+    </Panel>
     <label className="op-check"><input type="checkbox" checked={quickBelowFloor} onChange={e=>setQuickBelowFloor(e.target.checked)}/> Authorise a below-30% margin exception for this sale</label>
     {quickBelowFloor&&field('Exception reason (minimum 8 characters)',quickExceptionReason,setQuickExceptionReason)}
     <Panel title="Payment received now"><div className="op-grid">{field('Amount received (KES)',quickPaymentAmount,setQuickPaymentAmount,{type:'number',min:'0',step:'0.01',placeholder:'0 for unpaid sale'})}{selectField('Payment method',quickPaymentMethod,setQuickPaymentMethod,[{value:'cash',label:'Cash'},{value:'mpesa_paybill',label:'M-Pesa Paybill'}])}</div>{field('M-Pesa reference (optional)',quickPaymentReference,setQuickPaymentReference)}<small className="op-empty">Leave amount at zero if the customer will pay later. Partial and full payments are supported.</small></Panel>
     <div className="op-grid">{field('Invoice number',quickInvoiceNo,setQuickInvoiceNo)}{field('Invoice due date',dueDate,setDueDate,{type:'date'})}</div>
     {field('Payment number',quickPaymentNo,setQuickPaymentNo)}
-    <div className="op-guidance"><b>Estimated sale total: {cash(Math.max(0,Number(quickQuantity||0)*Number(quickUnitPrice||0)))}</b><p>Inventory is not reduced when the sale is saved. Issue materials only through the Production workflow.</p></div>
+    <div className="op-guidance"><b>Estimated combined sale total: {cash(Math.max(0,Number(quickQuantity||0)*Number(quickUnitPrice||0)+quickAddonLines.reduce((sum,line)=>sum+Number(line.quantity||0)*Number(line.unitPrice||0),0)))}</b><p>Inventory is not reduced when the sale is saved. Issue materials only through the Production workflow.</p></div>
    </>:<>
    {selectField('Product / service',quickItemId,value=>{const item=catalogue.find(x=>x.id===value);const methods=(item?.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);const preferred=methods.find((m:Row)=>m.is_preferred)||methods[0];setQuickItemId(value);setQuickMethod(preferred?.production_method||'');setQuickUnitPrice(item?.standard_unit_price==null?'':String(item.standard_unit_price));setQuickPriceReason('');},catalogue.map(x=>({value:x.id,label:x.name+' · '+x.item_type+' · '+x.selling_method.replaceAll('_',' ')})))}
    {quickItemId&&(()=>{const item=catalogue.find(x=>x.id===quickItemId);const methods=(item?.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);const method=methods.find((m:Row)=>m.production_method===quickMethod);const profile=profiles.find(p=>p.id===method?.costing_profile_id);return <><div className="op-grid">{methods.length>0&&selectField('Production method',quickMethod,setQuickMethod,methods.map((m:Row)=>({value:m.production_method,label:m.production_method.replaceAll('_',' ')})))}{field('Quantity',quickQuantity,setQuickQuantity,{type:'number',min:'1',step:'1'})}</div><div className="op-grid">{field('Agreed unit selling price (KES)',quickUnitPrice,setQuickUnitPrice,{type:'number',min:'0.01',step:'0.01'})}<div className="op-field"><span>Catalogue-approved price</span><strong>{item?.standard_unit_price==null?'Not approved':cash(Number(item.standard_unit_price))}</strong></div></div>{profile&&<p className="op-empty">Direct cost will use {profile.profile_name} v{profile.version}. The server calculates the cost snapshot and checks the 30% gross-margin floor.</p>}{selectField('Who supplies the item?',quickSupply,setQuickSupply,[{value:'mj_supplies',label:'MJ supplies the item'},{value:'customer_supplies',label:'Customer supplies the item'}])}{field('Other direct job costs (KES)',quickOtherCosts,setQuickOtherCosts,{type:'number',min:'0',step:'0.01'})}{Number(quickUnitPrice)<Number(item?.standard_unit_price||0)&&field('Reason for price below catalogue price',quickPriceReason,setQuickPriceReason,{placeholder:'Required for a discretionary price reduction'})}</>})()}
@@ -319,8 +362,8 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    <div className="customer-history-row"><b>Invoice</b><strong>{quickReceipt.invoice_number}</strong></div>
    {quickReceipt.payment_number&&<div className="customer-history-row"><b>Receipt / payment no.</b><strong>{quickReceipt.payment_number}</strong></div>}
    <div className="customer-history-row"><b>Customer</b><span>{quickReceipt.customer_name}</span></div>
-   <div className="customer-history-row"><b>Item</b><span>{quickReceipt.description}</span></div>
-   <div className="customer-history-row"><b>Quantity × unit price</b><span>{quickReceipt.quantity} × {cash(Number(quickReceipt.unit_price))}</span></div>
+   {Array.isArray(quickReceipt.items)&&quickReceipt.items.length>0?quickReceipt.items.map((line:Row,index:number)=><div className="customer-history-row" key={index}><b>Line {index+1}</b><span>{line.description} · {line.quantity} × {cash(Number(line.unit_price))}</span></div>):<div className="customer-history-row"><b>Item</b><span>{quickReceipt.description}</span></div>}
+   {!(Array.isArray(quickReceipt.items)&&quickReceipt.items.length>0)&&<div className="customer-history-row"><b>Quantity × unit price</b><span>{quickReceipt.quantity} × {cash(Number(quickReceipt.unit_price))}</span></div>}
    <div className="customer-history-row"><b>Invoice total</b><strong>{cash(Number(quickReceipt.total))}</strong></div>
    <div className="customer-history-row"><b>Paid</b><strong>{cash(Number(quickReceipt.amount_paid))}</strong></div>
    <div className="customer-history-row"><b>Balance</b><strong>{cash(Number(quickReceipt.balance))}</strong></div>

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261120195854_custom_job_quick_sales.sql', import.meta.url), 'utf8');
+const bundleMigration = await readFile(new URL('../supabase/migrations/20261121183000_custom_job_bundle_quick_sales.sql', import.meta.url), 'utf8');
 const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
 
 test('custom job Quick Sale accepts a one-off price without creating a catalogue standard price', () => {
@@ -35,10 +36,27 @@ test('custom job Quick Sale enforces whole-number quantities in the database', (
 test('custom job Quick Sale retains costing, payment and margin controls in the UI', () => {
   assert.match(operations, /customDimensions/);
   assert.match(operations, /customProfileId/);
-  assert.match(operations, /owner_create_custom_job_quick_sale/);
+  assert.match(operations, /owner_create_custom_job_bundle_quick_sale/);
   assert.match(operations, /p_dimensions:customDimensions\.trim\(\)/);
   assert.match(operations, /p_costing_profile_id:customProfileId/);
   assert.match(operations, /p_allow_below_floor:quickBelowFloor/);
   assert.match(operations, /p_payment_amount:paid/);
   assert.match(operations, /Custom job — one-off price/);
+});
+
+
+test('custom job bundle creates one invoice with separate catalogue lines and one combined payment', () => {
+  assert.match(bundleMigration, /owner_create_custom_job_bundle_quick_sale/);
+  assert.match(bundleMigration, /owner_create_custom_job_quick_sale\(/);
+  assert.match(bundleMigration, /owner_create_quick_sale\(/);
+  assert.match(bundleMigration, /update public\.sales_invoice_items[\s\S]*set invoice_id=v_invoice/);
+  assert.match(bundleMigration, /delete from public\.sales_invoices[\s\S]*id=v_temp_invoice/);
+  assert.match(bundleMigration, /sum\(line_total\)/);
+  assert.match(bundleMigration, /insert into public\.payments/);
+  assert.match(bundleMigration, /insert into public\.payment_allocations[\s\S]*v_invoice,v_paid/);
+  assert.match(bundleMigration, /v_paid>v_total/);
+  assert.match(bundleMigration, /revoke all on function public\.owner_create_custom_job_bundle_quick_sale[\s\S]*from public,anon/);
+  assert.match(operations, /Optional catalogue products \/ services/);
+  assert.match(operations, /p_catalogue_lines:quickAddonLines\.map/);
+  assert.match(operations, /Estimated combined sale total/);
 });
