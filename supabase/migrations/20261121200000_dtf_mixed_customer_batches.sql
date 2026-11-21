@@ -55,6 +55,7 @@ begin
  if jsonb_typeof(p_batch)<>'object' or jsonb_typeof(p_jobs)<>'array' or jsonb_array_length(p_jobs)=0 then raise exception 'Batch and jobs are required'; end if;
  no:=nullif(btrim(p_batch->>'batch_number'),'');
  if no is null then raise exception 'Batch number required'; end if;
+ if nullif(p_batch->>'supplier_id','') is null or not exists(select 1 from public.suppliers s where s.id=(p_batch->>'supplier_id')::uuid and s.business_id=biz) then raise exception 'Select a valid supplier in this workspace'; end if;
  print_total:=coalesce((p_batch->>'printing_charge')::numeric,0)+coalesce((p_batch->>'transport_cost')::numeric,0);
  press_total:=coalesce((p_batch->>'heat_press_total')::numeric,0);
  for j in select value from jsonb_array_elements(p_jobs) loop
@@ -65,8 +66,8 @@ begin
   area_total:=area_total+w*h*q; total_qty:=total_qty+q;
  end loop;
  if area_total<=0 or print_total<0 or press_total<0 then raise exception 'Invalid batch totals'; end if;
- insert into public.dtf_print_batches(business_id,batch_number,supplier_name,sheet_count,media_width,media_height,media_unit,printing_charge,transport_cost,heat_press_basis,heat_press_rate,heat_press_total,total_print_area_sq_in,created_by)
- values(biz,no,nullif(p_batch->>'supplier_name',''),greatest(1,coalesce((p_batch->>'sheet_count')::integer,1)),nullif(p_batch->>'media_width','')::numeric,nullif(p_batch->>'media_height','')::numeric,coalesce(p_batch->>'media_unit','inches'),coalesce((p_batch->>'printing_charge')::numeric,0),coalesce((p_batch->>'transport_cost')::numeric,0),coalesce(p_batch->>'heat_press_basis','piece'),coalesce((p_batch->>'heat_press_rate')::numeric,0),press_total,area_total,u) returning id into b;
+ insert into public.dtf_print_batches(business_id,batch_number,supplier_name,supplier_id,supplier_order_reference,sheet_count,media_width,media_height,media_unit,printing_charge,transport_cost,heat_press_basis,heat_press_rate,heat_press_total,total_print_area_sq_in,created_by)
+ values(biz,no,nullif(p_batch->>'supplier_name',''),(p_batch->>'supplier_id')::uuid,nullif(p_batch->>'supplier_order_reference',''),greatest(1,coalesce((p_batch->>'sheet_count')::integer,1)),nullif(p_batch->>'media_width','')::numeric,nullif(p_batch->>'media_height','')::numeric,coalesce(p_batch->>'media_unit','inches'),coalesce((p_batch->>'printing_charge')::numeric,0),coalesce((p_batch->>'transport_cost')::numeric,0),coalesce(p_batch->>'heat_press_basis','piece'),coalesce((p_batch->>'heat_press_rate')::numeric,0),press_total,area_total,u) returning id into b;
  for j in select value from jsonb_array_elements(p_jobs) loop
   n:=n+1; cust:=(j->>'customer_id')::uuid; w:=(j->>'width_inches')::numeric; h:=(j->>'height_inches')::numeric; q:=(j->>'quantity')::integer; a:=w*h*q;
   alloc_print:=round(print_total*a/area_total,2);
