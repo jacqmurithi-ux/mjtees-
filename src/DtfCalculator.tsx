@@ -22,7 +22,7 @@ export default function DtfCalculator({onSaved}:{onSaved?:()=>void}){
  const calc=useMemo(()=>{
   const stickerRows=stickers.map(x=>({...x,w:number(x.width),h:number(x.height),qty:number(x.quantity),area:number(x.width)*number(x.height)*(dimensionUnit==='cm'?1/6.4516:1)}));
   const garmentRows=garments.map(x=>({...x,qty:number(x.quantity),cost:x.source==='mj_supplies'?(number(x.unitCost)||number(String(stock.find(s=>s.id===x.stockId)?.average_unit_cost||0))):0}));
-  const stickerArea=stickerRows.reduce((n,x)=>n+x.area*x.qty,0),totalPieces=stickerRows.reduce((n,x)=>n+x.qty,0)+garmentRows.reduce((n,x)=>n+x.qty,0);
+  const stickerArea=stickerRows.reduce((n,x)=>n+x.area*x.qty,0),printPieces=stickerRows.reduce((n,x)=>n+x.qty,0),garmentPieces=garmentRows.reduce((n,x)=>n+x.qty,0),totalPieces=garmentPieces||printPieces;
   const batch=number(printCharge)+number(transport),press=pressMode==='piece'?number(pressCost)*totalPieces:number(pressCost);
   const printAndTransportPerPiece=stickerArea>0?batch/stickerArea:0;
   const stickerCost=stickerRows.reduce((n,x)=>n+(x.area*x.qty*printAndTransportPerPiece),0);
