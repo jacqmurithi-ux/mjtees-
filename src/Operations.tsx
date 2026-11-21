@@ -363,7 +363,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    {quickReceipt.payment_number&&<div className="customer-history-row"><b>Receipt / payment no.</b><strong>{quickReceipt.payment_number}</strong></div>}
    <div className="customer-history-row"><b>Customer</b><span>{quickReceipt.customer_name}</span></div>
    {Array.isArray(quickReceipt.items)&&quickReceipt.items.length>0?quickReceipt.items.map((line:Row,index:number)=><div className="customer-history-row" key={index}><b>Line {index+1}</b><span>{line.description} · {line.quantity} × {cash(Number(line.unit_price))}</span></div>):<div className="customer-history-row"><b>Item</b><span>{quickReceipt.description}</span></div>}
-   <div className="customer-history-row"><b>Quantity × unit price</b><span>{quickReceipt.quantity} × {cash(Number(quickReceipt.unit_price))}</span></div>
+   {!(Array.isArray(quickReceipt.items)&&quickReceipt.items.length>0)&&<div className="customer-history-row"><b>Quantity × unit price</b><span>{quickReceipt.quantity} × {cash(Number(quickReceipt.unit_price))}</span></div>}
    <div className="customer-history-row"><b>Invoice total</b><strong>{cash(Number(quickReceipt.total))}</strong></div>
    <div className="customer-history-row"><b>Paid</b><strong>{cash(Number(quickReceipt.amount_paid))}</strong></div>
    <div className="customer-history-row"><b>Balance</b><strong>{cash(Number(quickReceipt.balance))}</strong></div>
