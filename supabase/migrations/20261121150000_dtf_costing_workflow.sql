@@ -89,7 +89,7 @@ end $$;
 -- Carry DTF quote metadata into production and consume MJ garments only when
 -- the accepted quotation is converted into a production job.
 create or replace function private.apply_dtf_quote_production_details()
-returns trigger language plpgsql security definer set search_path=public,private,pg_temp as $
+returns trigger language plpgsql security definer set search_path=public,private,pg_temp as $$
 declare v_line public.quotation_lines%rowtype; v_details jsonb; v_garment jsonb; v_stock public.stock_items%rowtype; v_qty numeric;
 begin
  if new.quotation_id is null then return new; end if;
@@ -119,7 +119,7 @@ begin
   end if;
  end loop;
  return new;
-end $;
+end $$;
 
 drop trigger if exists trg_apply_dtf_quote_production_details on public.production_jobs;
 create trigger trg_apply_dtf_quote_production_details
