@@ -134,6 +134,7 @@ alter table public.expenses add column if not exists source_type text;
 alter table public.expenses add column if not exists source_id uuid;
 create unique index if not exists expenses_source_unique on public.expenses(source_type,source_id) where source_type is not null and source_id is not null;
 create index if not exists supplier_payments_dtf_batch_idx on public.supplier_payments(dtf_batch_id);
+create unique index if not exists supplier_payments_business_payment_number_uidx on public.supplier_payments(business_id,payment_number);
 
 create or replace function public.owner_record_dtf_supplier_payment(
  p_batch_id uuid,p_payment_number text,p_method text,p_amount numeric,p_reference_code text default null
