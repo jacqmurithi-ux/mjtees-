@@ -79,7 +79,7 @@ language plpgsql security definer
 set search_path=public,private,pg_temp
 as $fn$
 declare v_business uuid; v_item public.catalogue_items%rowtype; v_location uuid;
- v_stock uuid; v_variant uuid; v_name text; v_attrs jsonb; v_item_name text; v_category text;
+ v_stock uuid; v_variant uuid; v_name text; v_attrs jsonb; v_item_name text; v_category text; v_variant_text text;
 begin
  if auth.uid() is null then raise exception 'Authentication required'; end if;
  select business_id into v_business from public.business_memberships
@@ -93,9 +93,10 @@ begin
    or coalesce(p_opening_quantity,-1)<0 or coalesce(p_reorder_level,-1)<0 or coalesce(p_unit_cost,-1)<0
  then raise exception 'Enter a SKU, valid location and non-negative stock values'; end if;
  v_item_name:=lower(coalesce(v_item.name,''));
+ v_variant_text:=lower(concat_ws(' ',v_item.name,v_item.description));
  v_category:=lower(coalesce(v_item.category,''));
  if (v_item_name ~ '(t[ -]?shirts?|polos?|hoodies?)' or v_category='apparel')
-    and v_item_name !~ '(reflective)' then
+    and v_variant_text !~ '(reflective|hi.?vis)' then
   if nullif(btrim(coalesce(p_size,'')),'') is null or nullif(btrim(coalesce(p_colour,'')),'') is null then
    raise exception 'This apparel variant requires both size and colour';
   end if;
@@ -107,7 +108,7 @@ begin
   if nullif(btrim(coalesce(p_colour,'')),'') is null or nullif(btrim(coalesce(p_capacity,'')),'') is null then
    raise exception 'A drinkware variant requires colour and capacity/type';
   end if;
- elsif v_item_name ~ 'reflective.*(jackets?|vests?)|((jackets?|vests?).*reflective)' then
+ elsif v_variant_text ~ '((reflective|hi.?vis).*(jackets?|vests?)|((jackets?|vests?).*(reflective|hi.?vis)))' then
   if nullif(btrim(coalesce(p_size,'')),'') is null or nullif(btrim(coalesce(p_colour,'')),'') is null
      or nullif(btrim(coalesce(p_style,'')),'') is null then
    raise exception 'A reflective garment variant requires size, colour and reflective style';
