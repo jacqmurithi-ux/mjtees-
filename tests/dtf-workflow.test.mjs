@@ -8,10 +8,11 @@ const databaseE2e = await readFile(new URL('../supabase/tests/operational_e2e.te
 
 test('mixed DTF batch costs are calculated and rounded by the database, not trusted from the browser', () => {
   assert.match(migration, /alloc_print:=round\(print_total\*a\/area_total,2\)/);
-  assert.match(migration, /direct:=alloc_print\+alloc_press/);
+  assert.match(migration, /direct:=alloc_print\+alloc_press\+alloc_labour/);
   assert.doesNotMatch(migration, /direct:=coalesce\(\(j->>'direct_cost'\)/);
   assert.match(migration, /allocated_print:=allocated_print\+alloc_print/);
   assert.match(migration, /allocated_press:=allocated_press\+alloc_press/);
+  assert.match(migration, /allocated_labour:=allocated_labour\+alloc_labour/);
 });
 
 test('mixed DTF batch validates heat-press totals and enforces the 30% margin floor server-side', () => {
@@ -27,6 +28,9 @@ test('mixed-customer batch UI excludes unallocated garment inventory costs and d
   assert.match(ui, /allocated_heat_press_cost/);
   assert.match(ui, /Print \+ transport/);
   assert.match(ui, /Heat press/);
+  assert.match(ui, /Actual supplier printing charge/);
+  assert.match(ui, /Labour cost/);
+  assert.match(ui, /allocated_labour_cost/);
 });
 
 test('database E2E exercises mixed batch allocation, separate quotes, Quick Sales and duplicate protection', () => {
