@@ -81,3 +81,44 @@ begin
 end $$;
 revoke all on function public.owner_create_dtf_batch(jsonb,jsonb) from public,anon;
 grant execute on function public.owner_create_dtf_batch(jsonb,jsonb) to authenticated;
+
+
+-- Create a quotation for one customer job without combining other batch customers.
+create or replace function public.owner_quote_dtf_batch_job(p_job_id uuid,p_quote_number text,p_valid_until date)
+returns uuid language plpgsql security definer set search_path=public,private,pg_temp as $$
+declare u uuid:=auth.uid(); biz uuid; j public.dtf_print_jobs%rowtype; b public.dtf_print_batches%rowtype; qid uuid; details jsonb; unit_price numeric;
+begin
+ select business_id into biz from public.business_memberships where user_id=u and role='owner' order by created_at limit 1;
+ if biz is null then raise exception 'Owner workspace required'; end if;
+ select * into j from public.dtf_print_jobs where id=p_job_id and business_id=biz for update;
+ if not found then raise exception 'DTF job not found'; end if;
+ if j.transaction_status not in ('unquoted') then raise exception 'Only unquoted DTF jobs can be quoted'; end if;
+ select * into b from public.dtf_print_batches where id=j.batch_id and business_id=biz;
+ unit_price:=coalesce(j.agreed_unit_price,j.suggested_unit_price);
+ details:=jsonb_build_object('module','dtf_costing','source','mixed_supplier_batch','batch_id',b.id,'job_id',j.id,'sticker_type',j.sticker_type,'width_inches',j.width_inches,'height_inches',j.height_inches,'quantity',j.quantity,'allocated_print_transport_cost',j.allocated_print_transport_cost,'allocated_heat_press_cost',j.allocated_heat_press_cost,'direct_cost_total',j.direct_cost,'direct_cost_per_piece',j.direct_cost/j.quantity);
+ qid:=public.owner_create_dtf_quotation(j.customer_id,p_quote_number,p_valid_until,j.quantity,unit_price,j.direct_cost/j.quantity,details,false,null);
+ update public.dtf_print_jobs set quotation_id=qid,transaction_status='quoted' where id=j.id;
+ return qid;
+end $$;
+
+-- Record a Quick Sale for one customer job through the existing canonical accounting RPC.
+create or replace function public.owner_sell_dtf_batch_job(p_job_id uuid,p_invoice_number text,p_due_date date,p_payment_amount numeric default 0,p_payment_method text default null,p_payment_reference text default null,p_payment_number text default null)
+returns jsonb language plpgsql security definer set search_path=public,private,pg_temp as $$
+declare u uuid:=auth.uid(); biz uuid; j public.dtf_print_jobs%rowtype; b public.dtf_print_batches%rowtype; result jsonb; details jsonb; price numeric;
+begin
+ select business_id into biz from public.business_memberships where user_id=u and role='owner' order by created_at limit 1;
+ if biz is null then raise exception 'Owner workspace required'; end if;
+ select * into j from public.dtf_print_jobs where id=p_job_id and business_id=biz for update;
+ if not found then raise exception 'DTF job not found'; end if;
+ if j.transaction_status not in ('unquoted','quoted','quote_accepted') then raise exception 'DTF job is already sold or closed'; end if;
+ select * into b from public.dtf_print_batches where id=j.batch_id and business_id=biz;
+ price:=coalesce(j.agreed_unit_price,j.suggested_unit_price);
+ details:=jsonb_build_object('module','dtf_costing','source','mixed_supplier_batch','batch_id',b.id,'job_id',j.id,'stickers',jsonb_build_array(jsonb_build_object('label',j.sticker_type,'width_inches',j.width_inches,'height_inches',j.height_inches,'quantity',j.quantity)),'direct_cost_total',j.direct_cost,'direct_cost_per_piece',j.direct_cost/j.quantity,'garments','[]'::jsonb);
+ result:=public.owner_create_dtf_quick_sale(j.customer_id,p_invoice_number,p_due_date,j.sticker_type,j.quantity,price,j.direct_cost/j.quantity,details,'[]'::jsonb,false,null,p_payment_number,p_payment_method,coalesce(p_payment_amount,0),p_payment_reference);
+ update public.dtf_print_jobs set invoice_id=(result->>'invoice_id')::uuid,transaction_status='sold' where id=j.id;
+ return result||jsonb_build_object('dtf_batch_id',b.id,'dtf_job_id',j.id);
+end $$;
+revoke all on function public.owner_quote_dtf_batch_job(uuid,text,date) from public,anon;
+grant execute on function public.owner_quote_dtf_batch_job(uuid,text,date) to authenticated;
+revoke all on function public.owner_sell_dtf_batch_job(uuid,text,date,numeric,text,text,text) from public,anon;
+grant execute on function public.owner_sell_dtf_batch_job(uuid,text,date,numeric,text,text,text) to authenticated;
