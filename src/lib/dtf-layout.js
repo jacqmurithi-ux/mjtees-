@@ -4,16 +4,22 @@ export const DTF_RATE_PER_CM2_KES = DTF_RATE_PER_METRE_KES / (DTF_ROLL_WIDTH_CM 
 
 export function layoutDtfStickers(rows, options = {}) {
   const rollWidth = Number(options.rollWidthCm ?? DTF_ROLL_WIDTH_CM);
-  const gap = Math.max(0, Number(options.gapCm ?? 0));
+  const gap = Number(options.gapCm ?? 0);
   const empty = { error: '', placements: [], usedWidthCm: 0, usedLengthCm: 0, materialAreaCm2: 0, stickerAreaCm2: 0, pieceCount: 0 };
-  if (!(rollWidth > 0)) return { ...empty, error: 'Roll width must be greater than zero.' };
+  if (!Number.isFinite(rollWidth) || !(rollWidth > 0)) return { ...empty, error: 'Roll width must be greater than zero.' };
+  if (!Number.isFinite(gap) || gap < 0) return { ...empty, error: 'Sticker gap must be a finite non-negative number.' };
   const pieces = [];
   let stickerAreaCm2 = 0;
   for (const row of rows || []) {
     const width = Number(row.widthCm), height = Number(row.heightCm);
-    const quantity = Math.max(0, Math.floor(Number(row.quantity) || 0));
-    if (!(width > 0 && height > 0 && quantity > 0)) continue;
-    if (!Number.isInteger(Number(row.quantity))) return { ...empty, error: 'Sticker quantities must be whole numbers.' };
+    const rawQuantity = Number(row.quantity);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || !(width > 0 && height > 0)) {
+      return { ...empty, error: 'Every sticker must have positive finite width and height.' };
+    }
+    if (!Number.isInteger(rawQuantity) || rawQuantity < 1) {
+      return { ...empty, error: 'Sticker quantities must be whole numbers greater than zero.' };
+    }
+    const quantity = rawQuantity;
     stickerAreaCm2 += width * height * quantity;
     for (let i = 0; i < quantity; i++) {
       const normalFits = width <= rollWidth + 1e-9;
