@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from './lib/supabase';
+import ApparelInventory from './ApparelInventory';
 
 type Page = 'costing'|'sales'|'production'|'calendar'|'inventory'|'purchasing'|'finance'|'reports'|'settings';
 type Row = Record<string, any>;
@@ -38,7 +39,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
 
 
  const [customerId,setCustomerId]=useState(''),[profileId,setProfileId]=useState(''),[quoteNo,setQuoteNo]=useState(nextNumber('Q')), [description,setDescription]=useState('Printing service'),[qty,setQty]=useState('1'),[price,setPrice]=useState('0'),[blankCostPerPiece,setBlankCostPerPiece]=useState(''),[otherCosts,setOtherCosts]=useState(''),[otherCostNote,setOtherCostNote]=useState(''),[validUntil,setValidUntil]=useState(today()),[customerSupplied,setCustomerSupplied]=useState(false),[exception,setException]=useState(false),[exceptionReason,setExceptionReason]=useState('');
-  const [catalogue,setCatalogue]=useState<Row[]>([]),[quoteLines,setQuoteLines]=useState<Row[]>([{catalogueItemId:'',productionMethod:'',profileId:'',quantity:'1',supplyArrangement:'mj_supplies',discountType:'none',discountValue:'0',discountReason:'',blankCostPerPiece:'',otherCosts:'0',otherCostsNote:''}]),[revisionSourceId,setRevisionSourceId]=useState(''),[revisionReason,setRevisionReason]=useState('');
+  const [catalogue,setCatalogue]=useState<Row[]>([]),[apparelVariants,setApparelVariants]=useState<Row[]>([]),[quickApparelVariant,setQuickApparelVariant]=useState(''),[quoteLines,setQuoteLines]=useState<Row[]>([{catalogueItemId:'',productionMethod:'',profileId:'',quantity:'1',supplyArrangement:'mj_supplies',discountType:'none',discountValue:'0',discountReason:'',blankCostPerPiece:'',otherCosts:'0',otherCostsNote:''}]),[revisionSourceId,setRevisionSourceId]=useState(''),[revisionReason,setRevisionReason]=useState('');
  const [invoiceNo,setInvoiceNo]=useState(nextNumber('INV')),[jobNo,setJobNo]=useState(nextNumber('JOB')),[dueDate,setDueDate]=useState(today());
  const [quotationDateMode,setQuotationDateMode]=useState<'all'|'single'|'range'>('all'),[quotationSingleDate,setQuotationSingleDate]=useState(today()),[quotationStartDate,setQuotationStartDate]=useState(today()),[quotationEndDate,setQuotationEndDate]=useState(today());
  const [salesDateMode,setSalesDateMode]=useState<'all'|'single'|'range'>('all'),[salesSingleDate,setSalesSingleDate]=useState(today()),[salesStartDate,setSalesStartDate]=useState(today()),[salesEndDate,setSalesEndDate]=useState(today());
@@ -64,7 +65,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
   try{
    if(page==='sales'){
     const [c,q,i,cp,jobs,bs,ci]=await Promise.all([supabase.from('customers').select('id,customer_name').order('customer_name'),supabase.from('quotations').select('id,quote_number,status,total,customer_id,created_at,issue_date,below_floor_exception_reason,revision_number,revision_reason,supersedes_quotation_id,valid_until,accepted_at,accepted_recorded_by,acceptance_method,acceptance_reference,acceptance_notes,accepted_revision_number,quotation_lines(id,description,quantity,unit_price,direct_cost,catalogue_item_id,production_method,costing_profile_id,supply_arrangement,standard_unit_price,discount_type,discount_value,discount_reason,details)').order('created_at',{ascending:false}),supabase.from('sales_invoices').select('id,invoice_number,quotation_id,status,total,amount_paid,balance,customer_id,due_date,created_at,sales_invoice_items(description,quantity,unit_price,line_total,direct_cost,quotation_line_id)').eq('business_id',businessId).order('created_at',{ascending:false}),supabase.from('costing_profiles').select('id,profile_name,version,direct_cost,is_active,components').eq('is_active',true).order('profile_name'),supabase.from('production_jobs').select('id,job_number,stage,quotation_id,invoice_id').order('created_at',{ascending:false}),supabase.rpc('owner_get_max_unit_selling_price'),supabase.from('catalogue_items').select('id,name,item_type,selling_method,standard_unit_price,price_unit,quantity_rules,catalogue_item_methods(id,production_method,costing_profile_id,is_preferred,is_active)').eq('is_active',true).order('name')]);
-    if(c.error)throw c.error;if(q.error)throw q.error;if(i.error)throw i.error;if(cp.error)throw cp.error;if(jobs.error)throw jobs.error;if(bs.error)throw bs.error;if(ci.error)throw ci.error;setCatalogue(ci.data||[]);const ceiling=bs.data==null?null:Number(bs.data);setSavedMaxUnitPrice(ceiling);setMaxUnitPrice(ceiling==null?'':String(ceiling));setCustomers(c.data||[]);setRows(q.data||[]);setInvoices(i.data||[]);setProfiles(cp.data||[]);setProductionJobs(jobs.data||[]);const dep=await supabase.from('quotation_deposits').select('*').order('received_at',{ascending:false});if(dep.error)throw dep.error;setQuoteDeposits(dep.data||[]);const eligibleQuote=q.data?.find(x=>['sent','accepted'].includes(x.status));if(!depositQuote&&eligibleQuote)setDepositQuote(eligibleQuote.id);const pendingAcceptance=q.data?.find(x=>['draft','sent'].includes(x.status));if(!acceptanceQuote&&pendingAcceptance)setAcceptanceQuote(pendingAcceptance.id);
+    if(c.error)throw c.error;if(q.error)throw q.error;if(i.error)throw i.error;if(cp.error)throw cp.error;if(jobs.error)throw jobs.error;if(bs.error)throw bs.error;if(ci.error)throw ci.error;setCatalogue(ci.data||[]);const av=await supabase.from('catalogue_item_variants').select('id,catalogue_item_id,sku,size,colour,style,capacity,stock_items(quantity_on_hand,unit)').eq('business_id',businessId).eq('active',true).order('sku');if(av.error)throw av.error;setApparelVariants(av.data||[]);const ceiling=bs.data==null?null:Number(bs.data);setSavedMaxUnitPrice(ceiling);setMaxUnitPrice(ceiling==null?'':String(ceiling));setCustomers(c.data||[]);setRows(q.data||[]);setInvoices(i.data||[]);setProfiles(cp.data||[]);setProductionJobs(jobs.data||[]);const dep=await supabase.from('quotation_deposits').select('*').order('received_at',{ascending:false});if(dep.error)throw dep.error;setQuoteDeposits(dep.data||[]);const eligibleQuote=q.data?.find(x=>['sent','accepted'].includes(x.status));if(!depositQuote&&eligibleQuote)setDepositQuote(eligibleQuote.id);const pendingAcceptance=q.data?.find(x=>['draft','sent'].includes(x.status));if(!acceptanceQuote&&pendingAcceptance)setAcceptanceQuote(pendingAcceptance.id);
     if(!customerId&&c.data?.[0])setCustomerId(c.data[0].id);if(!cp.data?.some(p=>p.id===profileId)&&cp.data?.[0])setProfileId(cp.data[0].id);
    }else if(page==='production'){
     const [j,s,m]=await Promise.all([supabase.from('production_jobs').select('*').order('created_at',{ascending:false}),supabase.from('stock_items').select('id,item_name,quantity_on_hand,unit,average_unit_cost').eq('active',true).order('item_name'),supabase.from('production_job_materials').select('*').order('created_at',{ascending:false})]);
@@ -204,7 +205,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
   if(methods.length&&!methods.some((m:Row)=>m.production_method===quickMethod))return fail('Select an active production method for this item.');
   if(!supabase)return;
   setLoading(true);setError('');setNotice('');
-  const {data,error:saveError}=await supabase.rpc('owner_create_quick_sale',{
+  const saleArgs={
    p_customer_id:quickCustomerId||null,p_invoice_number:quickInvoiceNo,p_due_date:dueDate||today(),
    p_catalogue_item_id:item.id,p_production_method:quickMethod||null,p_quantity:quantity,
    p_unit_price:actualPrice,p_supply_arrangement:quickSupply,p_other_direct_costs:Number(quickOtherCosts||0),
@@ -212,14 +213,19 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    p_exception_reason:quickBelowFloor?quickExceptionReason.trim():null,
    p_payment_number:paid>0?quickPaymentNo:null,p_payment_method:paid>0?quickPaymentMethod:null,
    p_payment_amount:paid,p_payment_reference:quickPaymentReference.trim()||null
-  } as never);
+  };
+  const itemVariants=apparelVariants.filter(v=>v.catalogue_item_id===item.id);
+  if(quickSupply==='mj_supplies'&&itemVariants.length&&!quickApparelVariant)return fail('Select the exact apparel variant before confirming this sale.');
+  const {data,error:saveError}=quickSupply==='mj_supplies'&&quickApparelVariant
+   ? await supabase.rpc('owner_create_apparel_quick_sale',{p_sale_args:saleArgs,p_variant_id:quickApparelVariant} as never)
+   : await supabase.rpc('owner_create_quick_sale',saleArgs as never);
   setLoading(false);
   if(saveError)return fail(saveError.message);
   const saved=data as Row;
   setQuickReceipt(saved);
   notify('Quick sale saved. Invoice '+saved.invoice_number+' created'+(paid>0?' and payment recorded.':'.'));
   setQuickInvoiceNo(nextNumber('INV'));setQuickPaymentNo(nextNumber('PAY'));
-  setQuickPaymentAmount('');setQuickPaymentReference('');setQuickPriceReason('');
+  setQuickPaymentAmount('');setQuickPaymentReference('');setQuickPriceReason('');setQuickApparelVariant('');
   setQuickOtherCosts('0');setQuickBelowFloor(false);setQuickExceptionReason('');
   await refresh();await onChanged();
  }
