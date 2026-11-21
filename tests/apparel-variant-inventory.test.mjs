@@ -7,6 +7,11 @@ const operations = readFileSync(new URL('../src/Operations.tsx', import.meta.url
 const apparelUi = readFileSync(new URL('../src/ApparelInventory.tsx', import.meta.url), 'utf8');
 const purchasing = readFileSync(new URL('../supabase/migrations/20261120100000_restore_supplier_purchase_workflows.sql', import.meta.url), 'utf8');
 
+test('apparel sale movement type is allowed by the stock ledger constraint', () => {
+  assert.match(migration, /stock_movements_movement_type_check[\\s\\S]*?'apparel_sale'/i);
+  assert.match(migration, /'vinyl_sticker_sale','apparel_sale'/i);
+});
+
 test('variant SKUs are unique per business and link catalogue products to stock ledger items', () => {
   assert.match(migration, /unique \(business_id, sku\)/i);
   assert.match(migration, /foreign key \(business_id,stock_item_id\) references public\.stock_items\(business_id,id\)/i);
