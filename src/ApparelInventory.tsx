@@ -13,6 +13,7 @@ export default function ApparelInventory({businessId,onChanged}:{businessId:stri
  const [job,setJob]=useState(''),[variant,setVariant]=useState(''),[quantity,setQuantity]=useState('1'),[issue,setIssue]=useState('1'),[reason,setReason]=useState('Order cancelled');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const refresh=useCallback(async()=>{
+  if(!supabase)throw new Error('Supabase is not configured.');
   const [c,v,j,r]=await Promise.all([
    supabase.from('catalogue_items').select('id,name,item_type').eq('is_active',true).order('name'),
    supabase.from('catalogue_item_variants').select('id,sku,size,colour,style,capacity,attributes,catalogue_item_id,stock_item_id,stock_items(item_name,quantity_on_hand,reorder_level,average_unit_cost,unit)').eq('business_id',businessId).eq('active',true).order('sku'),
@@ -25,6 +26,7 @@ export default function ApparelInventory({businessId,onChanged}:{businessId:stri
  },[businessId,product,variant,job]);
  useEffect(()=>{void refresh().catch(e=>setError(e.message||String(e)))},[refresh]);
  async function run(name:string,args:Row,message:string){
+  if(!supabase){setError('Supabase is not configured.');return}
   setBusy(true);setError('');setNotice('');
   const {error:e}=await supabase.rpc(name,args as never);setBusy(false);
   if(e){setError(e.message);return}
