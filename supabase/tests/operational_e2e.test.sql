@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(122);
+select extensions.plan(123);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -461,9 +461,21 @@ select extensions.throws_ok(
  $assert$select public.owner_reserve_apparel_variant(current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,1.5 )$assert$,
  'P0001','Authentication and a positive whole-piece reservation quantity are required',
  'apparel reservations reject fractional pieces');
-select set_config('test.apparel_reservation_id',public.owner_reserve_apparel_variant(
- current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,4
+select set_config('test.apparel_variant_2_id',public.owner_create_apparel_variant(
+ current_setting('test.apparel_catalogue_id')::uuid,
+ 'E2E-TEE-L-NAVY','L','Navy',null,null,'shop_1',5,1,50
 )::text,true);
+select set_config('test.apparel_reservation_id',public.owner_reserve_apparel_variant(
+ current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,2
+)::text,true);
+select set_config('test.apparel_reservation_2_id',public.owner_reserve_apparel_variant(
+ current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_2_id')::uuid,2
+)::text,true);
+select extensions.is(
+ (select count(*)::integer from public.apparel_variant_reservations
+  where job_id=current_setting('test.apparel_job_id')::uuid and status='reserved'),
+ 2,
+ 'one branded job can reserve multiple distinct apparel variants');
 select extensions.is(
  (select quantity-issued_quantity from public.apparel_variant_reservations where id=current_setting('test.apparel_reservation_id')::uuid),
  4::numeric,
@@ -474,7 +486,7 @@ select extensions.throws_ok(
    'p_customer_id',(select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
    'p_invoice_number','INV-E2E-APPAREL-OVER-RESERVED','p_due_date',current_date+7,
    'p_catalogue_item_id',current_setting('test.apparel_catalogue_id'),
-   'p_production_method','dtf','p_quantity',7,'p_unit_price',500,
+   'p_production_method','dtf','p_quantity',9,'p_unit_price',500,
    'p_supply_arrangement','mj_supplies','p_other_direct_costs',0,
    'p_allow_below_floor',false,'p_payment_amount',0
   ),current_setting('test.apparel_variant_id')::uuid
@@ -491,17 +503,24 @@ select extensions.is(
  (select actual_direct_cost from public.production_jobs where id=current_setting('test.apparel_job_id')::uuid),
  460::numeric,
  'partial apparel issue replaces only the issued share of estimated blank cost with actual stock cost');
-select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,2);
+select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_2_id')::uuid,2);
 select extensions.is(
  (select actual_direct_cost from public.production_jobs where id=current_setting('test.apparel_job_id')::uuid),
- 320::numeric,
- 'final apparel issue removes the remaining blank estimate without double-counting actual cost');
+ 360::numeric,
+ 'issuing a second variant replaces its share of the same invoice blank estimate exactly once');
 select extensions.is(
  (select count(*)::integer from public.stock_movements
   where stock_item_id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)
    and movement_type='job_issue' and quantity=-2),
  2,
  'each partial apparel issue posts its own canonical negative stock movement');
+
+select extensions.is(
+ (select count(*)::integer from public.stock_movements
+  where stock_item_id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_2_id')::uuid)
+   and movement_type='job_issue' and quantity=-2),
+ 1,
+ 'each distinct apparel variant issue uses its own canonical stock ledger item');
 
 select * from extensions.finish();
 rollback;
