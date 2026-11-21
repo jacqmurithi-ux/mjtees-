@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(110);
+select extensions.plan(129);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -384,6 +384,76 @@ select extensions.throws_ok(
 select set_config('test.supplier_payment_multi',public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_multi')::uuid,'SPAY-TEST-MULTI','mpesa_paybill',20,'SUPPLIER-REF-02')::text,true);
 select extensions.is((select amount from public.supplier_payments where id=current_setting('test.supplier_payment_multi')::uuid),20::numeric,'partial supplier payment is recorded without changing purchase or stock movements');
 select extensions.is((select count(*)::integer from public.stock_movements where movement_type='purchase' and stock_item_id=current_setting('test.stock_two')::uuid and quantity=3),1,'goods receipt creates a separate append-only stock movement for each received stock line');
+
+
+-- DTF mixed-customer workflow: allocation, independent quotations/sales,
+-- margin enforcement, supplier expense recognition and duplicate protection.
+with created as (
+ insert into public.customers(business_id,customer_name,customer_type,created_by)
+ values(current_setting('test.business_id')::uuid,'Second DTF Customer','individual',auth.uid())
+ returning id
+)
+select set_config('test.dtf_customer_two',id::text,true) from created;
+
+select set_config('test.dtf_batch_result',public.owner_create_dtf_batch(
+ jsonb_build_object(
+  'batch_number','DTF-BATCH-E2E-001','supplier_id',current_setting('test.supplier_id')::uuid,
+  'sheet_count',1,'media_width',30,'media_height',20,'media_unit','cm',
+  'printing_charge',100,'transport_cost',20,'heat_press_basis','piece','heat_press_rate',10,'heat_press_total',20
+ ),
+ jsonb_build_array(
+  jsonb_build_object('customer_id',(select id from public.customers where customer_name='Example Customer'),'job_reference','DTF-JOB-A','sticker_type','Logo A','width_inches',2,'height_inches',2,'quantity',1),
+  jsonb_build_object('customer_id',current_setting('test.dtf_customer_two')::uuid,'job_reference','DTF-JOB-B','sticker_type','Logo B','width_inches',2,'height_inches',3,'quantity',1)
+ )
+)::text,true);
+select set_config('test.dtf_batch_id',(current_setting('test.dtf_batch_result')::jsonb->>'batch_id'),true);
+select extensions.is((current_setting('test.dtf_batch_result')::jsonb->>'job_count')::integer,2,'mixed DTF supplier batch saves two independent customer jobs');
+select extensions.is((select sum(allocated_print_transport_cost) from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid),120::numeric,'all supplier printing and transport costs are allocated across customer jobs exactly once');
+select extensions.is((select sum(allocated_heat_press_cost) from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid),20::numeric,'all heat-press costs are allocated across customer jobs exactly once');
+select extensions.is((select sum(direct_cost) from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid),140::numeric,'customer job direct costs reconcile to supplier, transport and heat-press batch costs');
+select extensions.ok(
+ (select allocated_print_transport_cost=48 and allocated_heat_press_cost=10 and direct_cost=58 from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid and line_number=1)
+ and
+ (select allocated_print_transport_cost=72 and allocated_heat_press_cost=10 and direct_cost=82 from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid and line_number=2),
+ 'each customer receives its area-weighted supplier allocation and quantity-based heat-press cost');
+
+select set_config('test.dtf_quote_id',public.owner_quote_dtf_batch_job(
+ (select id from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid and line_number=1),
+ 'DTF-QUOTE-E2E-001',current_date+7)::text,true);
+select extensions.ok(exists(select 1 from public.quotations where id=current_setting('test.dtf_quote_id')::uuid),'individual mixed-batch customer quotation is created');
+select extensions.is((select sum(direct_cost) from public.quotation_lines where quotation_id=current_setting('test.dtf_quote_id')::uuid),58::numeric,'individual quotation retains only its customer job direct cost');
+select extensions.throws_ok(
+ $assert$select public.owner_quote_dtf_batch_job((select id from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid and line_number=1),'DTF-QUOTE-DUP',current_date+7)$assert$,
+ 'P0001','Only unquoted DTF jobs can be quoted','duplicate quotation attempt is blocked for an already quoted DTF job');
+
+select set_config('test.dtf_sale_result',public.owner_sell_dtf_batch_job(
+ (select id from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid and line_number=2),
+ 'DTF-INVOICE-E2E-001',current_date+7,20,'cash','DTF-CASH-REF','DTF-SALE-PAY-001')::text,true);
+select set_config('test.dtf_invoice_id',(current_setting('test.dtf_sale_result')::jsonb->>'invoice_id'),true);
+select extensions.ok(exists(select 1 from public.sales_invoices where id=current_setting('test.dtf_invoice_id')::uuid),'individual DTF Quick Sale creates its own customer invoice');
+select extensions.is((select direct_cost from public.sales_invoice_items where invoice_id=current_setting('test.dtf_invoice_id')::uuid),82::numeric,'Quick Sale invoice stores the exact customer job direct cost');
+select extensions.is((select sum(amount) from public.payments where invoice_id=current_setting('test.dtf_invoice_id')::uuid),20::numeric,'Quick Sale records the received customer payment in the canonical payment ledger');
+select extensions.throws_ok(
+ $assert$select public.owner_sell_dtf_batch_job((select id from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid and line_number=2),'DTF-INVOICE-DUP',current_date+7,0,null,null,null)$assert$,
+ 'P0001','DTF job is already sold or closed','duplicate Quick Sale attempt is blocked for an already sold DTF job');
+
+select set_config('test.dtf_supplier_payment_id',public.owner_record_dtf_supplier_payment(
+ current_setting('test.dtf_batch_id')::uuid,'DTF-SUPPLIER-PAY-001','cash',30,'DTF-SUPPLIER-REF')::text,true);
+select extensions.is((select count(*)::integer from public.supplier_payments where dtf_batch_id=current_setting('test.dtf_batch_id')::uuid),1,'DTF supplier payment is recorded once against its batch');
+select extensions.is((select count(*)::integer from public.expenses where source_type='dtf_supplier_payment' and source_id=current_setting('test.dtf_supplier_payment_id')::uuid),1,'DTF supplier payment creates exactly one Supplies expense record');
+select extensions.is((select printing_charge+transport_cost-(select sum(amount) from public.supplier_payments where dtf_batch_id=current_setting('test.dtf_batch_id')::uuid) from public.dtf_print_batches where id=current_setting('test.dtf_batch_id')::uuid),90::numeric,'supplier outstanding balance remains correct after a partial payment');
+select extensions.throws_ok(
+ $assert$select public.owner_record_dtf_supplier_payment(current_setting('test.dtf_batch_id')::uuid,'DTF-SUPPLIER-PAY-001','cash',30,'DTF-SUPPLIER-REF')$assert$,
+ '23505',null,'duplicate supplier payment number is rejected by the unique payment constraint');
+select extensions.is((select count(*)::integer from public.supplier_payments where dtf_batch_id=current_setting('test.dtf_batch_id')::uuid),1,'duplicate supplier payment does not create a second payment');
+select extensions.is((select count(*)::integer from public.expenses where source_type='dtf_supplier_payment' and source_id=current_setting('test.dtf_supplier_payment_id')::uuid),1,'duplicate supplier payment does not duplicate the Supplies expense');
+
+select extensions.throws_ok(
+ $assert$select public.owner_create_dtf_batch(
+  jsonb_build_object('batch_number','DTF-BATCH-BELOW-FLOOR','supplier_id',current_setting('test.supplier_id')::uuid,'sheet_count',1,'media_width',2,'media_height',2,'media_unit','cm','printing_charge',50,'transport_cost',0,'heat_press_basis','piece','heat_press_rate',10,'heat_press_total',10),
+  jsonb_build_array(jsonb_build_object('customer_id',(select id from public.customers where customer_name='Example Customer'),'sticker_type','Underpriced','width_inches',2,'height_inches',2,'quantity',1,'agreed_unit_price',80))
+ )$assert$,
+ 'P0001','DTF job agreed price is below the 30% gross-margin floor','database blocks mixed-batch agreed prices below the 30 percent margin floor');
 
 select * from extensions.finish();
 rollback;
