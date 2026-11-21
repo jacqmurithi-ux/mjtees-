@@ -91,9 +91,9 @@ test('variant creation enforces the required attributes for each known merchandi
 test('MJ-supplied merchandise Quick Sales always require and display the exact variant, independent of production method', () => {
   assert.match(operations, /select\('id,name,item_type,category,selling_method/);
   assert.match(operations, /requiresManagedVariant=\['apparel','headwear','drinkware','merchandise'\]/);
-  assert.match(operations, /quickSupply==='mj_supplies'&&itemVariants\.length&&!quickApparelVariant/);
-  assert.match(operations, /quickSupply==='mj_supplies'&&apparelVariants\.some\(v=>v\.catalogue_item_id===quickItemId\)/);
-  assert.doesNotMatch(operations, /quickSupply==='mj_supplies'&&!quickMethod&&apparelVariants/);
+  assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&itemVariants\.length&&!quickApparelVariant/);
+  assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&apparelVariants\.some\(v=>v\.catalogue_item_id===quickItemId\)/);
+  assert.doesNotMatch(operations, /quickSupply==='mj_supplies'&&quickApparelVariant/);
 });
 
 test('apparel issue locks production job before reservation to avoid cancellation deadlocks', () => {
@@ -109,4 +109,11 @@ test('apparel stock quantities are restricted to whole pieces at the database bo
   assert.match(migration, /p_reorder_level<>trunc\(p_reorder_level\)/i);
   assert.match(migration, /p_quantity<>trunc\(p_quantity\).*whole-piece reservation quantity/i);
   assert.match(migration, /p_quantity<>trunc\(p_quantity\).*whole-piece issue quantity/i);
+});
+
+
+test('branded apparel remains reserved until production issue while blank-item sales consume stock', () => {
+  assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&quickApparelVariant/);
+  assert.match(operations, /Blank item — no decoration/);
+  assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&apparelVariants\.some/);
 });
