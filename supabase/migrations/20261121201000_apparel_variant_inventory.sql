@@ -184,6 +184,8 @@ set search_path=public,private,pg_temp
 as $fn$
 declare v_res public.apparel_variant_reservations%rowtype; v_variant public.catalogue_item_variants%rowtype;
  v_stock public.stock_items%rowtype; v_job public.production_jobs%rowtype; v_remaining numeric;
+ v_invoice_quantity numeric:=0; v_blank_estimate_total numeric:=0; v_previously_issued numeric:=0;
+ v_blank_estimate_to_replace numeric:=0; v_actual_job_cost numeric:=0;
 begin
  if auth.uid() is null or p_quantity is null or p_quantity<=0 or p_quantity<>trunc(p_quantity) then raise exception 'Authentication and a positive whole-piece issue quantity are required'; end if;
  -- Read the reservation to identify its job, then lock in the same order as cancellation:
