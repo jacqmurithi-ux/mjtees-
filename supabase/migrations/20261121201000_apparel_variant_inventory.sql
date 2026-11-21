@@ -210,7 +210,7 @@ begin
  where i.business_id=v_res.business_id
   and i.invoice_id=v_job.invoice_id
   and i.cost_snapshot->>'catalogue_item_id'=v_variant.catalogue_item_id::text;
- select coalesce(sum(r.issued_quantity),0) into v_previously_issued
+ select greatest(coalesce(sum(r.issued_quantity),0)-p_quantity,0) into v_previously_issued
  from public.apparel_variant_reservations r
  join public.catalogue_item_variants cv on cv.id=r.variant_id and cv.business_id=r.business_id
  where r.business_id=v_res.business_id and r.job_id=v_res.job_id
