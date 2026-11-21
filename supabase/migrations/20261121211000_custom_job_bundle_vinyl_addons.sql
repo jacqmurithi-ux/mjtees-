@@ -42,6 +42,10 @@ declare
  v_catalogue_item uuid;
  v_catalogue_name text;
  v_catalogue_price numeric(14,2);
+ v_selling_method text;
+ v_method_profile uuid;
+ v_method_profile_name text;
+ v_max_price numeric(14,2);
  v_quantity numeric;
  v_unit_price numeric;
  v_supply text;
@@ -99,17 +103,26 @@ begin
   if coalesce(nullif(v_addon->>'production_method',''),'')='vinyl_cutting' then
    -- Validate the catalogue identity and active production method independently;
    -- the vinyl RPC is the authority for pricing/stock, not catalogue metadata.
-   select name,standard_unit_price into v_catalogue_name,v_catalogue_price
+   select name,standard_unit_price,selling_method into v_catalogue_name,v_catalogue_price,v_selling_method
    from public.catalogue_items
    where id=v_catalogue_item and business_id=v_business and is_active=true
    for share;
    if not found then raise exception 'Vinyl add-on catalogue item is missing or inactive'; end if;
-   if exists(select 1 from public.catalogue_item_methods
-      where business_id=v_business and catalogue_item_id=v_catalogue_item and is_active=true)
-      and not exists(select 1 from public.catalogue_item_methods
-      where business_id=v_business and catalogue_item_id=v_catalogue_item
-       and production_method='vinyl_cutting' and is_active=true) then
-    raise exception 'Vinyl cutting is not an active method for catalogue add-on %',v_catalogue_name;
+   if v_catalogue_price is null then raise exception 'This catalogue item has no owner-approved standard price'; end if;
+   if v_selling_method='quantity_tier' then raise exception 'Quantity-tier pricing is unavailable until approved quantity rules are configured'; end if;
+   if v_selling_method not in('fixed_price','job_costed') then raise exception 'Unsupported catalogue selling method'; end if;
+   select costing_profile_id into v_method_profile from public.catalogue_item_methods
+   where business_id=v_business and catalogue_item_id=v_catalogue_item
+    and production_method='vinyl_cutting' and is_active=true
+   order by is_preferred desc limit 1;
+   if not found then raise exception 'Vinyl cutting is not an active method for catalogue add-on %',v_catalogue_name; end if;
+   if v_selling_method='job_costed' and v_method_profile is null then
+    raise exception 'This catalogue item requires an active production method linked to a costing profile';
+   end if;
+   if v_method_profile is not null then
+    select profile_name into v_method_profile_name from public.costing_profiles
+    where id=v_method_profile and business_id=v_business and is_active=true for share;
+    if v_method_profile_name is null then raise exception 'The linked costing profile is not active'; end if;
    end if;
 
    v_quantity:=nullif(v_addon->>'quantity','')::numeric;
@@ -118,7 +131,11 @@ begin
     raise exception 'Vinyl add-on quantity must be a whole number greater than zero';
    end if;
    if v_unit_price is null or v_unit_price<=0 then raise exception 'Vinyl add-on price must be greater than zero'; end if;
-   if v_catalogue_price is not null and v_unit_price<v_catalogue_price
+   select max_unit_selling_price into v_max_price from public.business_settings where business_id=v_business;
+   if v_max_price is not null and round(v_unit_price,2)>v_max_price then
+    raise exception 'Selling price exceeds the owner-set maximum price of KSh %',v_max_price;
+   end if;
+   if v_unit_price<v_catalogue_price
       and length(btrim(coalesce(v_addon->>'price_reason','')))<3 then
     raise exception 'A reason is required when a vinyl add-on price is below its catalogue-approved price';
    end if;
