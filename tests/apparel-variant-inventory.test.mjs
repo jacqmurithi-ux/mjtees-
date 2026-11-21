@@ -62,3 +62,28 @@ test('purchase order receipt remains linked to exact stock item and uses the exi
   assert.match(purchasing, /private\.apply_stock_movement\([\s\S]*?'purchase'/i);
   assert.match(apparelUi, /stock_item_id/);
 });
+
+test('direct apparel sales cannot consume stock committed to active production reservations', () => {
+  assert.match(migration, /perform 1 from public\.businesses where id=v_business for update/i);
+  assert.match(migration, /sum\(quantity-issued_quantity\)[\s\S]*?status in\('reserved','partially_issued'\)/i);
+  assert.match(migration, /v_stock\.quantity_on_hand-v_reserved<v_qty/i);
+  assert.match(migration, /Insufficient available apparel stock after reservations/i);
+});
+
+test('production issue replaces estimated blank-item cost instead of double-counting it', () => {
+  assert.match(migration, /cost_snapshot->>'catalogue_item_id'=v_variant\.catalogue_item_id::text/i);
+  assert.match(migration, /where c\.value->>'category'='blank_item'/i);
+  assert.match(migration, /v_blank_estimate_total\/v_invoice_quantity/i);
+  assert.match(migration, /greatest\(coalesce\(sum\(r\.issued_quantity\),0\)-p_quantity,0\)/i);
+  assert.match(migration, /coalesce\(actual_direct_cost,0\)-v_blank_estimate_to_replace/i);
+  assert.match(migration, /round\(p_quantity\*v_stock\.average_unit_cost,2\)/i);
+});
+
+test('variant creation enforces the required attributes for each known merchandise category', () => {
+  assert.match(migration, /This apparel variant requires both size and colour/i);
+  assert.match(migration, /A cap variant requires colour and style/i);
+  assert.match(migration, /A drinkware variant requires colour and capacity\/type/i);
+  assert.match(migration, /A reflective garment variant requires size, colour and reflective style/i);
+  assert.match(apparelUi, /requiredAttributes= isReflective/);
+  assert.match(apparelUi, /const missing=requiredAttributes\.filter/i);
+});
