@@ -45,3 +45,36 @@ test('a configurable gap is included between stickers', () => {
   assert.equal(result.usedWidthCm,41);
   assert.equal(result.usedLengthCm,10);
 });
+
+test('invalid dimensions and quantities are rejected rather than silently omitted', () => {
+  assert.match(layoutDtfStickers([{id:1,widthCm:0,heightCm:10,quantity:1}]).error,/positive finite width and height/i);
+  assert.match(layoutDtfStickers([{id:1,widthCm:10,heightCm:10,quantity:1.5}]).error,/whole numbers/i);
+  assert.match(layoutDtfStickers([{id:1,widthCm:10,heightCm:10,quantity:0}]).error,/whole numbers/i);
+});
+
+test('invalid roll and gap settings are rejected', () => {
+  assert.match(layoutDtfStickers([{id:1,widthCm:10,heightCm:10,quantity:1}],{rollWidthCm:0}).error,/roll width/i);
+  assert.match(layoutDtfStickers([{id:1,widthCm:10,heightCm:10,quantity:1}],{gapCm:-1}).error,/non-negative/i);
+  assert.match(layoutDtfStickers([{id:1,widthCm:10,heightCm:10,quantity:1}],{gapCm:NaN}).error,/non-negative/i);
+});
+
+test('every packed piece remains inside the roll and separated by the configured gap', () => {
+  const gap = 0.5;
+  const result = layoutDtfStickers([
+    {id:'A',widthCm:18,heightCm:12,quantity:3,allowRotation:true},
+    {id:'B',widthCm:25,heightCm:9,quantity:2,allowRotation:true},
+    {id:'C',widthCm:12,heightCm:8,quantity:2,allowRotation:false}
+  ],{gapCm:gap});
+  assert.equal(result.error,'');
+  assert.ok(result.placements.every(p=>p.xCm>=0&&p.yCm>=0&&p.xCm+p.widthCm<=58+1e-9));
+  for (let i=0;i<result.placements.length;i++) {
+    for (let j=i+1;j<result.placements.length;j++) {
+      const a=result.placements[i], b=result.placements[j];
+      const separated=a.xCm+a.widthCm+gap<=b.xCm+1e-9 ||
+        b.xCm+b.widthCm+gap<=a.xCm+1e-9 ||
+        a.yCm+a.heightCm+gap<=b.yCm+1e-9 ||
+        b.yCm+b.heightCm+gap<=a.yCm+1e-9;
+      assert.ok(separated, 'packed rectangles must not overlap and must respect the gap');
+    }
+  }
+});
