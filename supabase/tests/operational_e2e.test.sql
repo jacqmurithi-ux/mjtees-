@@ -480,6 +480,14 @@ select extensions.is(
   where job_id=current_setting('test.apparel_job_id')::uuid and status='reserved'),
  2,
  'one branded job can reserve multiple distinct apparel variants');
+select set_config('test.apparel_blank_catalogue_id',public.owner_save_catalogue_item_v2(
+ null,'E2E-APPAREL-BLANK','E2E Blank T-shirt','Apparel invoice mismatch test','product','Apparel','shop_1',
+ 'fixed_price',500,'piece',null,'{}'::jsonb,true,'[]'::jsonb
+)::text,true);
+select set_config('test.apparel_blank_variant_id',public.owner_create_apparel_variant(
+ current_setting('test.apparel_blank_catalogue_id')::uuid,
+ 'E2E-APPAREL-BLANK-M-BLK','M','Black',null,null,'shop_1',5,1,80
+)::text,true);
 select extensions.is(
  (select quantity-issued_quantity from public.apparel_variant_reservations where id=current_setting('test.apparel_reservation_id')::uuid),
  2::numeric,
@@ -574,15 +582,7 @@ select extensions.is(
  8::numeric,
  'rejected branded apparel quick sale leaves stock untouched');
 
--- A blank-sale catalogue item has no active production method; branded items use reservations.
-select set_config('test.apparel_blank_catalogue_id',public.owner_save_catalogue_item_v2(
- null,'E2E-APPAREL-BLANK','E2E Blank T-shirt','Blank apparel quick sale test','product','Apparel','shop_1',
- 'fixed_price',500,'piece',null,'{}'::jsonb,true,'[]'::jsonb
-)::text,true);
-select set_config('test.apparel_blank_variant_id',public.owner_create_apparel_variant(
- current_setting('test.apparel_blank_catalogue_id')::uuid,
- 'E2E-APPAREL-BLANK-M-BLK','M','Black',null,null,'shop_1',5,1,80
-)::text,true);
+-- The unrelated blank catalogue item above is also used for direct blank-sale coverage.
 
 -- Confirm a successful direct blank-apparel sale consumes the exact selected variant.
 select set_config('test.apparel_direct_sale_invoice',(
