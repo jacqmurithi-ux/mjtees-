@@ -264,8 +264,12 @@ create or replace function public.owner_create_apparel_quick_sale(
 language plpgsql security definer
 set search_path=public,private,pg_temp
 as $fn$
-declare v_business uuid; v_variant public.catalogue_item_variants%rowtype; v_stock public.stock_items%rowtype;
- v_result jsonb; v_qty numeric; v_supply text; v_item_id uuid;
+declare
+ v_business uuid; v_variant public.catalogue_item_variants%rowtype; v_stock public.stock_items%rowtype;
+ v_result jsonb; v_qty numeric; v_supply text; v_item_id uuid; v_invoice uuid;
+ v_invoice_total numeric(14,2); v_existing_cost numeric(14,2); v_blank_estimate numeric(14,2);
+ v_other_cost numeric(14,2); v_actual_cost numeric(14,2); v_margin numeric(7,2);
+ v_snapshot jsonb; v_exception boolean; v_exception_reason text;
 begin
  if auth.uid() is null or jsonb_typeof(p_sale_args)<>'object' or p_variant_id is null then raise exception 'Invalid apparel sale request'; end if;
  select business_id into v_business from public.business_memberships
@@ -289,15 +293,37 @@ begin
   p_sale_args->>'p_payment_number',p_sale_args->>'p_payment_method',
   coalesce((p_sale_args->>'p_payment_amount')::numeric,0),p_sale_args->>'p_payment_reference'
  );
+ v_invoice:=(v_result->>'invoice_id')::uuid;
+ select i.total,li.direct_cost,li.cost_snapshot into v_invoice_total,v_existing_cost,v_snapshot
+ from public.sales_invoices i join public.sales_invoice_items li on li.invoice_id=i.id and li.business_id=i.business_id
+ where i.id=v_invoice and i.business_id=v_business for update of li;
+ v_blank_estimate:=case when jsonb_typeof(v_snapshot->'components')='array' then
+  (select coalesce(sum(nullif(x.value->>'total_cost','')::numeric),0)
+   from jsonb_array_elements(v_snapshot->'components') x(value)
+   where x.value->>'category'='blank_item') else 0 end;
+ v_other_cost:=greatest(0,coalesce(v_existing_cost,0)-v_blank_estimate);
+ v_actual_cost:=round(v_other_cost+(v_stock.average_unit_cost*v_qty),2);
+ v_margin:=case when v_invoice_total>0 then round(((v_invoice_total-v_actual_cost)/v_invoice_total)*100,2) else 0 end;
+ v_exception:=coalesce((p_sale_args->>'p_allow_below_floor')::boolean,false);
+ v_exception_reason:=btrim(coalesce(p_sale_args->>'p_exception_reason',''));
+ if v_margin<30 and (not v_exception or length(v_exception_reason)<8) then
+  raise exception 'Actual apparel stock cost puts this sale below the 30%% gross-margin floor. An authorised exception and reason are required.';
+ end if;
  perform private.apply_stock_movement(v_business,v_stock.id,-v_qty,v_stock.average_unit_cost,'apparel_sale');
- update public.sales_invoice_items set cost_snapshot=coalesce(cost_snapshot,'{}'::jsonb)||jsonb_build_object(
-  'apparel_variant_id',v_variant.id,'apparel_sku',v_variant.sku,'apparel_attributes',v_variant.attributes,
-  'apparel_stock_item_id',v_stock.id,'apparel_stock_consumed',v_qty
- ) where invoice_id=(v_result->>'invoice_id')::uuid and business_id=v_business;
+ update public.sales_invoice_items set direct_cost=v_actual_cost,
+  cost_snapshot=coalesce(v_snapshot,'{}'::jsonb)||jsonb_build_object(
+   'apparel_variant_id',v_variant.id,'apparel_sku',v_variant.sku,'apparel_attributes',v_variant.attributes,
+   'apparel_stock_item_id',v_stock.id,'apparel_stock_consumed',v_qty,
+   'apparel_actual_unit_cost',v_stock.average_unit_cost,'apparel_actual_direct_cost',round(v_stock.average_unit_cost*v_qty,2),
+   'direct_cost_total',v_actual_cost,'gross_margin_percent',v_margin
+  )
+ where invoice_id=v_invoice and business_id=v_business;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
- values(v_business,auth.uid(),'sales.apparel_variant_consumed','sales_invoice',(v_result->>'invoice_id')::uuid,
-  jsonb_build_object('variant_id',v_variant.id,'sku',v_variant.sku,'stock_item_id',v_stock.id,'quantity',v_qty));
- return v_result||jsonb_build_object('apparel_variant_id',v_variant.id,'apparel_sku',v_variant.sku);
+ values(v_business,auth.uid(),'sales.apparel_variant_consumed','sales_invoice',v_invoice,
+  jsonb_build_object('variant_id',v_variant.id,'sku',v_variant.sku,'stock_item_id',v_stock.id,'quantity',v_qty,
+   'unit_cost',v_stock.average_unit_cost,'actual_direct_cost',v_actual_cost,'gross_margin_percent',v_margin,
+   'below_floor_exception_reason',case when v_margin<30 then v_exception_reason else null end));
+ return v_result||jsonb_build_object('apparel_variant_id',v_variant.id,'apparel_sku',v_variant.sku,'actual_direct_cost',v_actual_cost,'gross_margin_percent',v_margin);
 end
 $fn$;
 
