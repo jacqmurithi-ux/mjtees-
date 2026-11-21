@@ -95,3 +95,11 @@ test('MJ-supplied merchandise Quick Sales always require and display the exact v
   assert.match(operations, /quickSupply==='mj_supplies'&&apparelVariants\.some\(v=>v\.catalogue_item_id===quickItemId\)/);
   assert.doesNotMatch(operations, /quickSupply==='mj_supplies'&&!quickMethod&&apparelVariants/);
 });
+
+test('apparel issue locks production job before reservation to avoid cancellation deadlocks', () => {
+  const start=migration.indexOf('create or replace function public.owner_issue_apparel_variant_reservation');
+  const end=migration.indexOf('create or replace function public.owner_release_apparel_variant_reservation',start);
+  const issue=migration.slice(start,end);
+  assert.ok(issue.indexOf('from public.production_jobs')<issue.indexOf('from public.apparel_variant_reservations where id=p_reservation_id for update'));
+  assert.match(issue,/production job first, reservation second, stock item third/i);
+});
