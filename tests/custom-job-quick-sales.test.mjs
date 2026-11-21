@@ -4,6 +4,9 @@ import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261120195854_custom_job_quick_sales.sql', import.meta.url), 'utf8');
 const bundleMigration = await readFile(new URL('../supabase/migrations/20261121183000_custom_job_bundle_quick_sales.sql', import.meta.url), 'utf8');
+const vinylBundleMigration = await readFile(new URL('../supabase/migrations/20261121210000_custom_job_bundle_vinyl_addons.sql', import.meta.url), 'utf8');
+const vinylAddon = await readFile(new URL('../src/VinylAddonCalculator.tsx', import.meta.url), 'utf8');
+const vinylIntegrationTest = await readFile(new URL('../supabase/tests/custom_job_bundle_vinyl.test.sql', import.meta.url), 'utf8');
 const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
 
 test('custom job Quick Sale accepts a one-off price without creating a catalogue standard price', () => {
@@ -59,4 +62,37 @@ test('custom job bundle creates one invoice with separate catalogue lines and on
   assert.match(operations, /Optional catalogue products \/ services/);
   assert.match(operations, /p_catalogue_lines:quickAddonLines\.map/);
   assert.match(operations, /Estimated combined sale total/);
+});
+
+
+test('custom job bundle processes vinyl add-ons through the canonical stock-consuming RPC', () => {
+  assert.match(vinylBundleMigration, /owner_create_vinyl_sticker_quick_sale/);
+  assert.match(vinylBundleMigration, /from public\.stock_items[\s\S]*for update/);
+  assert.match(vinylBundleMigration, /ceil\(\(\(v_area\*v_quantity\)\/\(v_roll_width\*39\.37\)\)\*1000000\)\/1000000/);
+  assert.match(vinylBundleMigration, /p_payment_amount=>0/);
+  assert.match(vinylBundleMigration, /set entity_id=v_invoice[\s\S]*bundle_addon_index/);
+  assert.match(vinylBundleMigration, /Exactly one combined payment/);
+  assert.match(vinylBundleMigration, /insert into public\.payments/);
+  assert.match(vinylBundleMigration, /insert into public\.payment_allocations/);
+});
+
+test('vinyl add-on UI captures dimensions, stock colour, roll width and direct costs', () => {
+  assert.match(operations, /import VinylAddonCalculator from '\.\/VinylAddonCalculator'/);
+  assert.match(operations, /<VinylAddonCalculator line=\{line\} onChange=\{update\}/);
+  assert.match(operations, /vinyl_length_inches:/);
+  assert.match(operations, /vinyl_stock_item_id:/);
+  assert.match(vinylAddon, /Sticker length \(inches\)/);
+  assert.match(vinylAddon, /Sticker width \(inches\)/);
+  assert.match(vinylAddon, /Roll width \(inches\)/);
+  assert.match(vinylAddon, /Vinyl colour \/ stock item/);
+  assert.match(vinylAddon, /Cutting \/ weeding labour per piece/);
+  assert.match(vinylAddon, /Transfer tape per piece/);
+  assert.match(vinylAddon, /Application labour per piece/);
+});
+
+test('database integration test covers successful sale, insufficient stock and transaction rollback', () => {
+  assert.match(vinylIntegrationTest, /successful mixed-supply custom job and vinyl add-ons/);
+  assert.match(vinylIntegrationTest, /insufficient stock on a later add-on rejects the complete bundle/);
+  assert.match(vinylIntegrationTest, /earlier successful vinyl deduction is fully rolled back/);
+  assert.match(vinylIntegrationTest, /failed bundle leaves no payment record/);
 });
