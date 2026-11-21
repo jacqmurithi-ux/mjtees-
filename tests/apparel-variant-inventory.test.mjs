@@ -113,6 +113,7 @@ test('apparel stock quantities are restricted to whole pieces at the database bo
 
 
 test('branded apparel remains reserved until production issue while blank-item sales consume stock', () => {
+  assert.match(migration, /Branded apparel orders must reserve stock and issue it through production/);
   assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&quickApparelVariant/);
   assert.match(operations, /Blank item — no decoration/);
   assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&apparelVariants\.some/);
