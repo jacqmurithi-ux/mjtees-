@@ -151,6 +151,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    if(customDescription.trim().length<2)return fail('Describe the custom job.');
    if(customDimensions.trim().length<2)return fail('Enter the job dimensions or size.');
    if(!['vinyl_cutting','dtf','screen_printing','sublimation','embroidery','other'].includes(customMethod))return fail('Select a valid production method.');
+   if(quickSupply==='mj_supplies'&&customMethod==='vinyl_cutting')return fail('Use the Vinyl Sticker Calculator for MJ-supplied vinyl work so the correct vinyl quantity is deducted with the sale.');
    if(!customProfileId)return fail('Select an active costing profile for this custom job.');
    if(!Number.isInteger(quantity)||quantity<1)return fail('Quantity must be a whole number of at least 1.');
    if(!Number.isFinite(unitPrice)||unitPrice<=0)return fail('Enter the agreed custom-job price per unit.');
@@ -203,6 +204,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
   if(quickBelowFloor&&quickExceptionReason.trim().length<8)return fail('A below-floor exception reason must contain at least 8 characters.');
   const methods=(item.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);
   if(methods.length&&!methods.some((m:Row)=>m.production_method===quickMethod))return fail('Select an active production method for this item.');
+  if(quickSupply==='mj_supplies'&&quickMethod==='vinyl_cutting')return fail('Use the Vinyl Sticker Calculator for MJ-supplied vinyl work so the correct vinyl quantity is deducted with the sale.');
   if(!supabase)return;
   setLoading(true);setError('');setNotice('');
   const saleArgs={
