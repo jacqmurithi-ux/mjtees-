@@ -348,8 +348,8 @@ begin
  where business_id=v_business and variant_id=p_variant_id
   and status in('reserved','partially_issued');
  if v_stock.quantity_on_hand-v_reserved<v_qty then
-  raise exception 'Insufficient available apparel stock after reservations. On hand %, reserved %, requested %',
-   v_stock.quantity_on_hand,v_reserved,v_qty;
+  raise exception 'Insufficient available apparel stock after reservations'
+   using detail=format('On hand %s, reserved %s, requested %s',v_stock.quantity_on_hand,v_reserved,v_qty);
  end if;
  v_result:=public.owner_create_quick_sale(
   (p_sale_args->>'p_customer_id')::uuid,p_sale_args->>'p_invoice_number',(p_sale_args->>'p_due_date')::date,
