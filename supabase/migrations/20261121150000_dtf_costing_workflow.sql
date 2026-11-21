@@ -64,7 +64,8 @@ begin
   cost_snapshot=coalesce(cost_snapshot,'{}'::jsonb)||jsonb_build_object('pricing_source','dtf_costing','dtf_details',p_details,
    'direct_cost_per_piece',round(p_direct_cost_per_piece,2),'direct_cost_total',round(p_direct_cost_per_piece*p_quantity,2))
  where business_id=v_business and invoice_id=v_invoice;
- update public.production_jobs set actual_direct_cost=round(p_direct_cost_per_piece*p_quantity,2)
+ update public.production_jobs set actual_direct_cost=round(p_direct_cost_per_piece*p_quantity,2),
+  customer_supplied_items=not (coalesce(p_details->'garments','[]'::jsonb) @> '[{"supply_source":"mj_supplies"}]'::jsonb)
  where business_id=v_business and invoice_id=v_invoice;
  for v_line in select value from jsonb_array_elements(coalesce(p_stock_lines,'[]'::jsonb)) loop
   begin v_qty:=(v_line->>'quantity')::numeric;
