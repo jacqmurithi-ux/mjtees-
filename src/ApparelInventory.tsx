@@ -21,8 +21,9 @@ export default function ApparelInventory({businessId,onChanged}:{businessId:stri
    supabase.from('apparel_variant_reservations').select('id,variant_id,job_id,quantity,issued_quantity,status,created_at').eq('business_id',businessId).in('status',['reserved','partially_issued']).order('created_at',{ascending:false})
   ]);
   const failure=[c.error,v.error,j.error,r.error].find(Boolean);if(failure)throw failure;
-  setCatalogue(c.data||[]);setVariants(v.data||[]);setJobs((j.data||[]).filter((x:Row)=>!x.customer_supplied_items));setReservations(r.data||[]);
-  if(!product&&c.data?.[0])setProduct(c.data[0].id);if(!variant&&v.data?.[0])setVariant(v.data[0].id);if(!job&&j.data?.[0])setJob(j.data[0].id);
+  const eligibleJobs=(j.data||[]).filter((x:Row)=>!x.customer_supplied_items);
+  setCatalogue(c.data||[]);setVariants(v.data||[]);setJobs(eligibleJobs);setReservations(r.data||[]);
+  if(!product&&c.data?.[0])setProduct(c.data[0].id);if(!variant&&v.data?.[0])setVariant(v.data[0].id);if(!job&&eligibleJobs[0])setJob(eligibleJobs[0].id);
  },[businessId,product,variant,job]);
  useEffect(()=>{void refresh().catch(e=>setError(e.message||String(e)))},[refresh]);
  async function run(name:string,args:Row,message:string){
