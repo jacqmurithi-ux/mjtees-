@@ -42,7 +42,7 @@ export default function DtfCalculator({onSaved}:{onSaved?:()=>void}){
   const stickerRowsCosted=stickerRows.map((x,i)=>{
    const last=i===stickerRows.length-1;
    const allocatedBatchCost=last?roundMoney(batch-allocatedBatchSoFar):roundMoney(x.areaCm2*printAndTransportPerCm2);
-   const allocatedHeatPressCost=last?roundMoney(press-allocatedPressSoFar):roundMoney(pressMode==='piece'?number(pressCost)*x.qty:(printPieces>0?press*x.qty/printPieces:0));
+   const allocatedHeatPressCost=last?roundMoney(press-allocatedPressSoFar):roundMoney(printPieces>0?press*x.qty/printPieces:0);
    allocatedBatchSoFar+=allocatedBatchCost;allocatedPressSoFar+=allocatedHeatPressCost;
    return {...x,allocatedBatchCost,allocatedHeatPressCost,directCost:roundMoney(allocatedBatchCost+allocatedHeatPressCost)};
   });
