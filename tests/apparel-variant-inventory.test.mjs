@@ -46,7 +46,7 @@ test('direct apparel sales call the canonical quick-sale RPC and consume the sel
   assert.match(migration, /public\.owner_create_quick_sale\(/i);
   assert.match(migration, /'apparel_sale'/i);
   assert.match(operations, /owner_create_apparel_quick_sale/i);
-  assert.match(operations, /Select the exact apparel variant before confirming this sale/i);
+  assert.match(operations, /Select the exact apparel variant before confirming this blank-item sale/i);
 });
 
 test('variant management UI supports exact product attributes, reservations, issue and release', () => {
