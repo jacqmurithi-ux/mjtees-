@@ -151,7 +151,7 @@ begin
  insert into public.supplier_payments(business_id,supplier_id,dtf_batch_id,payment_number,method,amount,reference_code,paid_by)
  values(biz,b.supplier_id,b.id,btrim(p_payment_number),p_method,p_amount,nullif(btrim(p_reference_code),''),u) returning id into payment_id;
  insert into public.expenses(business_id,expense_date,category,description,amount,payment_method,created_by,source_type,source_id)
- values(biz,current_date,'Supplies','DTF supplier order '+b.batch_number||' — payment '+btrim(p_payment_number),p_amount,p_method,u,'dtf_supplier_payment',payment_id)
+ values(biz,current_date,'Supplies','DTF supplier order '||b.batch_number||' — payment '+btrim(p_payment_number),p_amount,p_method,u,'dtf_supplier_payment',payment_id)
  returning id into expense_id;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(biz,u,'dtf.supplier_payment_recorded','dtf_supplier_payment',payment_id,jsonb_build_object('batch_id',b.id,'expense_id',expense_id,'amount',p_amount,'category','Supplies','outstanding_after_payment',supplier_due-p_amount));
