@@ -293,8 +293,59 @@ begin
  values(p_business_id,p_stock_item_id,p_movement_type,p_quantity,p_unit_cost,auth.uid());
 end
 $function$;
-revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) from public,anon;
-grant execute on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) to authenticated;
+revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) from public,anon,authenticated;
+
+-- Keep the stock movement helper private to RPC implementations. These legacy
+-- owner RPCs must be SECURITY DEFINER because they call the private helper.
+create or replace function public.owner_create_stock_item(
+ p_location_code text,p_item_name text,p_category text,p_unit text default 'piece',
+ p_opening_quantity numeric default 0,p_reorder_level numeric default 0,p_unit_cost numeric default 0,p_sku text default null
+) returns uuid
+language plpgsql security definer
+set search_path=public,private,pg_temp
+as $fn$
+declare v_business uuid; v_location uuid; v_item uuid; v_user uuid;
+begin
+ v_user:=auth.uid();
+ if v_user is null then raise exception 'Authentication required'; end if;
+ select business_id into v_business from public.business_memberships where user_id=v_user and role='owner' limit 1;
+ if v_business is null then raise exception 'Owner workspace required'; end if;
+ if p_location_code not in('shop_1','shop_2') or p_opening_quantity<0 or p_reorder_level<0 or p_unit_cost<0 then raise exception 'Invalid stock details'; end if;
+ select id into v_location from public.inventory_locations where business_id=v_business and location_code=p_location_code;
+ if v_location is null then raise exception 'Inventory location not found'; end if;
+ insert into public.stock_items(business_id,location_id,sku,item_name,category,unit,quantity_on_hand,reorder_level,average_unit_cost)
+ values(v_business,v_location,nullif(btrim(p_sku),''),btrim(p_item_name),btrim(p_category),coalesce(nullif(btrim(p_unit),''),'piece'),0,p_reorder_level,p_unit_cost)
+ returning id into v_item;
+ if p_opening_quantity>0 then
+  perform private.apply_stock_movement(v_business,v_item,p_opening_quantity,p_unit_cost,'opening');
+ end if;
+ return v_item;
+end
+$fn$;
+
+create or replace function public.owner_issue_job_material(p_job_material_id uuid,p_quantity numeric)
+returns void
+language plpgsql security definer
+set search_path=public,private,pg_temp
+as $fn$
+declare m public.production_job_materials%rowtype; s public.stock_items%rowtype; v_user uuid;
+begin
+ v_user:=auth.uid();
+ if v_user is null then raise exception 'Authentication required'; end if;
+ select * into m from public.production_job_materials where id=p_job_material_id for update;
+ if not found or not exists(select 1 from public.business_memberships where business_id=m.business_id and user_id=v_user and role='owner') then raise exception 'Job material not found'; end if;
+ if p_quantity is null or p_quantity<=0 or m.issued_quantity+p_quantity>m.planned_quantity then raise exception 'Issue quantity exceeds planned balance'; end if;
+ select * into s from public.stock_items where id=m.stock_item_id and business_id=m.business_id for update;
+ if not found or s.quantity_on_hand<p_quantity then raise exception 'Insufficient stock'; end if;
+ perform private.apply_stock_movement(m.business_id,s.id,-p_quantity,s.average_unit_cost,'job_issue');
+ perform private.update_job_material_issue(m.business_id,m.id,p_quantity,p_quantity*s.average_unit_cost);
+end
+$fn$;
+revoke all on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) from public,anon;
+revoke all on function public.owner_issue_job_material(uuid,numeric) from public,anon;
+grant execute on function public.owner_create_stock_item(text,text,text,text,numeric,numeric,numeric,text) to authenticated;
+grant execute on function public.owner_issue_job_material(uuid,numeric) to authenticated;
+
 
 -- Cancellation releases only unissued reservations. Issued quantities remain consumed.
 create or replace function private.release_apparel_reservations_on_job_cancel()
@@ -337,7 +388,7 @@ declare
  v_result jsonb; v_qty numeric; v_supply text; v_item_id uuid; v_invoice uuid; v_reserved numeric:=0;
  v_invoice_total numeric(14,2); v_existing_cost numeric(14,2); v_blank_estimate numeric(14,2);
  v_other_cost numeric(14,2); v_actual_cost numeric(14,2); v_margin numeric(7,2);
- v_snapshot jsonb; v_exception boolean; v_exception_reason text;
+ v_snapshot jsonb; v_effective_method text; v_exception boolean; v_exception_reason text;
 begin
  if auth.uid() is null or jsonb_typeof(p_sale_args)<>'object' or p_variant_id is null then raise exception 'Invalid apparel sale request'; end if;
  select business_id into v_business from public.business_memberships
@@ -351,9 +402,6 @@ begin
  v_item_id:=(p_sale_args->>'p_catalogue_item_id')::uuid;
  if v_item_id<>v_variant.catalogue_item_id then raise exception 'Selected variant does not belong to the selected catalogue product'; end if;
  if v_supply<>'mj_supplies' then raise exception 'Customer-supplied items must use the standard sale workflow without MJ stock'; end if;
- if nullif(btrim(p_sale_args->>'p_production_method'),'') is not null then
-  raise exception 'Branded apparel orders must reserve stock and issue it through production';
- end if;
  if v_qty is null or v_qty<=0 or v_qty<>trunc(v_qty) then raise exception 'Apparel quantity must be a whole number greater than zero'; end if;
  select * into v_stock from public.stock_items where id=v_variant.stock_item_id and business_id=v_business and active for update;
  if not found then raise exception 'Apparel variant stock item is inactive or unavailable'; end if;
@@ -374,9 +422,12 @@ begin
   coalesce((p_sale_args->>'p_payment_amount')::numeric,0),p_sale_args->>'p_payment_reference'
  );
  v_invoice:=(v_result->>'invoice_id')::uuid;
- select i.total,li.direct_cost,li.cost_snapshot into v_invoice_total,v_existing_cost,v_snapshot
+ select i.total,li.direct_cost,li.cost_snapshot,li.production_method into v_invoice_total,v_existing_cost,v_snapshot,v_effective_method
  from public.sales_invoices i join public.sales_invoice_items li on li.invoice_id=i.id and li.business_id=i.business_id
  where i.id=v_invoice and i.business_id=v_business for update of li;
+ if v_effective_method is not null then
+  raise exception 'Branded apparel orders must reserve stock and issue it through production';
+ end if;
  v_blank_estimate:=case when jsonb_typeof(v_snapshot->'components')='array' then
   (select coalesce(sum(nullif(x.value->>'total_cost','')::numeric),0)
    from jsonb_array_elements(v_snapshot->'components') x(value)
