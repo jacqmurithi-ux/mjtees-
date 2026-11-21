@@ -116,6 +116,6 @@ test('branded apparel remains reserved until production issue while blank-item s
   assert.match(migration, /Branded apparel orders must reserve stock and issue it through production/);
   assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&quickApparelVariant/);
   assert.doesNotMatch(operations, /Blank item — no decoration/);
-  assert.match(migration, /li\.production_method/);
+  assert.match(migration, /v_snapshot->>'production_method'/);
   assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&apparelVariants\.some/);
 });
