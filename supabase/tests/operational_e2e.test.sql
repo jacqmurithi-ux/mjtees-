@@ -386,10 +386,20 @@ select extensions.is((select amount from public.supplier_payments where id=curre
 select extensions.is((select count(*)::integer from public.stock_movements where movement_type='purchase' and stock_item_id=current_setting('test.stock_two')::uuid and quantity=3),1,'goods receipt creates a separate append-only stock movement for each received stock line');
 
 
+-- Create test merchandise catalogue products in the bootstrapped workspace.
+select set_config('test.tshirt_catalogue_id',public.owner_save_catalogue_item_v2(
+ null,'E2E-TSHIRT-VARIANT','E2E T-shirt','Apparel variant test','product','Apparel','shop_1',
+ 'fixed_price',500,'piece',null,'{}'::jsonb,true,'[]'::jsonb
+)::text,true);
+select set_config('test.cap_catalogue_id',public.owner_save_catalogue_item_v2(
+ null,'E2E-CAP-VARIANT','E2E Cap','Headwear variant test','product','Headwear','shop_1',
+ 'fixed_price',300,'piece',null,'{}'::jsonb,true,'[]'::jsonb
+)::text,true);
+
 -- Apparel variant inventory: product attributes, reservation protection and actual issue costing.
 select extensions.throws_ok(
  $select public.owner_create_apparel_variant(
-  (select id from public.catalogue_items where business_id=current_setting('test.business_id')::uuid and item_code='APP-TSHIRT'),
+  current_setting('test.tshirt_catalogue_id')::uuid,
   'E2E-TEE-MISSING-COLOUR','M',null,null,null,'shop_1',0,0,30
  )$,
  'P0001','This apparel variant requires both size and colour',
@@ -407,7 +417,7 @@ select extensions.is(
 
 select extensions.throws_ok(
  $select public.owner_create_apparel_variant(
-  (select id from public.catalogue_items where business_id=current_setting('test.business_id')::uuid and item_code='APP-CAP'),
+  current_setting('test.cap_catalogue_id')::uuid,
   'E2E-CAP-MISSING-STYLE',null,'Black',null,null,'shop_1',0,0,30
  )$,
  'P0001','A cap variant requires colour and style (for example adjustable or fitted)',
