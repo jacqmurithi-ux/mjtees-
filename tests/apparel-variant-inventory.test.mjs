@@ -33,7 +33,7 @@ test('reservations check on-hand less active reservations before reserving', () 
 test('issuing reserved merchandise posts a negative stock movement and records actual cost', () => {
   assert.match(migration, /owner_issue_apparel_variant_reservation/i);
   assert.match(migration, /'job_issue'/i);
-  assert.match(migration, /actual_direct_cost=coalesce\(actual_direct_cost,0\)/i);
+  assert.match(migration, /coalesce\(actual_direct_cost,0\)-v_blank_estimate_to_replace/i);
 });
 
 test('release and job cancellation close only unissued reservation balances', () => {
