@@ -7,12 +7,12 @@ const ui = await readFile(new URL('../src/DtfCalculator.tsx', import.meta.url), 
 const databaseE2e = await readFile(new URL('../supabase/tests/operational_e2e.test.sql', import.meta.url), 'utf8');
 
 test('mixed DTF batch costs are calculated and rounded by the database, not trusted from the browser', () => {
-  assert.match(migration, /alloc_print:=round\\(print_total\\*a\\/area_total,2\\)/);
-  assert.match(migration, /direct:=alloc_print\\+alloc_press\\+alloc_labour/);
-  assert.doesNotMatch(migration, /direct:=coalesce\\(\\(j->>'direct_cost'\\)/);
-  assert.match(migration, /allocated_print:=allocated_print\\+alloc_print/);
-  assert.match(migration, /allocated_press:=allocated_press\\+alloc_press/);
-  assert.match(migration, /allocated_labour:=allocated_labour\\+alloc_labour/);
+  assert.match(migration, /alloc_print:=round\(print_total\*a\/area_total,2\)/);
+  assert.match(migration, /direct:=alloc_print\+alloc_press\+alloc_labour/);
+  assert.doesNotMatch(migration, /direct:=coalesce\(\(j->>'direct_cost'\)/);
+  assert.match(migration, /allocated_print:=allocated_print\+alloc_print/);
+  assert.match(migration, /allocated_press:=allocated_press\+alloc_press/);
+  assert.match(migration, /allocated_labour:=allocated_labour\+alloc_labour/);
 });
 
 test('mixed DTF batch validates heat-press totals and enforces the 30% margin floor server-side', () => {
@@ -27,7 +27,7 @@ test('mixed-customer batch UI excludes unallocated garment inventory costs and d
   assert.match(ui, /Mixed-customer supplier batches contain DTF sticker jobs only/);
   assert.match(ui, /allocated_print_transport_cost/);
   assert.match(ui, /allocated_heat_press_cost/);
-  assert.match(ui, /Print \\+ transport/);
+  assert.match(ui, /Print \+ transport/);
   assert.match(ui, /Heat press/);
   assert.match(ui, /Actual supplier printing charge/);
   assert.match(ui, /Labour cost/);
