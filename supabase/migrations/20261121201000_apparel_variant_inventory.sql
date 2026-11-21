@@ -90,7 +90,8 @@ begin
  if not found then raise exception 'Active catalogue item not found'; end if;
  if v_item.item_type<>'product' then raise exception 'Variants can only be created for catalogue products, not services'; end if;
  if length(btrim(coalesce(p_sku,'')))<2 or p_location_code not in('shop_1','shop_2')
-   or coalesce(p_opening_quantity,-1)<0 or coalesce(p_reorder_level,-1)<0 or coalesce(p_unit_cost,-1)<0
+   or coalesce(p_opening_quantity,-1)<0 or p_opening_quantity<>trunc(p_opening_quantity)
+   or coalesce(p_reorder_level,-1)<0 or p_reorder_level<>trunc(p_reorder_level) or coalesce(p_unit_cost,-1)<0
  then raise exception 'Enter a SKU, valid location and non-negative stock values'; end if;
  v_item_name:=lower(coalesce(v_item.name,''));
  v_variant_text:=lower(concat_ws(' ',v_item.name,v_item.description));
@@ -149,7 +150,7 @@ as $fn$
 declare v_business uuid; v_job public.production_jobs%rowtype; v_variant public.catalogue_item_variants%rowtype;
  v_stock public.stock_items%rowtype; v_reserved numeric; v_id uuid;
 begin
- if auth.uid() is null or p_quantity is null or p_quantity<=0 then raise exception 'Authentication and a positive reservation quantity are required'; end if;
+ if auth.uid() is null or p_quantity is null or p_quantity<=0 or p_quantity<>trunc(p_quantity) then raise exception 'Authentication and a positive whole-piece reservation quantity are required'; end if;
  select business_id into v_business from public.business_memberships
  where user_id=auth.uid() and role='owner' order by created_at limit 1;
  select * into v_job from public.production_jobs where id=p_job_id and business_id=v_business for update;
@@ -184,7 +185,7 @@ as $fn$
 declare v_res public.apparel_variant_reservations%rowtype; v_variant public.catalogue_item_variants%rowtype;
  v_stock public.stock_items%rowtype; v_job public.production_jobs%rowtype; v_remaining numeric;
 begin
- if auth.uid() is null or p_quantity is null or p_quantity<=0 then raise exception 'Authentication and a positive issue quantity are required'; end if;
+ if auth.uid() is null or p_quantity is null or p_quantity<=0 or p_quantity<>trunc(p_quantity) then raise exception 'Authentication and a positive whole-piece issue quantity are required'; end if;
  -- Read the reservation to identify its job, then lock in the same order as cancellation:
  -- production job first, reservation second, stock item third.
  select * into v_res from public.apparel_variant_reservations where id=p_reservation_id;
