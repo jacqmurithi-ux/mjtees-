@@ -445,6 +445,10 @@ select set_config('test.apparel_catalogue_id',public.owner_save_catalogue_item_v
  'job_costed',500,'piece',null,'{}'::jsonb,true,
  jsonb_build_array(jsonb_build_object('production_method','dtf','costing_profile_id',current_setting('test.apparel_profile_id'),'is_preferred',true,'is_active',true))
 )::text,true);
+select set_config('test.apparel_variant_id',public.owner_create_apparel_variant(
+ current_setting('test.apparel_catalogue_id')::uuid,
+ 'E2E-APPAREL-M-BLK','M','Black',null,null,'shop_1',10,2,30
+)::text,true);
 select set_config('test.apparel_invoice_id',(public.owner_create_quick_sale(
  (select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
  'INV-E2E-APPAREL',current_date+7,current_setting('test.apparel_catalogue_id')::uuid,'dtf',
@@ -478,7 +482,7 @@ select extensions.is(
  'one branded job can reserve multiple distinct apparel variants');
 select extensions.is(
  (select quantity-issued_quantity from public.apparel_variant_reservations where id=current_setting('test.apparel_reservation_id')::uuid),
- 4::numeric,
+ 2::numeric,
  'branded order reserves the exact apparel variant without reducing physical stock');
 select extensions.throws_ok(
  $assert$select public.owner_create_apparel_quick_sale(
@@ -512,7 +516,7 @@ select extensions.is(
  (select count(*)::integer from public.stock_movements
   where stock_item_id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)
    and movement_type='job_issue' and quantity=-2),
- 2,
+ 1,
  'each partial apparel issue posts its own canonical negative stock movement');
 
 select extensions.is(
