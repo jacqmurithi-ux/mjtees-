@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(110);
+select extensions.plan(120);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -384,6 +384,106 @@ select extensions.throws_ok(
 select set_config('test.supplier_payment_multi',public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_multi')::uuid,'SPAY-TEST-MULTI','mpesa_paybill',20,'SUPPLIER-REF-02')::text,true);
 select extensions.is((select amount from public.supplier_payments where id=current_setting('test.supplier_payment_multi')::uuid),20::numeric,'partial supplier payment is recorded without changing purchase or stock movements');
 select extensions.is((select count(*)::integer from public.stock_movements where movement_type='purchase' and stock_item_id=current_setting('test.stock_two')::uuid and quantity=3),1,'goods receipt creates a separate append-only stock movement for each received stock line');
+
+
+-- Apparel variant inventory: product attributes, reservation protection and actual issue costing.
+select extensions.throws_ok(
+ $select public.owner_create_apparel_variant(
+  (select id from public.catalogue_items where business_id=current_setting('test.business_id')::uuid and item_code='APP-TSHIRT'),
+  'E2E-TEE-MISSING-COLOUR','M',null,null,null,'shop_1',0,0,30
+ )$,
+ 'P0001','This apparel variant requires both size and colour',
+ 'T-shirt variants require both size and colour');
+
+select set_config('test.apparel_variant_id',public.owner_create_apparel_variant(
+ (select id from public.catalogue_items where business_id=current_setting('test.business_id')::uuid and item_code='APP-TSHIRT'),
+ 'E2E-TEE-M-BLK','M','Black',null,null,'shop_1',10,2,30
+)::text,true);
+select extensions.is(
+ (select quantity_on_hand from public.stock_items
+  where id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)),
+ 10::numeric,
+ 'new apparel variant opening quantity is recorded through the stock ledger');
+
+select extensions.throws_ok(
+ $select public.owner_create_apparel_variant(
+  (select id from public.catalogue_items where business_id=current_setting('test.business_id')::uuid and item_code='APP-CAP'),
+  'E2E-CAP-MISSING-STYLE',null,'Black',null,null,'shop_1',0,0,30
+ )$,
+ 'P0001','A cap variant requires colour and style (for example adjustable or fitted)',
+ 'cap variants require colour and fit/style');
+
+select set_config('test.mug_catalogue_id',public.owner_save_catalogue_item_v2(
+ null,'E2E-MUG','E2E Mug','Drinkware attribute validation','product','Drinkware','shop_1',
+ 'fixed_price',250,'piece',null,'{}'::jsonb,true,'[]'::jsonb
+)::text,true);
+select extensions.throws_ok(
+ $select public.owner_create_apparel_variant(
+  current_setting('test.mug_catalogue_id')::uuid,'E2E-MUG-MISSING-CAPACITY',
+  null,'White',null,null,'shop_1',0,0,80
+ )$,
+ 'P0001','A drinkware variant requires colour and capacity/type',
+ 'mug variants require colour and capacity/type');
+
+select set_config('test.apparel_profile_id',public.owner_create_costing_profile(
+ 'E2E apparel blank and decoration',
+ '[{"name":"Blank garment","category":"blank_item","cost":100,"basis":"per_piece"},{"name":"Decoration","category":"production","cost":50,"basis":"per_piece"}]'::jsonb,
+ 150,true
+)::text,true);
+select set_config('test.apparel_catalogue_id',public.owner_save_catalogue_item_v2(
+ null,'E2E-APPAREL','E2E T-shirt','Apparel inventory integration test','product','Apparel','shop_1',
+ 'job_costed',500,'piece',null,'{}'::jsonb,true,
+ jsonb_build_array(jsonb_build_object('production_method','dtf','costing_profile_id',current_setting('test.apparel_profile_id'),'is_preferred',true,'is_active',true))
+)::text,true);
+select set_config('test.apparel_invoice_id',(public.owner_create_quick_sale(
+ (select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
+ 'INV-E2E-APPAREL',current_date+7,current_setting('test.apparel_catalogue_id')::uuid,'dtf',
+ 4,500,'mj_supplies',0,null,false,null,null,null,0,null
+)->>'invoice_id'),true);
+select set_config('test.apparel_job_id',(public.owner_create_production_job_from_invoice(
+ current_setting('test.apparel_invoice_id')::uuid,'JOB-E2E-APPAREL',current_date+7
+)->>'job_id'),true);
+select extensions.is(
+ (select actual_direct_cost from public.production_jobs where id=current_setting('test.apparel_job_id')::uuid),
+ 600::numeric,
+ 'production job begins with the invoice blank-item estimate and other direct costs');
+select set_config('test.apparel_reservation_id',public.owner_reserve_apparel_variant(
+ current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,4
+)::text,true);
+select extensions.is(
+ (select quantity-issued_quantity from public.apparel_variant_reservations where id=current_setting('test.apparel_reservation_id')::uuid),
+ 4::numeric,
+ 'branded order reserves the exact apparel variant without reducing physical stock');
+select extensions.throws_ok(
+ $select public.owner_create_apparel_quick_sale(
+  jsonb_build_object(
+   'p_customer_id',(select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
+   'p_invoice_number','INV-E2E-APPAREL-OVER-RESERVED','p_due_date',current_date+7,
+   'p_catalogue_item_id',current_setting('test.apparel_catalogue_id'),
+   'p_production_method','dtf','p_quantity',7,'p_unit_price',500,
+   'p_supply_arrangement','mj_supplies','p_other_direct_costs',0,
+   'p_allow_below_floor',false,'p_payment_amount',0
+  ),current_setting('test.apparel_variant_id')::uuid
+ )$,
+ 'P0001','Insufficient available apparel stock after reservations. On hand 10, reserved 4, requested 7',
+ 'direct apparel sale cannot consume stock reserved for a production job');
+
+select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,2);
+select extensions.is(
+ (select actual_direct_cost from public.production_jobs where id=current_setting('test.apparel_job_id')::uuid),
+ 460::numeric,
+ 'partial apparel issue replaces only the issued share of estimated blank cost with actual stock cost');
+select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,2);
+select extensions.is(
+ (select actual_direct_cost from public.production_jobs where id=current_setting('test.apparel_job_id')::uuid),
+ 320::numeric,
+ 'final apparel issue removes the remaining blank estimate without double-counting actual cost');
+select extensions.is(
+ (select count(*)::integer from public.stock_movements
+  where stock_item_id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)
+   and movement_type='job_issue' and quantity=-2),
+ 2,
+ 'each partial apparel issue posts its own canonical negative stock movement');
 
 select * from extensions.finish();
 rollback;
