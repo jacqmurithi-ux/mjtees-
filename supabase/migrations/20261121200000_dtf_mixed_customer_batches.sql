@@ -46,7 +46,7 @@ grant select on public.dtf_print_batches,public.dtf_print_jobs to authenticated;
 create or replace function public.owner_create_dtf_batch(p_batch jsonb,p_jobs jsonb)
 returns jsonb language plpgsql security definer set search_path=public,private,pg_temp as $$
 declare
- u uuid:=auth.uid(); b uuid; biz uuid; no text; area_total numeric:=0; print_total numeric:=0; press_total numeric:=0;
+ u uuid:=auth.uid(); b uuid; biz uuid; no text; area_total numeric:=0; total_qty numeric:=0; print_total numeric:=0; press_total numeric:=0;
  j jsonb; cust uuid; w numeric; h numeric; q integer; a numeric; n integer:=0; alloc_print numeric; alloc_press numeric; direct numeric;
 begin
  if u is null then raise exception 'Authentication required'; end if;
@@ -62,7 +62,7 @@ begin
   if cust is null or not exists(select 1 from public.customers c where c.id=cust and c.business_id=biz) then raise exception 'Every job requires a customer in this workspace'; end if;
   w:=(j->>'width_inches')::numeric; h:=(j->>'height_inches')::numeric; q:=(j->>'quantity')::integer;
   if w<=0 or h<=0 or q<=0 then raise exception 'Invalid job dimensions or quantity'; end if;
-  area_total:=area_total+w*h*q;
+  area_total:=area_total+w*h*q; total_qty:=total_qty+q;
  end loop;
  if area_total<=0 or print_total<0 or press_total<0 then raise exception 'Invalid batch totals'; end if;
  insert into public.dtf_print_batches(business_id,batch_number,supplier_name,sheet_count,media_width,media_height,media_unit,printing_charge,transport_cost,heat_press_basis,heat_press_rate,heat_press_total,total_print_area_sq_in,created_by)
@@ -70,7 +70,7 @@ begin
  for j in select value from jsonb_array_elements(p_jobs) loop
   n:=n+1; cust:=(j->>'customer_id')::uuid; w:=(j->>'width_inches')::numeric; h:=(j->>'height_inches')::numeric; q:=(j->>'quantity')::integer; a:=w*h*q;
   alloc_print:=round(print_total*a/area_total,2);
-  alloc_press:=case when n=jsonb_array_length(p_jobs) then press_total-(select coalesce(sum(allocated_heat_press_cost),0) from public.dtf_print_jobs where batch_id=b) when coalesce(p_batch->>'heat_press_basis','piece')='piece' then round(coalesce((p_batch->>'heat_press_rate')::numeric,0)*q,2) else round(press_total*a/area_total,2) end;
+  alloc_press:=case when n=jsonb_array_length(p_jobs) then press_total-(select coalesce(sum(allocated_heat_press_cost),0) from public.dtf_print_jobs where batch_id=b) when coalesce(p_batch->>'heat_press_basis','piece')='piece' then round(coalesce((p_batch->>'heat_press_rate')::numeric,0)*q,2) else round(press_total*q/total_qty,2) end;
   direct:=coalesce((j->>'direct_cost')::numeric,alloc_print+alloc_press);
   insert into public.dtf_print_jobs(business_id,batch_id,line_number,customer_id,job_reference,sticker_type,width_inches,height_inches,quantity,area_sq_in,allocated_print_transport_cost,allocated_heat_press_cost,direct_cost,suggested_unit_price,agreed_unit_price)
   values(biz,b,n,cust,nullif(j->>'job_reference',''),coalesce(nullif(j->>'sticker_type',''),'DTF sticker'),w,h,q,a,alloc_print,alloc_press,direct,coalesce((j->>'suggested_unit_price')::numeric,ceil(direct/q/0.7)),nullif(j->>'agreed_unit_price','')::numeric);
