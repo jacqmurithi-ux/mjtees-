@@ -293,7 +293,8 @@ begin
  values(p_business_id,p_stock_item_id,p_movement_type,p_quantity,p_unit_cost,auth.uid());
 end
 $function$;
-revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) from public,anon,authenticated;
+revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) from public,anon;
+grant execute on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) to authenticated;
 
 -- Cancellation releases only unissued reservations. Issued quantities remain consumed.
 create or replace function private.release_apparel_reservations_on_job_cancel()
