@@ -32,7 +32,7 @@ export default function DtfCalculator({onSaved}:{onSaved?:()=>void}){
    const widthCm=w*(dimensionUnit==='cm'?1:2.54),heightCm=h*(dimensionUnit==='cm'?1:2.54);
    return {...x,w,h,qty,widthCm,heightCm,area:w*h*(dimensionUnit==='cm'?1/6.4516:1),areaCm2:widthCm*heightCm*qty};
   });
-  const layout=layoutDtfStickers(stickerRows.map(x=>({id:x.id,label:x.label,widthCm:x.widthCm,heightCm:x.heightCm,quantity:x.qty,allowRotation:x.allowRotation})),{rollWidthCm:58,gapCm:number(gapCm)});
+  const layout=layoutDtfStickers(stickerRows.filter(x=>x.widthCm>0&&x.heightCm>0&&x.qty>0).map(x=>({id:x.id,label:x.label,widthCm:x.widthCm,heightCm:x.heightCm,quantity:x.qty,allowRotation:x.allowRotation})),{rollWidthCm:58,gapCm:number(gapCm)});
   const garmentRows=garments.map(x=>({...x,qty:number(x.quantity),cost:x.source==='mj_supplies'?(number(x.unitCost)||number(String(stock.find(s=>s.id===x.stockId)?.average_unit_cost||0))):0}));
   const stickerArea=stickerRows.reduce((n,x)=>n+x.area*x.qty,0),stickerAreaCm2=stickerRows.reduce((n,x)=>n+x.areaCm2,0),printPieces=stickerRows.reduce((n,x)=>n+x.qty,0),garmentPieces=garmentRows.reduce((n,x)=>n+x.qty,0),totalPieces=garmentPieces||printPieces;
   const printingCost=layout.error?0:layout.materialAreaCm2*number(supplierRate)/(58*100);
