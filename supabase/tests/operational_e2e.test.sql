@@ -547,17 +547,27 @@ select extensions.is(
  8::numeric,
  'rejected branded apparel quick sale leaves stock untouched');
 
+-- A blank-sale catalogue item has no active production method; branded items use reservations.
+select set_config('test.apparel_blank_catalogue_id',public.owner_save_catalogue_item_v2(
+ null,'E2E-APPAREL-BLANK','E2E Blank T-shirt','Blank apparel quick sale test','product','Apparel','shop_1',
+ 'fixed_price',500,'piece',null,'{}'::jsonb,true,'[]'::jsonb
+)::text,true);
+select set_config('test.apparel_blank_variant_id',public.owner_create_apparel_variant(
+ current_setting('test.apparel_blank_catalogue_id')::uuid,
+ 'E2E-APPAREL-BLANK-M-BLK','M','Black',null,null,'shop_1',5,1,80
+)::text,true);
+
 -- Confirm a successful direct blank-apparel sale consumes the exact selected variant.
 select set_config('test.apparel_direct_sale_invoice',(
  public.owner_create_apparel_quick_sale(
   jsonb_build_object(
    'p_customer_id',(select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
    'p_invoice_number','INV-E2E-APPAREL-DIRECT','p_due_date',current_date+7,
-   'p_catalogue_item_id',current_setting('test.apparel_catalogue_id'),
-   'p_production_method','dtf','p_quantity',1,'p_unit_price',500,
+   'p_catalogue_item_id',current_setting('test.apparel_blank_catalogue_id'),
+   'p_production_method',null,'p_quantity',1,'p_unit_price',500,
    'p_supply_arrangement','mj_supplies','p_other_direct_costs',0,
    'p_allow_below_floor',false,'p_payment_amount',0
-  ),current_setting('test.apparel_variant_id')::uuid
+  ),current_setting('test.apparel_blank_variant_id')::uuid
  )->>'invoice_id'
 ),true);
 select extensions.is(
@@ -567,12 +577,12 @@ select extensions.is(
  'successful direct apparel sale records actual variant cost while preserving non-blank decoration cost');
 select extensions.is(
  (select quantity_on_hand from public.stock_items
-  where id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)),
- 7::numeric,
+  where id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_blank_variant_id')::uuid)),
+ 4::numeric,
  'successful direct apparel sale deducts the exact selected variant quantity');
 select extensions.is(
  (select count(*)::integer from public.stock_movements
-  where stock_item_id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)
+  where stock_item_id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_blank_variant_id')::uuid)
    and movement_type='apparel_sale' and quantity=-1),
  1,
  'successful direct apparel sale posts one canonical apparel_sale ledger movement');
