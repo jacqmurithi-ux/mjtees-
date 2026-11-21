@@ -198,6 +198,66 @@ end
 $fn$;
 
 -- Atomic direct blank-item sale: preserve canonical invoice, payment, costing and margin validation.
+-- Extend the canonical stock ledger movement vocabulary for confirmed blank-item sales.
+create or replace function private.apply_stock_movement(
+ p_business_id uuid,p_stock_item_id uuid,p_quantity numeric,p_unit_cost numeric,p_movement_type text
+) returns void
+language plpgsql security definer
+set search_path=public,pg_temp
+as $function$
+declare v_stock public.stock_items%rowtype; v_new_quantity numeric(14,6); v_new_cost numeric(14,2);
+begin
+ if auth.uid() is null or not exists(select 1 from public.business_memberships
+  where business_id=p_business_id and user_id=auth.uid() and role='owner') then
+  raise exception 'Owner authorization required';
+ end if;
+ if p_quantity is null or p_quantity=0 or p_unit_cost is null or p_unit_cost<0
+  or p_movement_type not in('opening','purchase','job_issue','transfer_in','transfer_out','adjustment','offcut_return','vinyl_sticker_sale','apparel_sale') then
+  raise exception 'Invalid stock movement';
+ end if;
+ select * into v_stock from public.stock_items where id=p_stock_item_id and business_id=p_business_id for update;
+ if not found then raise exception 'Stock item not found'; end if;
+ v_new_quantity:=v_stock.quantity_on_hand+p_quantity;
+ if v_new_quantity<0 then raise exception 'Insufficient stock'; end if;
+ v_new_cost:=v_stock.average_unit_cost;
+ if p_quantity>0 then
+  v_new_cost:=case when v_new_quantity>0 then
+   ((v_stock.quantity_on_hand*v_stock.average_unit_cost)+(p_quantity*p_unit_cost))/v_new_quantity
+   else p_unit_cost end;
+ end if;
+ update public.stock_items set quantity_on_hand=v_new_quantity,average_unit_cost=v_new_cost
+ where id=v_stock.id and business_id=p_business_id;
+ insert into public.stock_movements(business_id,stock_item_id,movement_type,quantity,unit_cost,created_by)
+ values(p_business_id,p_stock_item_id,p_movement_type,p_quantity,p_unit_cost,auth.uid());
+end
+$function$;
+revoke all on function private.apply_stock_movement(uuid,uuid,numeric,numeric,text) from public,anon,authenticated;
+
+-- Cancellation releases only unissued reservations. Issued quantities remain consumed.
+create or replace function private.release_apparel_reservations_on_job_cancel()
+returns trigger language plpgsql security definer
+set search_path=public,pg_temp
+as $trigger$
+begin
+ if new.production_status='cancelled' and old.production_status is distinct from new.production_status then
+  update public.apparel_variant_reservations
+   set status='released',updated_at=now()
+   where business_id=new.business_id and job_id=new.id and status in('reserved','partially_issued');
+  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+  select new.business_id,auth.uid(),'inventory.apparel_reservation_released_on_cancel',
+   'apparel_variant_reservation',r.id,
+   jsonb_build_object('job_id',new.id,'unissued_quantity',r.quantity-r.issued_quantity,'issued_quantity_kept_consumed',r.issued_quantity)
+  from public.apparel_variant_reservations r
+  where r.business_id=new.business_id and r.job_id=new.id and r.status='released';
+ end if;
+ return new;
+end
+$trigger$;
+drop trigger if exists production_job_release_apparel_reservations on public.production_jobs;
+create trigger production_job_release_apparel_reservations
+ after update of production_status on public.production_jobs
+ for each row execute function private.release_apparel_reservations_on_job_cancel();
+
 create or replace function public.owner_create_apparel_quick_sale(
  p_sale_args jsonb,p_variant_id uuid
 ) returns jsonb
@@ -229,7 +289,7 @@ begin
   p_sale_args->>'p_payment_number',p_sale_args->>'p_payment_method',
   coalesce((p_sale_args->>'p_payment_amount')::numeric,0),p_sale_args->>'p_payment_reference'
  );
- perform private.apply_stock_movement(v_business,v_stock.id,-v_qty,v_stock.average_unit_cost,'job_issue');
+ perform private.apply_stock_movement(v_business,v_stock.id,-v_qty,v_stock.average_unit_cost,'apparel_sale');
  update public.sales_invoice_items set cost_snapshot=coalesce(cost_snapshot,'{}'::jsonb)||jsonb_build_object(
   'apparel_variant_id',v_variant.id,'apparel_sku',v_variant.sku,'apparel_attributes',v_variant.attributes,
   'apparel_stock_item_id',v_stock.id,'apparel_stock_consumed',v_qty
