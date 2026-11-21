@@ -88,7 +88,7 @@ test('variant creation enforces the required attributes for each known merchandi
   assert.match(apparelUi, /const missing=requiredAttributes\.filter/i);
 });
 
-test('MJ-supplied merchandise Quick Sales always require and display the exact variant, independent of production method', () => {
+test('MJ-supplied merchandise requires managed variant stock; blank sales select the exact variant', () => {
   assert.match(operations, /select\('id,name,item_type,category,selling_method/);
   assert.match(operations, /requiresManagedVariant=\['apparel','headwear','drinkware','merchandise'\]/);
   assert.match(operations, /quickSupply==='mj_supplies'&&!quickMethod&&itemVariants\.length&&!quickApparelVariant/);
