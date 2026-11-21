@@ -345,7 +345,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
         {Number(line.unitPrice)<Number(item.standard_unit_price||0)&&field('Reason for price below catalogue price',String(line.priceReason||''),value=>update({priceReason:value}))}
         {selectField('Who supplies the item?',line.supplyArrangement,value=>update({supplyArrangement:value}),[{value:'mj_supplies',label:'MJ supplies the item'},{value:'customer_supplies',label:'Customer supplies the item'}])}
         {line.productionMethod==='vinyl_cutting'&&<VinylAddonCalculator line={line} onChange={update}/>}
-        {field('Other direct costs (KES)',String(line.otherDirectCosts||'0'),value=>update({otherDirectCosts:value}),{type:'number',min:'0',step:'0.01'})}
+        {field(line.productionMethod==='vinyl_cutting'?'Other direct costs for this add-on (KES total)':'Other direct costs (KES)',String(line.otherDirectCosts||'0'),value=>update({otherDirectCosts:value}),{type:'number',min:'0',step:'0.01'})}
         <label className="op-check"><input type="checkbox" checked={Boolean(line.allowBelowFloor)} onChange={e=>update({allowBelowFloor:e.target.checked})}/> Authorise below-30% margin exception for this line</label>
         {line.allowBelowFloor&&field('Exception reason (minimum 8 characters)',String(line.exceptionReason||''),value=>update({exceptionReason:value}))}
         <p className="op-empty">Line total: <b>{cash(Number(line.quantity||0)*Number(line.unitPrice||0))}</b></p>
