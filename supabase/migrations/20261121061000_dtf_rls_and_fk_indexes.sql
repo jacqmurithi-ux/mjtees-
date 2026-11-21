@@ -1,0 +1,3 @@
+-- Intentionally retained as a no-op for migration history compatibility.
+-- DTF batch/job tables are created by later migrations, so their indexes and
+-- policies are now applied by 20261121210000_dtf_rls_and_fk_indexes.sql.
