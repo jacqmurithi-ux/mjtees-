@@ -103,3 +103,10 @@ test('apparel issue locks production job before reservation to avoid cancellatio
   assert.ok(issue.indexOf('from public.production_jobs')<issue.indexOf('from public.apparel_variant_reservations where id=p_reservation_id for update'));
   assert.match(issue,/production job first, reservation second, stock item third/i);
 });
+
+test('apparel stock quantities are restricted to whole pieces at the database boundary', () => {
+  assert.match(migration, /p_opening_quantity<>trunc\(p_opening_quantity\)/i);
+  assert.match(migration, /p_reorder_level<>trunc\(p_reorder_level\)/i);
+  assert.match(migration, /p_quantity<>trunc\(p_quantity\).*whole-piece reservation quantity/i);
+  assert.match(migration, /p_quantity<>trunc\(p_quantity\).*whole-piece issue quantity/i);
+});
