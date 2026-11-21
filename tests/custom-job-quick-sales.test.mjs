@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261120195854_custom_job_quick_sales.sql', import.meta.url), 'utf8');
 const bundleMigration = await readFile(new URL('../supabase/migrations/20261121183000_custom_job_bundle_quick_sales.sql', import.meta.url), 'utf8');
-const vinylBundleMigration = await readFile(new URL('../supabase/migrations/20261121210000_custom_job_bundle_vinyl_addons.sql', import.meta.url), 'utf8');
+const vinylBundleMigration = await readFile(new URL('../supabase/migrations/20261121211000_custom_job_bundle_vinyl_addons.sql', import.meta.url), 'utf8');
 const vinylAddon = await readFile(new URL('../src/VinylAddonCalculator.tsx', import.meta.url), 'utf8');
 const vinylIntegrationTest = await readFile(new URL('../supabase/tests/custom_job_bundle_vinyl.test.sql', import.meta.url), 'utf8');
 const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
