@@ -66,7 +66,7 @@ begin
  where business_id=v_business and invoice_id=v_invoice;
  update public.production_jobs set actual_direct_cost=round(p_direct_cost_per_piece*p_quantity,2),
   notes=concat_ws(E'\\n',nullif(notes,''),'DTF production details: '||p_details::text),
-  customer_supplied_items=not (coalesce(p_details->'garments','[]'::jsonb) @> '[{"supply_source":"mj_supplies"}]'::jsonb)
+  customer_supplied_items=coalesce(p_details->'garments' @> '[{"supply_source":"customer_supplies"}]'::jsonb,false)
  where business_id=v_business and invoice_id=v_invoice;
  for v_line in select value from jsonb_array_elements(coalesce(p_stock_lines,'[]'::jsonb)) loop
   begin v_qty:=(v_line->>'quantity')::numeric;
@@ -102,7 +102,7 @@ begin
  update public.production_jobs set
   notes=concat_ws(E'\\n',nullif(notes,''),'DTF production details: '||v_details::text),
   actual_direct_cost=v_line.direct_cost,
-  customer_supplied_items=not (coalesce(v_details->'garments','[]'::jsonb) @> '[{"supply_source":"mj_supplies"}]'::jsonb)
+  customer_supplied_items=coalesce(v_details->'garments' @> '[{"supply_source":"customer_supplies"}]'::jsonb,false)
  where id=new.id and business_id=new.business_id;
  for v_garment in select value from jsonb_array_elements(coalesce(v_details->'garments','[]'::jsonb)) loop
   if v_garment->>'supply_source'='mj_supplies' and nullif(v_garment->>'inventory_stock_item_id','') is not null then
