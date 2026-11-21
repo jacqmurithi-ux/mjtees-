@@ -84,6 +84,6 @@ test('variant creation enforces the required attributes for each known merchandi
   assert.match(migration, /A cap variant requires colour and style/i);
   assert.match(migration, /A drinkware variant requires colour and capacity\/type/i);
   assert.match(migration, /A reflective garment variant requires size, colour and reflective style/i);
-  assert.match(apparelUi, /requiredAttributes= isReflective/);
+  assert.match(apparelUi, /requiredAttributes=isReflective/);
   assert.match(apparelUi, /const missing=requiredAttributes\.filter/i);
 });
