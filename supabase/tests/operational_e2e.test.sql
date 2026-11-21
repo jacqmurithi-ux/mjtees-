@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(124);
+select extensions.plan(132);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -525,6 +525,89 @@ select extensions.is(
    and movement_type='job_issue' and quantity=-2),
  1,
  'each distinct apparel variant issue uses its own canonical stock ledger item');
+
+
+-- Confirm a successful direct blank-apparel sale consumes the exact selected variant.
+select set_config('test.apparel_direct_sale_invoice',(
+ public.owner_create_apparel_quick_sale(
+  jsonb_build_object(
+   'p_customer_id',(select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
+   'p_invoice_number','INV-E2E-APPAREL-DIRECT','p_due_date',current_date+7,
+   'p_catalogue_item_id',current_setting('test.apparel_catalogue_id'),
+   'p_production_method','dtf','p_quantity',1,'p_unit_price',500,
+   'p_supply_arrangement','mj_supplies','p_other_direct_costs',0,
+   'p_allow_below_floor',false,'p_payment_amount',0
+  ),current_setting('test.apparel_variant_id')::uuid
+ )->>'invoice_id'
+),true);
+select extensions.is(
+ (select direct_cost from public.sales_invoice_items
+  where invoice_id=current_setting('test.apparel_direct_sale_invoice')::uuid),
+ 80::numeric,
+ 'successful direct apparel sale records actual variant cost while preserving non-blank decoration cost');
+select extensions.is(
+ (select quantity_on_hand from public.stock_items
+  where id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)),
+ 7::numeric,
+ 'successful direct apparel sale deducts the exact selected variant quantity');
+select extensions.is(
+ (select count(*)::integer from public.stock_movements
+  where stock_item_id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)
+   and movement_type='apparel_sale' and quantity=-1),
+ 1,
+ 'successful direct apparel sale posts one canonical apparel_sale ledger movement');
+
+-- Cancellation releases only the unissued balance and leaves issued stock consumed.
+select set_config('test.apparel_cancel_invoice_id',(
+ public.owner_create_quick_sale(
+  (select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
+  'INV-E2E-APPAREL-CANCEL',current_date+7,current_setting('test.apparel_catalogue_id')::uuid,'dtf',
+  1,500,'mj_supplies',0,null,false,null,null,null,0,null
+ )->>'invoice_id'
+),true);
+select set_config('test.apparel_cancel_job_id',(
+ public.owner_create_production_job_from_invoice(
+  current_setting('test.apparel_cancel_invoice_id')::uuid,'JOB-E2E-APPAREL-CANCEL',current_date+7
+ )->>'job_id'
+),true);
+select set_config('test.apparel_cancel_reservation_id',public.owner_reserve_apparel_variant(
+ current_setting('test.apparel_cancel_job_id')::uuid,current_setting('test.apparel_variant_2_id')::uuid,2
+)::text,true);
+select public.owner_issue_apparel_variant_reservation(
+ current_setting('test.apparel_cancel_reservation_id')::uuid,1
+);
+select public.owner_cancel_production_job(
+ current_setting('test.apparel_cancel_job_id')::uuid,'JOB-E2E-APPAREL-CANCEL',
+ 'Customer cancelled after partial garment issue'
+);
+select extensions.is(
+ (select status from public.apparel_variant_reservations
+  where id=current_setting('test.apparel_cancel_reservation_id')::uuid),
+ 'released',
+ 'cancelling a job releases the remaining apparel reservation');
+select extensions.is(
+ (select issued_quantity from public.apparel_variant_reservations
+  where id=current_setting('test.apparel_cancel_reservation_id')::uuid),
+ 1::numeric,
+ 'cancellation preserves the quantity already issued to production');
+select extensions.is(
+ (select quantity_on_hand from public.stock_items
+  where id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_2_id')::uuid)),
+ 2::numeric,
+ 'cancellation does not restore already-issued apparel stock');
+select extensions.is(
+ (select count(*)::integer from public.audit_events
+  where event_type='inventory.apparel_reservation_released_on_cancel'
+   and entity_id=current_setting('test.apparel_cancel_reservation_id')::uuid
+   and details->>'unissued_quantity'='1'
+   and details->>'issued_quantity_kept_consumed'='1'),
+ 1,
+ 'cancellation records the released and issued quantities in the audit trail');
+select extensions.is(
+ (select count(*)::integer from public.sales_invoices
+  where id=current_setting('test.apparel_cancel_invoice_id')::uuid),
+ 1,
+ 'cancelling an apparel production job leaves its invoice intact');
 
 select * from extensions.finish();
 rollback;
