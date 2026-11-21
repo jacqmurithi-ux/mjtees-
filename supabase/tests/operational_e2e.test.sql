@@ -197,18 +197,18 @@ select extensions.ok(not has_function_privilege('authenticated','private.apply_s
 select set_config('test.material_id',public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,2)::text,true);
 select extensions.is((select planned_quantity from public.production_job_materials where id=current_setting('test.material_id')::uuid),2::numeric,'owner can plan a positive quantity of same-business stock for a production job');
 select extensions.throws_ok(
- $assert$$select public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,0)$assert$,
+ $assert$select public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,0)$assert$,
  'P0001','Planned quantity must be greater than zero',
  'rejects a zero production material plan');
 select extensions.throws_ok(
- $assert$$select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'printing')$assert$,
+ $assert$select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'printing')$assert$,
  'P0001','Invalid production stage transition',
  'rejects skipping required production stages');
 select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1);
 select extensions.is((select issued_quantity from public.production_job_materials where id=current_setting('test.material_id')::uuid),1::numeric,'partial material issue is recorded against the plan');
 select extensions.is((select quantity_on_hand from public.stock_items where id=current_setting('test.stock_id')::uuid),9::numeric,'partial material issue reduces available stock through the ledger');
 select extensions.throws_ok(
- $assert$$select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1.01)$assert$,
+ $assert$select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1.01)$assert$,
  'P0001','Issue quantity exceeds planned balance',
  'rejects issuing more than the remaining planned quantity');
 select public.owner_issue_job_material(current_setting('test.material_id')::uuid,1);
@@ -219,7 +219,7 @@ select extensions.is((select count(*)::integer from public.stock_movements where
 select extensions.is((select count(*)::integer from public.audit_events where entity_type='production_job_material' and entity_id=current_setting('test.material_id')::uuid and event_type in('production.material_planned','production.material_issued')),3,'material planning and both partial issues create audit events');
 select set_config('test.insufficient_material_id',public.owner_add_job_material(current_setting('test.job_id')::uuid,current_setting('test.stock_id')::uuid,20)::text,true);
 select extensions.throws_ok(
- $assert$$select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,9)$assert$,
+ $assert$select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,9)$assert$,
  'P0001','Insufficient stock',
  'rejects issuing material beyond available stock');
 
@@ -232,13 +232,13 @@ select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'r
 select public.owner_set_production_stage(current_setting('test.job_id')::uuid,'delivered');
 select extensions.ok((select delivered_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production delivery is timestamped');
 select extensions.throws_ok(
- $assert$$select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,1)$assert$,
+ $assert$select public.owner_issue_job_material(current_setting('test.insufficient_material_id')::uuid,1)$assert$,
  'P0001','Cannot issue material for a closed production job',
  'prevents issuing material after a production job is closed');
 select extensions.ok((select due_at is not null from public.production_jobs where id=current_setting('test.job_id')::uuid),'production due date is carried from the invoice terms');
 
 select extensions.throws_ok(
- $test$$select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',801,null)$test$,
+ $test$select public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-OVER','cash',801,null)$test$,
  'P0001','Invalid payment method or amount exceeds invoice balance',
  'rejects a customer payment greater than the outstanding invoice balance');
 select set_config('test.payment_id',public.owner_record_payment(current_setting('test.invoice_id')::uuid,'PAY-TEST-E2E','mpesa_paybill',800,'E2E-TEST-REF')::text,true);
@@ -284,7 +284,7 @@ select set_config('test.custom_profile_id',public.owner_create_costing_profile(
 
 
 select extensions.throws_ok(
- $test$$select public.owner_create_custom_job_quick_sale(
+ $test$select public.owner_create_custom_job_quick_sale(
   (select id from public.customers where customer_name='Example Customer'),
   'INV-CUSTOM-FRACTIONAL',current_date+7,'Fractional custom job','12 x 4 inches',
   'screen_printing',current_setting('test.custom_profile_id')::uuid,1.5,1000,
@@ -378,7 +378,7 @@ select public.owner_receive_purchase_order_line((select id from public.purchase_
 select public.owner_receive_purchase_order_line((select id from public.purchase_order_lines where purchase_order_id=current_setting('test.po_multi')::uuid and stock_item_id=current_setting('test.stock_two')::uuid),3);
 select extensions.is((select status from public.purchase_orders where id=current_setting('test.po_multi')::uuid),'received','order closes only after every ordered unit is received');
 select extensions.throws_ok(
- $assert$$select public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_multi')::uuid,'SPAY-TEST-OVER','cash',107,null)$assert$,
+ $assert$select public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_multi')::uuid,'SPAY-TEST-OVER','cash',107,null)$assert$,
  'P0001','Supplier payment exceeds outstanding balance',
  'rejects supplier payment above the selected purchase order balance');
 select set_config('test.supplier_payment_multi',public.owner_record_supplier_payment(current_setting('test.supplier_id')::uuid,current_setting('test.po_multi')::uuid,'SPAY-TEST-MULTI','mpesa_paybill',20,'SUPPLIER-REF-02')::text,true);
@@ -398,7 +398,7 @@ select set_config('test.cap_catalogue_id',public.owner_save_catalogue_item_v2(
 
 -- Apparel variant inventory: product attributes, reservation protection and actual issue costing.
 select extensions.throws_ok(
- $assert$$select public.owner_create_apparel_variant(
+ $assert$select public.owner_create_apparel_variant(
   current_setting('test.tshirt_catalogue_id')::uuid,
   'E2E-TEE-MISSING-COLOUR','M',null,null,null,'shop_1',0,0,30
   )$assert$,
@@ -416,7 +416,7 @@ select extensions.is(
  'new apparel variant opening quantity is recorded through the stock ledger');
 
 select extensions.throws_ok(
- $assert$$select public.owner_create_apparel_variant(
+ $assert$select public.owner_create_apparel_variant(
   current_setting('test.cap_catalogue_id')::uuid,
   'E2E-CAP-MISSING-STYLE',null,'Black',null,null,'shop_1',0,0,30
   )$assert$,
@@ -428,7 +428,7 @@ select set_config('test.mug_catalogue_id',public.owner_save_catalogue_item_v2(
  'fixed_price',250,'piece',null,'{}'::jsonb,true,'[]'::jsonb
 )::text,true);
 select extensions.throws_ok(
- $assert$$select public.owner_create_apparel_variant(
+ $assert$select public.owner_create_apparel_variant(
   current_setting('test.mug_catalogue_id')::uuid,'E2E-MUG-MISSING-CAPACITY',
   null,'White',null,null,'shop_1',0,0,80
   )$assert$,
@@ -458,7 +458,7 @@ select extensions.is(
  600::numeric,
  'production job begins with the invoice blank-item estimate and other direct costs');
 select extensions.throws_ok(
- $assert$$select public.owner_reserve_apparel_variant(current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,1.5 )$assert$,
+ $assert$select public.owner_reserve_apparel_variant(current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,1.5 )$assert$,
  'P0001','Authentication and a positive whole-piece reservation quantity are required',
  'apparel reservations reject fractional pieces');
 select set_config('test.apparel_reservation_id',public.owner_reserve_apparel_variant(
@@ -469,7 +469,7 @@ select extensions.is(
  4::numeric,
  'branded order reserves the exact apparel variant without reducing physical stock');
 select extensions.throws_ok(
- $assert$$select public.owner_create_apparel_quick_sale(
+ $assert$select public.owner_create_apparel_quick_sale(
   jsonb_build_object(
    'p_customer_id',(select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
    'p_invoice_number','INV-E2E-APPAREL-OVER-RESERVED','p_due_date',current_date+7,
@@ -483,7 +483,7 @@ select extensions.throws_ok(
  'direct apparel sale cannot consume stock reserved for a production job');
 
 select extensions.throws_ok(
- $assert$$select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,1.5 )$assert$,
+ $assert$select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,1.5 )$assert$,
  'P0001','Authentication and a positive whole-piece issue quantity are required',
  'apparel issue rejects fractional pieces');
 select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,2);
