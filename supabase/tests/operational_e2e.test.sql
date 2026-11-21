@@ -504,7 +504,7 @@ select extensions.throws_ok(
  $assert$select public.owner_reserve_apparel_variant(
   current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,1
  )$assert$,
- 'P0001','Reservation exceeds invoiced quantity. Invoiced 4, already reserved or issued 4, requested 1',
+ 'P0001','Reservation exceeds invoiced quantity. Invoiced 4.000, already reserved or issued 4.000, requested 1',
  'combined reservations across sizes and colours cannot exceed the invoice quantity');
 select extensions.throws_ok(
  $assert$select public.owner_create_apparel_quick_sale(
@@ -619,7 +619,7 @@ select set_config('test.apparel_cancel_invoice_id',(
  public.owner_create_quick_sale(
   (select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
   'INV-E2E-APPAREL-CANCEL',current_date+7,current_setting('test.apparel_catalogue_id')::uuid,'dtf',
-  1,500,'mj_supplies',0,null,false,null,null,null,0,null
+  2,500,'mj_supplies',0,null,false,null,null,null,0,null
  )->>'invoice_id'
 ),true);
 select set_config('test.apparel_cancel_job_id',(
