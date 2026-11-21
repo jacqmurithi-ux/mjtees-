@@ -343,5 +343,5 @@ revoke all on function public.owner_create_apparel_quick_sale(jsonb,uuid) from p
 grant execute on function public.owner_create_apparel_variant(uuid,text,text,text,text,text,text,numeric,numeric,numeric) to authenticated;
 grant execute on function public.owner_reserve_apparel_variant(uuid,uuid,numeric) to authenticated;
 grant execute on function public.owner_issue_apparel_variant_reservation(uuid,numeric) to authenticated;
-grant execute on function public.owner_release_apparel_variant(uuid,text) to authenticated;
+grant execute on function public.owner_release_apparel_variant_reservation(uuid,text) to authenticated;
 grant execute on function public.owner_create_apparel_quick_sale(jsonb,uuid) to authenticated;
