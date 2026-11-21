@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const migration = readFileSync(new URL('../supabase/migrations/20261121200000_apparel_variant_inventory.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../supabase/migrations/20261121201000_apparel_variant_inventory.sql', import.meta.url), 'utf8');
 const operations = readFileSync(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
 const apparelUi = readFileSync(new URL('../src/ApparelInventory.tsx', import.meta.url), 'utf8');
 const purchasing = readFileSync(new URL('../supabase/migrations/20261120100000_restore_supplier_purchase_workflows.sql', import.meta.url), 'utf8');
