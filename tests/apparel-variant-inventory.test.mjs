@@ -8,7 +8,7 @@ const apparelUi = readFileSync(new URL('../src/ApparelInventory.tsx', import.met
 const purchasing = readFileSync(new URL('../supabase/migrations/20261120100000_restore_supplier_purchase_workflows.sql', import.meta.url), 'utf8');
 
 test('apparel sale movement type is allowed by the stock ledger constraint', () => {
-  assert.match(migration, /stock_movements_movement_type_check[\\s\\S]*?'apparel_sale'/i);
+  assert.match(migration, /stock_movements_movement_type_check[\s\S]*?'apparel_sale'/i);
   assert.match(migration, /'vinyl_sticker_sale','apparel_sale'/i);
 });
 
