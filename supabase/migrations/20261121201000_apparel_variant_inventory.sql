@@ -300,19 +300,22 @@ create or replace function private.release_apparel_reservations_on_job_cancel()
 returns trigger language plpgsql security definer
 set search_path=public,pg_temp
 as $trigger$
+declare
+ v_released record;
 begin
  if new.production_status='cancelled' and old.production_status is distinct from new.production_status then
-  with released as (
+  for v_released in
    update public.apparel_variant_reservations
     set status='released',updated_at=now()
     where business_id=new.business_id and job_id=new.id and status in('reserved','partially_issued')
     returning id,quantity,issued_quantity
-  )
-  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
-  select new.business_id,auth.uid(),'inventory.apparel_reservation_released_on_cancel',
-   'apparel_variant_reservation',r.id,
-   jsonb_build_object('job_id',new.id,'unissued_quantity',r.quantity-r.issued_quantity,'issued_quantity_kept_consumed',r.issued_quantity)
-  from released r;
+  loop
+   insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
+   values(new.business_id,auth.uid(),'inventory.apparel_reservation_released_on_cancel',
+    'apparel_variant_reservation',v_released.id,
+    jsonb_build_object('job_id',new.id,'unissued_quantity',v_released.quantity-v_released.issued_quantity,
+     'issued_quantity_kept_consumed',v_released.issued_quantity));
+  end loop;
  end if;
  return new;
 end
