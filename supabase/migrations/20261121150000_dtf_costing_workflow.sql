@@ -19,8 +19,12 @@ begin
  v_quote:=public.owner_create_quotation(p_customer_id,v_profile,p_quote_number,p_valid_until,
   jsonb_build_array(jsonb_build_object('description','DTF printing and garment decoration','quantity',p_quantity,'unit_price',p_unit_price,
    'details',jsonb_build_object('customer_supplied_items',coalesce((p_details->'garments') @> '[{"supply_source":"customer_supplies"}]'::jsonb,false),
-    'item_type','custom_production','cost_snapshot',jsonb_build_object('pricing_source','dtf_costing','dtf_details',p_details)))),
+    'item_type','custom_production'))),
   coalesce(p_allow_below_floor,false),p_exception_reason);
+ update public.quotation_lines set details=coalesce(details,'{}'::jsonb)||jsonb_build_object('cost_snapshot',
+  coalesce(details->'cost_snapshot','{}'::jsonb)||jsonb_build_object('pricing_source','dtf_costing','dtf_details',p_details))
+ where quotation_id=v_quote and business_id=v_business;
+ update public.costing_profiles set is_active=false where id=v_profile and business_id=v_business;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(v_business,v_user,'dtf.quotation_created','quotation',v_quote,jsonb_build_object('pricing_source','dtf_costing','dtf_details',p_details));
  return v_quote;
