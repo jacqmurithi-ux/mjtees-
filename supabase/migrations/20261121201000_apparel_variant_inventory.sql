@@ -168,7 +168,7 @@ begin
   raise exception 'Insufficient available stock. On hand %, already reserved %, requested %',v_stock.quantity_on_hand,v_reserved,p_quantity;
  end if;
  insert into public.apparel_variant_reservations(business_id,variant_id,job_id,quantity,created_by)
- values(v_business,p_variant_id,p_quantity,auth.uid()) returning id into v_id;
+ values(v_business,p_variant_id,p_job_id,p_quantity,auth.uid()) returning id into v_id;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
  values(v_business,auth.uid(),'inventory.apparel_variant_reserved','apparel_variant_reservation',v_id,
   jsonb_build_object('job_id',p_job_id,'variant_id',p_variant_id,'quantity',p_quantity));
