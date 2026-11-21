@@ -88,6 +88,7 @@ begin
  select * into v_item from public.catalogue_items
  where id=p_catalogue_item_id and business_id=v_business and is_active for share;
  if not found then raise exception 'Active catalogue item not found'; end if;
+ if v_item.item_type<>'product' then raise exception 'Variants can only be created for catalogue products, not services'; end if;
  if length(btrim(coalesce(p_sku,'')))<2 or p_location_code not in('shop_1','shop_2')
    or coalesce(p_opening_quantity,-1)<0 or coalesce(p_reorder_level,-1)<0 or coalesce(p_unit_cost,-1)<0
  then raise exception 'Enter a SKU, valid location and non-negative stock values'; end if;
