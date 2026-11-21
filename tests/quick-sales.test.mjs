@@ -52,3 +52,10 @@ test('generic Quick Sale blocks MJ-supplied vinyl paths that would bypass stock 
   assert.match(operations, /quickSupply==='mj_supplies'&&quickMethod==='vinyl_cutting'[\s\S]*Vinyl Sticker Calculator/);
   assert.match(vinyl, /owner_create_vinyl_sticker_quick_sale/);
 });
+
+test('Sales counter exposes the canonical stock-consuming vinyl sale workflow', () => {
+  assert.match(operations, /import VinylStickerCalculator from '\.\/VinylStickerCalculator'/);
+  assert.match(operations, /<VinylStickerCalculator onSaleSaved=/);
+  assert.match(operations, /line\.supplyArrangement==='mj_supplies'&&line\.productionMethod==='vinyl_cutting'[\s\S]*Record them separately/);
+  assert.match(vinyl, /owner_create_vinyl_sticker_quick_sale/);
+});
