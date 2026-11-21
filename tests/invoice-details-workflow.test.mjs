@@ -32,6 +32,15 @@ test('Invoice details use existing invoice, allocation, payment and production r
   assert.match(operations, /Activity history/);
 });
 
+test('Quotation documents are printable and accepted quotes pass through a final conversion review', () => {
+  assert.match(operations, /Quotation document/);
+  assert.match(operations, /Print \/ save PDF/);
+  assert.match(operations, /Final review/);
+  assert.match(operations, /owner_convert_accepted_quote_to_invoice/);
+  assert.match(operations, /Open existing invoice/);
+  assert.match(operations, /Confirm and create invoice/);
+});
+
 test('Invoice payment receipts are reprints of saved payments and do not create payment records', () => {
   assert.match(operations, /PAYMENT RECEIPT/);
   assert.match(operations, /View receipt/);
