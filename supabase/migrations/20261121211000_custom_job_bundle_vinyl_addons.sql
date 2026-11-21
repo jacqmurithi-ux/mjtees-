@@ -176,13 +176,13 @@ begin
     v_material_cost:=(v_area/(v_roll_width*39.37))*v_stock.average_unit_cost;
    end if;
 
-   v_direct_cost:=round(v_material_cost+v_labour+v_tape+v_application+v_other_costs,2);
+   v_direct_cost:=round(v_material_cost+v_labour+v_tape+v_application+(v_other_costs/v_quantity),2);
    v_breakdown:=jsonb_build_array(
     jsonb_build_object('name','Vinyl material by area','category','material','basis','per_piece','unit_cost',round(v_material_cost,2),'total_cost',round(v_material_cost,2)),
     jsonb_build_object('name','Cutting / weeding labour','category','labour','basis','per_piece','unit_cost',round(v_labour,2),'total_cost',round(v_labour,2)),
     jsonb_build_object('name','Transfer tape','category','material','basis','per_piece','unit_cost',round(v_tape,2),'total_cost',round(v_tape,2)),
     jsonb_build_object('name','Application labour','category','labour','basis','per_piece','unit_cost',round(v_application,2),'total_cost',round(v_application,2)),
-    jsonb_build_object('name','Other direct job costs','category','job_expense','basis','per_piece','unit_cost',round(v_other_costs,2),'total_cost',round(v_other_costs,2))
+    jsonb_build_object('name','Other direct job costs','category','job_expense','basis','per_job','unit_cost',round(v_other_costs,2),'quantity',1,'total_cost',round(v_other_costs,2))
    );
    v_pricing_details:=jsonb_build_object(
     'unit','inch','length',v_length,'width',v_width,'area_square_inches',v_area,
