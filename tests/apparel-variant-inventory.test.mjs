@@ -87,3 +87,11 @@ test('variant creation enforces the required attributes for each known merchandi
   assert.match(apparelUi, /requiredAttributes=isReflective/);
   assert.match(apparelUi, /const missing=requiredAttributes\.filter/i);
 });
+
+test('MJ-supplied merchandise Quick Sales always require and display the exact variant, independent of production method', () => {
+  assert.match(operations, /select\('id,name,item_type,category,selling_method/);
+  assert.match(operations, /requiresManagedVariant=\['apparel','headwear','drinkware','merchandise'\]/);
+  assert.match(operations, /quickSupply==='mj_supplies'&&itemVariants\.length&&!quickApparelVariant/);
+  assert.match(operations, /quickSupply==='mj_supplies'&&apparelVariants\.some\(v=>v\.catalogue_item_id===quickItemId\)/);
+  assert.doesNotMatch(operations, /quickSupply==='mj_supplies'&&!quickMethod&&apparelVariants/);
+});
