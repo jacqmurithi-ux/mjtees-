@@ -16,8 +16,8 @@ export function layoutDtfStickers(rows, options = {}) {
     if (!Number.isInteger(Number(row.quantity))) return { ...empty, error: 'Sticker quantities must be whole numbers.' };
     stickerAreaCm2 += width * height * quantity;
     for (let i = 0; i < quantity; i++) {
-      const normalFits = width + gap <= rollWidth + 1e-9;
-      const rotatedFits = row.allowRotation !== false && height + gap <= rollWidth + 1e-9;
+      const normalFits = width <= rollWidth + 1e-9;
+      const rotatedFits = row.allowRotation !== false && height <= rollWidth + 1e-9;
       if (!normalFits && !rotatedFits) return { ...empty, error: 'Sticker ' + (row.label || row.id || '') + ' cannot fit within the 58 cm roll width, even when rotated.', stickerAreaCm2, pieceCount: pieces.length };
       pieces.push({ rowId: row.id, label: row.label || '', pieceNo: i + 1, width, height, allowRotation: row.allowRotation !== false });
     }
@@ -45,8 +45,8 @@ export function layoutDtfStickers(rows, options = {}) {
         const shelf=shelves[si];
         for (const o of orientations) {
           const packedW=o.width+gap, packedH=o.height+gap;
-          if (shelf.usedWidth+packedW<=rollWidth+1e-9 && packedH<=shelf.height+1e-9) {
-            const widthSlack=rollWidth-(shelf.usedWidth+packedW);
+          if (shelf.usedWidth+o.width<=rollWidth+1e-9 && packedH<=shelf.height+1e-9) {
+            const widthSlack=rollWidth-(shelf.usedWidth+o.width);
             const heightSlack=shelf.height-packedH;
             candidates.push({si,o,score:heightSlack*1000+widthSlack});
           }
@@ -60,7 +60,7 @@ export function layoutDtfStickers(rows, options = {}) {
         usedWidth=Math.max(usedWidth,shelf.usedWidth-gap);
         continue;
       }
-      const viable=orientations.filter(o=>o.width+gap<=rollWidth+1e-9);
+      const viable=orientations.filter(o=>o.width<=rollWidth+1e-9);
       if (!viable.length) return null;
       viable.sort((a,b)=>{
         const areaA=Math.max(usedWidth,a.width)*(runningY+a.height+gap);
