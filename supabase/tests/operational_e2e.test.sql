@@ -599,8 +599,8 @@ select extensions.is(
  (select count(*)::integer from public.audit_events
   where event_type='inventory.apparel_reservation_released_on_cancel'
    and entity_id=current_setting('test.apparel_cancel_reservation_id')::uuid
-   and details->>'unissued_quantity'='1'
-   and details->>'issued_quantity_kept_consumed'='1'),
+   and (details->>'unissued_quantity')::numeric=1
+   and (details->>'issued_quantity_kept_consumed')::numeric=1),
  1,
  'cancellation records the released and issued quantities in the audit trail');
 select extensions.is(
