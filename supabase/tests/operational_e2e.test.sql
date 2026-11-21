@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(120);
+select extensions.plan(122);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -457,6 +457,10 @@ select extensions.is(
  (select actual_direct_cost from public.production_jobs where id=current_setting('test.apparel_job_id')::uuid),
  600::numeric,
  'production job begins with the invoice blank-item estimate and other direct costs');
+select extensions.throws_ok(
+ $select public.owner_reserve_apparel_variant(current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,1.5)$,
+ 'P0001','Authentication and a positive whole-piece reservation quantity are required',
+ 'apparel reservations reject fractional pieces');
 select set_config('test.apparel_reservation_id',public.owner_reserve_apparel_variant(
  current_setting('test.apparel_job_id')::uuid,current_setting('test.apparel_variant_id')::uuid,4
 )::text,true);
@@ -478,6 +482,10 @@ select extensions.throws_ok(
  'P0001','Insufficient available apparel stock after reservations',
  'direct apparel sale cannot consume stock reserved for a production job');
 
+select extensions.throws_ok(
+ $select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,1.5)$,
+ 'P0001','Authentication and a positive whole-piece issue quantity are required',
+ 'apparel issue rejects fractional pieces');
 select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,2);
 select extensions.is(
  (select actual_direct_cost from public.production_jobs where id=current_setting('test.apparel_job_id')::uuid),
