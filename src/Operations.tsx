@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from './lib/supabase';
 import ApparelInventory from './ApparelInventory';
+import VinylStickerCalculator from './VinylStickerCalculator';
 
 type Page = 'costing'|'sales'|'production'|'calendar'|'inventory'|'purchasing'|'finance'|'reports'|'settings';
 type Row = Record<string, any>;
@@ -161,6 +162,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    for(let index=0;index<quickAddonLines.length;index++){
     const line=quickAddonLines[index],catalogueItem=catalogue.find(x=>x.id===line.catalogueItemId&&x.is_active);
     if(!catalogueItem)return fail('Add-on '+(index+1)+': select an active catalogue item.');
+    if(line.supplyArrangement==='mj_supplies'&&line.productionMethod==='vinyl_cutting')return fail('MJ-supplied vinyl add-ons must be recorded through the vinyl sticker counter so the correct stock is deducted. Record them separately for now.');
     if(!Number.isInteger(Number(line.quantity))||Number(line.quantity)<1)return fail('Add-on '+(index+1)+': quantity must be a whole number of at least 1.');
     if(!Number.isFinite(Number(line.unitPrice))||Number(line.unitPrice)<=0)return fail('Add-on '+(index+1)+': enter a valid selling price.');
     if(Number(line.unitPrice)<Number(catalogueItem.standard_unit_price||0)&&String(line.priceReason||'').trim().length<3)return fail('Add-on '+(index+1)+': explain any price below the approved catalogue price.');
@@ -308,6 +310,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
   <article className="stat"><span>Quick Sales</span><strong>{cash(todaysQuickSales.reduce((n,i)=>n+Number(i.total||0),0))}</strong><small>{todaysQuickSales.length} invoices</small></article>
   <article className="stat"><span>Quotation invoices</span><strong>{cash(todaysQuotationSales.reduce((n,i)=>n+Number(i.total||0),0))}</strong><small>{todaysQuotationSales.length} invoices</small></article>
  </div>
+ <Panel title="Vinyl sticker counter sale"><p className="op-guidance"><b>Vinyl stickers and cut lettering.</b> Record dimensions, quantity, agreed price and payment here. When MJ supplies the vinyl, the sale and metre deduction are recorded together.</p><VinylStickerCalculator onSaleSaved={()=>{void refresh();void onChanged();}}/></Panel>
  <Panel title="Quick Sale">
   <form className="op-form" onSubmit={createQuickSale}>
    <p className="op-guidance"><b>Everyday sales — no quotation required.</b> Save the sale directly as an invoice. Walk-in customers can be recorded without entering customer details. Any payment is posted to the same customer payment ledger used by invoices.</p>
