@@ -75,10 +75,10 @@ begin
   select * into v_stock from public.stock_items where id=(v_line->>'stock_item_id')::uuid and business_id=v_business and active for update;
   if not found then raise exception 'Selected MJ inventory item is not active or does not belong to this business'; end if;
   if v_stock.quantity_on_hand<v_qty then raise exception 'Insufficient stock for %: required %, available %',v_stock.item_name,v_qty,v_stock.quantity_on_hand; end if;
-  perform private.apply_stock_movement(v_business,v_stock.id,-v_qty,v_stock.average_unit_cost,'dtf_garment_quick_sale');
+  perform private.apply_stock_movement(v_business,v_stock.id,-v_qty,v_stock.average_unit_cost,'job_issue');
   insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
   values(v_business,v_user,'inventory.dtf_garment_stock_consumed','sales_invoice',v_invoice,
-   jsonb_build_object('stock_item_id',v_stock.id,'item_name',v_stock.item_name,'quantity',v_qty,'unit',v_stock.unit,'movement_type','dtf_garment_quick_sale'));
+   jsonb_build_object('stock_item_id',v_stock.id,'item_name',v_stock.item_name,'quantity',v_qty,'unit',v_stock.unit,'movement_type','job_issue'));
  end loop;
  delete from public.costing_profiles where id=v_profile and business_id=v_business;
  insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
@@ -112,10 +112,10 @@ begin
    where id=(v_garment->>'inventory_stock_item_id')::uuid and business_id=new.business_id and active for update;
    if not found then raise exception 'DTF garment stock item is inactive or unavailable'; end if;
    if v_stock.quantity_on_hand<v_qty then raise exception 'Insufficient stock for %: required %, available %',v_stock.item_name,v_qty,v_stock.quantity_on_hand; end if;
-   perform private.apply_stock_movement(new.business_id,v_stock.id,-v_qty,v_stock.average_unit_cost,'dtf_garment_quote_conversion');
+   perform private.apply_stock_movement(new.business_id,v_stock.id,-v_qty,v_stock.average_unit_cost,'job_issue');
    insert into public.audit_events(business_id,actor_user_id,event_type,entity_type,entity_id,details)
    values(new.business_id,auth.uid(),'inventory.dtf_garment_stock_consumed','production_job',new.id,
-    jsonb_build_object('stock_item_id',v_stock.id,'item_name',v_stock.item_name,'quantity',v_qty,'unit',v_stock.unit,'movement_type','dtf_garment_quote_conversion'));
+    jsonb_build_object('stock_item_id',v_stock.id,'item_name',v_stock.item_name,'quantity',v_qty,'unit',v_stock.unit,'movement_type','job_issue'));
   end if;
  end loop;
  return new;
