@@ -18,7 +18,7 @@ test('mixed DTF batch costs are calculated and rounded by the database, not trus
 test('mixed DTF batch validates heat-press totals and enforces the 30% margin floor server-side', () => {
   assert.match(migration, /Per-piece heat-press total does not match the job quantities and rate/);
   assert.match(migration, /Batch heat-press total does not match the entered batch rate/);
-  assert.match(migration, /DTF job agreed price is below the 30% gross-margin floor/);
+  assert.match(migration, /DTF job agreed price is below the 30%% gross-margin floor/);
   assert.match(migration, /DTF job price is below the 30% gross-margin floor/);
 });
 
