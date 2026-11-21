@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { supabase } from './lib/supabase';
 import ApparelInventory from './ApparelInventory';
 import VinylStickerCalculator from './VinylStickerCalculator';
+import VinylAddonCalculator from './VinylAddonCalculator';
 
 type Page = 'costing'|'sales'|'production'|'calendar'|'inventory'|'purchasing'|'finance'|'reports'|'settings';
 type Row = Record<string, any>;
@@ -162,7 +163,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
    for(let index=0;index<quickAddonLines.length;index++){
     const line=quickAddonLines[index],catalogueItem=catalogue.find(x=>x.id===line.catalogueItemId&&x.is_active);
     if(!catalogueItem)return fail('Add-on '+(index+1)+': select an active catalogue item.');
-    if(line.supplyArrangement==='mj_supplies'&&line.productionMethod==='vinyl_cutting')return fail('MJ-supplied vinyl add-ons must be recorded through the vinyl sticker counter so the correct stock is deducted. Record them separately for now.');
+    if(line.productionMethod==='vinyl_cutting'){const length=Number(line.vinylLengthInches),width=Number(line.vinylWidthInches),rollWidth=Number(line.vinylRollWidthInches);if(!Number.isFinite(length)||length<=0||!Number.isFinite(width)||width<=0||!Number.isFinite(rollWidth)||rollWidth<=0)return fail('Add-on '+(index+1)+': enter positive sticker dimensions and roll width.');if(line.supplyArrangement==='mj_supplies'&&!line.vinylStockItemId)return fail('Add-on '+(index+1)+': select the exact MJ vinyl colour / stock item.');for(const key of ['vinylDirectLabour','vinylTransferTapeCost','vinylApplicationCost'])if(!Number.isFinite(Number(line[key]||0))||Number(line[key]||0)<0)return fail('Add-on '+(index+1)+': vinyl direct costs cannot be negative.');}
     if(!Number.isInteger(Number(line.quantity))||Number(line.quantity)<1)return fail('Add-on '+(index+1)+': quantity must be a whole number of at least 1.');
     if(!Number.isFinite(Number(line.unitPrice))||Number(line.unitPrice)<=0)return fail('Add-on '+(index+1)+': enter a valid selling price.');
     if(Number(line.unitPrice)<Number(catalogueItem.standard_unit_price||0)&&String(line.priceReason||'').trim().length<3)return fail('Add-on '+(index+1)+': explain any price below the approved catalogue price.');
@@ -185,7 +186,14 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
      supply_arrangement:line.supplyArrangement,other_direct_costs:Number(line.otherDirectCosts||0),
      price_reason:String(line.priceReason||'').trim()||null,
      allow_below_floor:Boolean(line.allowBelowFloor),
-     exception_reason:line.allowBelowFloor?String(line.exceptionReason||'').trim():null
+     exception_reason:line.allowBelowFloor?String(line.exceptionReason||'').trim():null,
+     vinyl_length_inches:line.productionMethod==='vinyl_cutting'?Number(line.vinylLengthInches):null,
+     vinyl_width_inches:line.productionMethod==='vinyl_cutting'?Number(line.vinylWidthInches):null,
+     vinyl_roll_width_inches:line.productionMethod==='vinyl_cutting'?Number(line.vinylRollWidthInches):null,
+     vinyl_stock_item_id:line.productionMethod==='vinyl_cutting'&&line.supplyArrangement==='mj_supplies'?line.vinylStockItemId:null,
+     vinyl_direct_labour:line.productionMethod==='vinyl_cutting'?Number(line.vinylDirectLabour||0):0,
+     vinyl_transfer_tape_cost:line.productionMethod==='vinyl_cutting'?Number(line.vinylTransferTapeCost||0):0,
+     vinyl_application_cost:line.productionMethod==='vinyl_cutting'?Number(line.vinylApplicationCost||0):0
     })),
     p_payment_number:paid>0?quickPaymentNo:null,p_payment_method:paid>0?quickPaymentMethod:null,
     p_payment_amount:paid,p_payment_reference:quickPaymentReference.trim()||null
@@ -332,10 +340,11 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
       return <div className="op-card" key={index}>
        <div className="op-actions"><b>Catalogue line {index+1}</b><button type="button" onClick={()=>setQuickAddonLines(current=>current.filter((_,i)=>i!==index))}>Remove</button></div>
        {selectField('Active catalogue product / service',line.catalogueItemId,value=>{const selected=catalogue.find(x=>x.id===value&&x.is_active);const active=(selected?.catalogue_item_methods||[]).filter((m:Row)=>m.is_active);const preferred=active.find((m:Row)=>m.is_preferred)||active[0];update({catalogueItemId:value,productionMethod:preferred?.production_method||'',unitPrice:selected?.standard_unit_price==null?'':String(selected.standard_unit_price),priceReason:''});},catalogue.filter(x=>x.is_active).map(x=>({value:x.id,label:x.name+' · '+x.item_type+' · '+x.selling_method.replaceAll('_',' ')})))}
-       {item&&<><div className="op-grid">{methods.length>0&&selectField('Production method',line.productionMethod,value=>update({productionMethod:value}),methods.map((m:Row)=>({value:m.production_method,label:m.production_method.replaceAll('_',' ')})))}{field('Quantity',String(line.quantity),value=>update({quantity:value}),{type:'number',min:'1',step:'1'})}</div>
+       {item&&<><div className="op-grid">{methods.length>0&&selectField('Production method',line.productionMethod,value=>update({productionMethod:value,...(value==='vinyl_cutting'?{vinylLengthInches:line.vinylLengthInches||'12',vinylWidthInches:line.vinylWidthInches||'4',vinylRollWidthInches:line.vinylRollWidthInches||'24',vinylDirectLabour:line.vinylDirectLabour||'0',vinylTransferTapeCost:line.vinylTransferTapeCost||'0',vinylApplicationCost:line.vinylApplicationCost||'0'}:{})}),methods.map((m:Row)=>({value:m.production_method,label:m.production_method.replaceAll('_',' ')})))}{field('Quantity',String(line.quantity),value=>update({quantity:value}),{type:'number',min:'1',step:'1'})}</div>
         <div className="op-grid">{field('Agreed unit price (KES)',String(line.unitPrice),value=>update({unitPrice:value}),{type:'number',min:'0.01',step:'0.01'})}<div className="op-field"><span>Approved catalogue price</span><strong>{item.standard_unit_price==null?'Not approved':cash(Number(item.standard_unit_price))}</strong></div></div>
         {Number(line.unitPrice)<Number(item.standard_unit_price||0)&&field('Reason for price below catalogue price',String(line.priceReason||''),value=>update({priceReason:value}))}
         {selectField('Who supplies the item?',line.supplyArrangement,value=>update({supplyArrangement:value}),[{value:'mj_supplies',label:'MJ supplies the item'},{value:'customer_supplies',label:'Customer supplies the item'}])}
+        {line.productionMethod==='vinyl_cutting'&&<VinylAddonCalculator line={line} onChange={update}/>}
         {field('Other direct costs (KES)',String(line.otherDirectCosts||'0'),value=>update({otherDirectCosts:value}),{type:'number',min:'0',step:'0.01'})}
         <label className="op-check"><input type="checkbox" checked={Boolean(line.allowBelowFloor)} onChange={e=>update({allowBelowFloor:e.target.checked})}/> Authorise below-30% margin exception for this line</label>
         {line.allowBelowFloor&&field('Exception reason (minimum 8 characters)',String(line.exceptionReason||''),value=>update({exceptionReason:value}))}
@@ -343,7 +352,7 @@ export default function Operations({page,businessId,onChanged,onNavigate,recordI
        </>}
       </div>;
      })}
-     <button type="button" onClick={()=>setQuickAddonLines(current=>[...current,{catalogueItemId:'',productionMethod:'',quantity:'1',unitPrice:'',supplyArrangement:'mj_supplies',otherDirectCosts:'0',priceReason:'',allowBelowFloor:false,exceptionReason:''}])}>Add catalogue line</button>
+     <button type="button" onClick={()=>setQuickAddonLines(current=>[...current,{catalogueItemId:'',productionMethod:'',quantity:'1',unitPrice:'',supplyArrangement:'mj_supplies',otherDirectCosts:'0',priceReason:'',allowBelowFloor:false,exceptionReason:'',vinylLengthInches:'12',vinylWidthInches:'4',vinylRollWidthInches:'24',vinylDirectLabour:'0',vinylTransferTapeCost:'0',vinylApplicationCost:'0'}])}>Add catalogue line</button>
     </Panel>
     <label className="op-check"><input type="checkbox" checked={quickBelowFloor} onChange={e=>setQuickBelowFloor(e.target.checked)}/> Authorise a below-30% margin exception for this sale</label>
     {quickBelowFloor&&field('Exception reason (minimum 8 characters)',quickExceptionReason,setQuickExceptionReason)}
