@@ -2,7 +2,7 @@ name: Quality checks
 on:
   pull_request:
   push:
-    branches: [main, release/e2e-operational-workflows]
+    branches: [main, release/e2e-operational-workflows, feature/dtf-costing-workflow]
 permissions:
   contents: read
 concurrency:
