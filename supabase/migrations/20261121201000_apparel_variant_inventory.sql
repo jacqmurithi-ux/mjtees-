@@ -351,6 +351,9 @@ begin
  v_item_id:=(p_sale_args->>'p_catalogue_item_id')::uuid;
  if v_item_id<>v_variant.catalogue_item_id then raise exception 'Selected variant does not belong to the selected catalogue product'; end if;
  if v_supply<>'mj_supplies' then raise exception 'Customer-supplied items must use the standard sale workflow without MJ stock'; end if;
+ if nullif(btrim(p_sale_args->>'p_production_method'),'') is not null then
+  raise exception 'Branded apparel orders must reserve stock and issue it through production';
+ end if;
  if v_qty is null or v_qty<=0 or v_qty<>trunc(v_qty) then raise exception 'Apparel quantity must be a whole number greater than zero'; end if;
  select * into v_stock from public.stock_items where id=v_variant.stock_item_id and business_id=v_business and active for update;
  if not found then raise exception 'Apparel variant stock item is inactive or unavailable'; end if;
