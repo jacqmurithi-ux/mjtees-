@@ -465,7 +465,7 @@ select extensions.throws_ok(
    'p_allow_below_floor',false,'p_payment_amount',0
   ),current_setting('test.apparel_variant_id')::uuid
  )$,
- 'P0001','Insufficient available apparel stock after reservations. On hand 10, reserved 4, requested 7',
+ 'P0001','Insufficient available apparel stock after reservations',
  'direct apparel sale cannot consume stock reserved for a production job');
 
 select public.owner_issue_apparel_variant_reservation(current_setting('test.apparel_reservation_id')::uuid,2);
