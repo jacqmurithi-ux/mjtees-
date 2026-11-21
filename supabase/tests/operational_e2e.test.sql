@@ -432,7 +432,7 @@ select set_config('test.dtf_sale_result',public.owner_sell_dtf_batch_job(
 select set_config('test.dtf_invoice_id',(current_setting('test.dtf_sale_result')::jsonb->>'invoice_id'),true);
 select extensions.ok(exists(select 1 from public.sales_invoices where id=current_setting('test.dtf_invoice_id')::uuid),'individual DTF Quick Sale creates its own customer invoice');
 select extensions.is((select direct_cost from public.sales_invoice_items where invoice_id=current_setting('test.dtf_invoice_id')::uuid),82::numeric,'Quick Sale invoice stores the exact customer job direct cost');
-select extensions.is((select sum(amount) from public.payments where invoice_id=current_setting('test.dtf_invoice_id')::uuid),20::numeric,'Quick Sale records the received customer payment in the canonical payment ledger');
+select extensions.is((select sum(p.amount) from public.payments p join public.payment_allocations pa on pa.payment_id=p.id where pa.invoice_id=current_setting('test.dtf_invoice_id')::uuid),20::numeric,'Quick Sale records the received customer payment in the canonical payment ledger');
 select extensions.throws_ok(
  $assert$select public.owner_sell_dtf_batch_job((select id from public.dtf_print_jobs where batch_id=current_setting('test.dtf_batch_id')::uuid and line_number=2),'DTF-INVOICE-DUP',current_date+7,0,null,null,null)$assert$,
  'P0001','DTF job is already sold or closed','duplicate Quick Sale attempt is blocked for an already sold DTF job');
