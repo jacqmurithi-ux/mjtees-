@@ -9,8 +9,9 @@ test('Quick Sale requires an explicitly selected customer and offers inline cust
   assert.match(operations, /Select a named customer or explicitly choose Walk-in customer/);
   assert.match(operations, /Use walk-in customer/);
   assert.match(operations, /async function createQuickCustomer/);
-  assert.match(operations, /customer_contacts/);
-  assert.match(operations, /customer_addresses/);
+  assert.match(operations, /Contact person \\(optional\\)/);
+  assert.match(operations, /Address \\(optional\\)/);
+  assert.match(operations, /notes,created_by:user.id/);
   assert.match(operations, /p_customer_id:quickCustomerId/);
 });
 
