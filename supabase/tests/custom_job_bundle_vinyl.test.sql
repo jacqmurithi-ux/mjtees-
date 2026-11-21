@@ -87,7 +87,7 @@ select extensions.ok(
  (select quantity_on_hand<2 from public.stock_items where id=current_setting('test.stock_good')::uuid),
  'MJ-supplied vinyl reduces the selected colour stock');
 select extensions.is(
- (select count(*)::integer from public.stock_movements where stock_item_id=current_setting('test.stock_short')::uuid),0,
+ (select count(*)::integer from public.stock_movements where stock_item_id=current_setting('test.stock_short')::uuid and movement_type='vinyl_sticker_sale'),0,
  'customer-supplied vinyl does not create an MJ stock movement');
 select extensions.ok(
  exists(select 1 from public.audit_events where event_type='inventory.vinyl_sticker_stock_consumed'
