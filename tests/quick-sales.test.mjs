@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const migration = await readFile(new URL('../supabase/migrations/20261120130012_add_quick_sales.sql', import.meta.url), 'utf8');
 const operations = await readFile(new URL('../src/Operations.tsx', import.meta.url), 'utf8');
+const vinyl = await readFile(new URL('../src/VinylStickerCalculator.tsx', import.meta.url), 'utf8');
 
 test('Quick Sales creates a direct invoice without creating a quotation', () => {
   assert.match(migration, /create or replace function public\.owner_create_quick_sale\(/);
@@ -49,5 +50,5 @@ test('Sales UI exposes Quick Sale, a printable receipt and combined daily invoic
 test('generic Quick Sale blocks MJ-supplied vinyl paths that would bypass stock consumption', () => {
   assert.match(operations, /quickSupply==='mj_supplies'&&customMethod==='vinyl_cutting'[\\s\\S]*Vinyl Sticker Calculator/);
   assert.match(operations, /quickSupply==='mj_supplies'&&quickMethod==='vinyl_cutting'[\\s\\S]*Vinyl Sticker Calculator/);
-  assert.match(operations, /owner_create_vinyl_sticker_quick_sale/);
+  assert.match(vinyl, /owner_create_vinyl_sticker_quick_sale/);
 });
