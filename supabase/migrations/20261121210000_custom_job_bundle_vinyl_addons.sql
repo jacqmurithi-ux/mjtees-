@@ -73,6 +73,9 @@ begin
   raise exception 'A custom sale can contain no more than 20 catalogue add-on lines';
  end if;
  if v_paid<0 then raise exception 'Payment amount cannot be negative'; end if;
+ if p_production_method='vinyl_cutting' and p_supply_arrangement='mj_supplies' then
+  raise exception 'MJ-supplied vinyl must be recorded as a calculated vinyl add-on so stock is consumed atomically';
+ end if;
 
  -- Create the primary custom-job invoice without payment. The existing
  -- canonical custom-job RPC retains owner, profile, costing and margin checks.
@@ -138,7 +141,6 @@ begin
    v_area:=v_length*v_width;
    v_material_cost:=0;
    v_stock_consumption:=0;
-   v_stock:=null;
 
    if v_supply='mj_supplies' then
     select * into v_stock from public.stock_items
