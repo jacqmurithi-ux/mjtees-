@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(132);
+select extensions.plan(133);
 
 insert into auth.users(
  id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -526,6 +526,26 @@ select extensions.is(
  1,
  'each distinct apparel variant issue uses its own canonical stock ledger item');
 
+
+-- Branded apparel orders must not consume stock before production issue.
+select extensions.throws_ok(
+ $assert$select public.owner_create_apparel_quick_sale(
+  jsonb_build_object(
+   'p_customer_id',(select id from public.customers where business_id=current_setting('test.business_id')::uuid and customer_name='Example Customer' limit 1),
+   'p_invoice_number','INV-E2E-APPAREL-BRANDED-BLOCKED','p_due_date',current_date+7,
+   'p_catalogue_item_id',current_setting('test.apparel_catalogue_id'),
+   'p_production_method','dtf','p_quantity',1,'p_unit_price',500,
+   'p_supply_arrangement','mj_supplies','p_other_direct_costs',0,
+   'p_allow_below_floor',false,'p_payment_amount',0
+  ),current_setting('test.apparel_variant_id')::uuid
+ )$assert$,
+ 'P0001','Branded apparel orders must reserve stock and issue it through production',
+ 'branded apparel orders cannot consume stock before production issue');
+select extensions.is(
+ (select quantity_on_hand from public.stock_items
+  where id=(select stock_item_id from public.catalogue_item_variants where id=current_setting('test.apparel_variant_id')::uuid)),
+ 8::numeric,
+ 'rejected branded apparel quick sale leaves stock untouched');
 
 -- Confirm a successful direct blank-apparel sale consumes the exact selected variant.
 select set_config('test.apparel_direct_sale_invoice',(
